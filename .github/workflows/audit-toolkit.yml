@@ -1,0 +1,41 @@
+name: Audit toolkit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/audit-toolkit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  toolkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fetch locked dependencies
+        run: |
+          go mod download
+          cd web
+          npm ci --no-audit --no-fund
+      - name: Pack toolchain and public build dependencies only
+        run: |
+          mkdir -p "$RUNNER_TEMP/toolkit"
+          cp -a "$(go env GOROOT)" "$RUNNER_TEMP/toolkit/go"
+          cp -a "$(go env GOMODCACHE)" "$RUNNER_TEMP/toolkit/gomodcache"
+          cp -a web/node_modules "$RUNNER_TEMP/toolkit/node_modules"
+          tar -C "$RUNNER_TEMP/toolkit" -czf "$RUNNER_TEMP/audit-toolkit.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-toolkit
+          path: ${{ runner.temp }}/audit-toolkit.tar.gz
+          retention-days: 1
