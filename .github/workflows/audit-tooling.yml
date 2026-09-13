@@ -1,0 +1,34 @@
+name: Audit toolchain snapshot
+on:
+  push:
+    paths: ['.github/workflows/audit-tooling.yml']
+permissions:
+  contents: read
+jobs:
+  tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Fetch only declared dependencies
+        run: go mod download && cd web && npm ci
+      - name: Package public toolchain and dependencies, never environment or credentials
+        run: |
+          mkdir -p audit-tooling
+          tar -czf audit-tooling/go-sdk.tar.gz -C "$(go env GOROOT)" .
+          tar -czf audit-tooling/go-modules.tar.gz -C "$(go env GOMODCACHE)" .
+          tar -czf audit-tooling/frontend-deps.tar.gz -C web node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-tooling-${{ github.sha }}
+          path: audit-tooling/
+          retention-days: 1
