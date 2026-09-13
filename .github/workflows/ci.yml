@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive exact reviewed source
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/source.tar.gz" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ github.sha }}
+          path: ${{ runner.temp }}/source.tar.gz
+          retention-days: 3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked frontend dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Build production UI
+        working-directory: web
+        run: npm run build
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test with race detector
+        run: go test -race -count=1 ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Build Linux and Windows binaries
+        run: make dist
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: build-${{ github.sha }}
+          path: |
+            dist/
+            internal/webui/dist/
+          retention-days: 3
