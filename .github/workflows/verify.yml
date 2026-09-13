@@ -1,0 +1,42 @@
+name: Verify Monik
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive the exact source revision
+        run: |
+          mkdir -p verification
+          git rev-parse HEAD > verification/commit.txt
+          git archive --format=tar.gz --output=verification/source.tar.gz HEAD
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Frontend build
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Go vet and race tests
+        run: |
+          set -o pipefail
+          go vet ./... 2>&1 | tee verification/vet.txt
+          go test -race -count=1 ./... 2>&1 | tee verification/go-tests.txt
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ github.sha }}
+          path: verification/
+          retention-days: 7
