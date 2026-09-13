@@ -12,6 +12,10 @@ import (
 var embedded embed.FS
 
 func Serve(w http.ResponseWriter, r *http.Request) {
+	if !DistExists() {
+		http.Error(w, "UI is not built. Run make ui before building monik-server (or use make all).", http.StatusServiceUnavailable)
+		return
+	}
 	sub, err := fs.Sub(embedded, "dist")
 	if err != nil {
 		http.Error(w, "ui not embedded", 500)

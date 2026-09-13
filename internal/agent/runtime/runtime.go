@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,23 +33,29 @@ import (
 )
 
 type Agent struct {
-	CfgPath string
-	State   *configfile.State
-	Cred    string
-	Clock   clock.Clock
-	Host    *collectors.Host
-	Ping    *collectors.Pinger
-	Spool   *spool.Store
-	Session string
-	Seq     atomic.Int64
-	cfg     protocol.AgentConfig
-	cfgRev  int64
-	cfgHash string
-	mu      sync.Mutex
-	client  *http.Client
-	jobs    map[string]protocol.JobReceipt
-	started time.Time
-	selfBin string
+	CfgPath        string
+	State          *configfile.State
+	Cred           string
+	Clock          clock.Clock
+	Host           *collectors.Host
+	Ping           *collectors.Pinger
+	Spool          *spool.Store
+	Session        string
+	Seq            atomic.Int64
+	cfg            protocol.AgentConfig
+	cfgRev         int64
+	cfgHash        string
+	mu             sync.Mutex
+	client         *http.Client
+	jobs           map[string]protocol.JobReceipt
+	started        time.Time
+	selfBin        string
+	digest         string
+	discoveries    chan *protocol.DiscoveryDelta
+	observations   chan protocol.CheckObservation
+	discovering    atomic.Bool
+	checking       atomic.Bool
+	forceDiscovery bool
 }
 
 func Open(cfgPath string) (*Agent, error) {
@@ -77,16 +84,22 @@ func Open(cfgPath string) (*Agent, error) {
 		CfgPath: cfgPath, State: st, Cred: cred, Clock: clock.Real{},
 		Host: collectors.NewHost(), Ping: collectors.NewPinger(), Spool: sp,
 		Session: idgen.New(), cfg: cfg, client: &http.Client{
-			Timeout: 20 * time.Second,
+			Timeout:       4 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 				Proxy:           nil,
 			},
 		},
-		jobs: map[string]protocol.JobReceipt{}, started: time.Now(), selfBin: self,
+		jobs: map[string]protocol.JobReceipt{}, started: time.Now(), selfBin: self, digest: fileDigest(self), discoveries: make(chan *protocol.DiscoveryDelta, 1), observations: make(chan protocol.CheckObservation, 128),
 	}
 	a.cfgHash = configfile.HashConfig(cfg)
 	a.cfgRev = st.File.AppliedRevision
+	if b, err := os.ReadFile(filepath.Join(st.File.StateDir, "job-receipts.json")); err == nil {
+		if err := json.Unmarshal(b, &a.jobs); err != nil {
+			return nil, fmt.Errorf("job receipt journal corrupt: %w", err)
+		}
+	}
 	return a, nil
 }
 
@@ -97,14 +110,18 @@ func (a *Agent) Run(ctx context.Context) error {
 	if discEvery <= 0 {
 		discEvery = protocol.DiscoveryInterval
 	}
-	lastDisc := time.Time{}
+	lastDisc := a.Clock.Now()
 	a.tick(ctx, true)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-t.C():
-			doDisc := lastDisc.IsZero() || a.Clock.Now().Sub(lastDisc) >= discEvery
+			discEvery = time.Duration(a.cfg.Intervals.DiscoverySeconds) * time.Second
+			if discEvery < 5*time.Second {
+				discEvery = protocol.DiscoveryInterval
+			}
+			doDisc := a.forceDiscovery || a.Clock.Now().Sub(lastDisc) >= discEvery
 			a.tick(ctx, doDisc)
 			if doDisc {
 				lastDisc = a.Clock.Now()
@@ -115,65 +132,134 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) tick(ctx context.Context, discover bool) {
 	now := a.Clock.Now().UTC()
-	host, caps := a.Host.Snapshot(now)
-	if a.cfg.Ping.Enabled {
-		tgt := a.cfg.Ping.Target
-		if tgt == "" {
-			tgt = "8.8.8.8"
+	var host *protocol.HostMetrics
+	caps := map[string]protocol.Capability{}
+	collectRequested := false
+	a.mu.Lock()
+	for _, job := range a.jobs {
+		if job.Status == protocol.TargetAccepted && job.Stage == "collect_pending" {
+			collectRequested = true
 		}
+	}
+	a.mu.Unlock()
+	if !a.cfg.Paused || collectRequested {
+		host, caps = a.Host.Snapshot(now)
+	}
+	if host != nil && a.cfg.Ping.Enabled {
 		pctx, cancel := context.WithTimeout(ctx, protocol.PingTimeout)
-		a.Ping.Observe(pctx, tgt, protocol.PingTimeout, now)
+		a.Ping.Observe(pctx, a.cfg.Ping.Target, protocol.PingTimeout, now)
 		cancel()
-		sum, pcap := a.Ping.Summary(now, protocol.PingWindow, tgt)
+		sum, cap := a.Ping.Summary(now, protocol.PingWindow, a.cfg.Ping.Target)
 		host.Ping = sum
-		caps["ping"] = pcap
+		caps["ping"] = cap
 	}
 	locals, _ := netutil.LocalInterfaceIPs()
-	var checkObs []protocol.CheckObservation
-	if !a.cfg.Paused {
-		for _, def := range a.cfg.Checks {
-			cctx, cancel := context.WithTimeout(ctx, protocol.HTTPProbeTimeout+time.Second)
-			obs := checks.Run(cctx, def, locals, "", "")
-			obs.ConfigRev = a.cfgRev
-			checkObs = append(checkObs, obs)
-			cancel()
-		}
+	if !a.cfg.Paused && a.checking.CompareAndSwap(false, true) {
+		defs := append([]protocol.CheckDefinition(nil), a.cfg.Checks...)
+		revision := a.cfgRev
+		go func() {
+			defer a.checking.Store(false)
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, 16)
+			for _, def := range defs {
+				if ctx.Err() != nil {
+					break
+				}
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				wg.Add(1)
+				go func(d protocol.CheckDefinition) {
+					defer wg.Done()
+					defer func() { <-sem }()
+					cctx, cancel := context.WithTimeout(ctx, protocol.HTTPProbeTimeout)
+					defer cancel()
+					obs := checks.Run(cctx, d, locals, "", "")
+					obs.ConfigRev = revision
+					select {
+					case a.observations <- obs:
+					case <-ctx.Done():
+					}
+				}(def)
+			}
+			wg.Wait()
+		}()
+	}
+	if discover && !a.cfg.Paused && a.discovering.CompareAndSwap(false, true) {
+		a.forceDiscovery = false
+		go func() {
+			defer a.discovering.Store(false)
+			ls, err := discovery.Listeners()
+			var d *protocol.DiscoveryDelta
+			if err != nil {
+				d = &protocol.DiscoveryDelta{StartedAt: time.Now().UTC(), EndedAt: time.Now().UTC(), PermissionGaps: []string{err.Error()}}
+			} else {
+				d = discovery.Identify(discovery.DialTargets(ls, locals), protocol.DiscoveryBudgetMin, 800*time.Millisecond)
+			}
+			select {
+			case a.discoveries <- d:
+			case <-ctx.Done():
+			}
+		}()
 	}
 	var disc *protocol.DiscoveryDelta
-	if discover && !a.cfg.Paused {
-		ls, err := discovery.Listeners()
-		if err == nil {
-			targets := discovery.DialTargets(ls, locals)
-			disc = discovery.Identify(targets, protocol.DiscoveryBudgetMin, 800*time.Millisecond)
-			for i := range disc.Confirmed {
-				for _, l := range ls {
-					if netutil.FormatDial(l.IP, fmt.Sprintf("%d", l.Port)) == disc.Confirmed[i].DialTarget {
-						disc.Confirmed[i].ProcessName = l.Process
-						disc.Confirmed[i].PID = l.PID
-					}
-				}
-			}
-		} else {
-			caps["discovery"] = protocol.Capability{Status: protocol.CapError, Reason: err.Error()}
+	select {
+	case disc = <-a.discoveries:
+	default:
+	}
+	obs := make([]protocol.CheckObservation, 0)
+	for len(obs) < 128 {
+		select {
+		case o := <-a.observations:
+			obs = append(obs, o)
+		default:
+			goto drained
 		}
 	}
-	digest := fileDigest(a.selfBin)
-	rep := protocol.AgentReport{
-		SchemaVersion: protocol.SchemaVersion, AgentID: a.State.File.AgentID, SessionID: a.Session,
-		Sequence: a.Seq.Add(1), ObservedAt: now, ReportedAt: now,
-		ConfigRevision: a.cfgRev, ConfigHash: a.cfgHash,
-		EndpointGeneration: a.State.File.EndpointGeneration,
-		WorkerVersion: version.Version, WorkerDigest: digest,
-		Capabilities: caps, Host: host, Checks: checkObs, Discovery: disc,
-		IsLive: true, Spool: ptrSpool(a.Spool.Status()),
-	}
+drained:
+	seq := a.Seq.Add(1)
+	rep := protocol.AgentReport{SchemaVersion: protocol.SchemaVersion, AgentID: a.State.File.AgentID, SessionID: a.Session, Sequence: seq, ObservedAt: now, ReportedAt: a.Clock.Now().UTC(), ConfigRevision: a.cfgRev, ConfigHash: a.cfgHash, EndpointGeneration: a.State.File.EndpointGeneration, WorkerVersion: version.Version, WorkerDigest: a.digest, Host: host, Capabilities: caps, Checks: obs, Discovery: disc, IsLive: true, Spool: ptrSpool(a.Spool.Status())}
 	a.mu.Lock()
-	for _, r := range a.jobs {
-		rep.JobReceipts = append(rep.JobReceipts, r)
+	for id, job := range a.jobs {
+		if job.Status == protocol.TargetAccepted {
+			wasDiscovery := job.Stage == "discover_pending"
+			completed := job.Stage == "collect_pending" && host != nil
+			if job.Stage == "discover_pending" && disc != nil && job.AcceptedAt != nil && !disc.StartedAt.Before(*job.AcceptedAt) {
+				completed = true
+			}
+			if completed {
+				job.Status = protocol.TargetSucceeded
+				job.Stage = "fresh_result"
+				job.Message = "fresh observation committed with this receipt"
+				job.AppliedAt = &now
+				job.Evidence = map[string]any{"sequence": seq, "session_id": a.Session, "observed_at": now}
+				if wasDiscovery && disc != nil && len(disc.PermissionGaps) > 0 {
+					job.Status = protocol.TargetFailed
+					job.Message = "discovery failed"
+				}
+				a.jobs[id] = job
+			}
+		}
+	}
+	// Keep the journal bounded; no automatic resurrection of expired actions.
+	ids := make([]string, 0, len(a.jobs))
+	for id := range a.jobs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if len(rep.JobReceipts) >= 64 {
+			break
+		}
+		rep.JobReceipts = append(rep.JobReceipts, a.jobs[id])
+	}
+	if err := a.saveJobsLocked(); err != nil {
+		rep.JobReceipts = nil
 	}
 	a.mu.Unlock()
 	if err := a.send(ctx, rep); err != nil {
-		rep.IsLive = true
 		_ = a.Spool.Push(rep)
 		return
 	}
@@ -213,94 +299,128 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 		return fmt.Errorf("report status %d %s", resp.StatusCode, slurp)
 	}
 	var cr protocol.ControlResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&cr); err != nil {
 		return err
 	}
-	a.applyControl(cr)
+	if cr.ControllerID != a.State.File.ControllerID || cr.Ack == nil || !cr.Ack.Committed || cr.Ack.UpToSequence != rep.Sequence {
+		return fmt.Errorf("invalid controller identity or uncommitted acknowledgement")
+	}
+	if rep.IsLive {
+		a.applyControl(cr)
+	}
 	return nil
 }
 
 func (a *Agent) applyControl(cr protocol.ControlResponse) {
-	if cr.DesiredConfig != nil {
-		body := cr.DesiredConfig.Body
-		hash := configfile.HashConfig(body)
-		_ = configfile.SaveAppliedConfig(a.State.File.StateDir, body, cr.DesiredConfig.Revision, hash)
-		a.cfg = body
-		a.cfgRev = cr.DesiredConfig.Revision
-		a.cfgHash = hash
-		a.State.File.AppliedRevision = a.cfgRev
-		a.State.File.AppliedHash = hash
-		_ = a.State.Save()
-	}
-	if cr.Migration != nil {
-		_ = configfile.SaveMigration(a.State.File.StateDir, cr.Migration)
-		if cr.Migration.Mode == "activate" && cr.Migration.CandidateURL != "" {
-			a.State.File.ControllerURL = cr.Migration.CandidateURL
-			if cr.Migration.TrustPEM != "" {
-				a.State.File.CACertPEM = cr.Migration.TrustPEM
+	if cr.DesiredConfig != nil && cr.DesiredConfig.Revision >= a.cfgRev {
+		d := cr.DesiredConfig
+		hash := configfile.HashConfig(d.Body)
+		if hash == d.Hash && protocol.ValidateAgentConfig(d.Body) == nil {
+			if err := configfile.SaveAppliedConfig(a.State.File.StateDir, d.Body, d.Revision, hash); err == nil {
+				a.State.File.AppliedRevision = d.Revision
+				a.State.File.AppliedHash = hash
+				if err := a.State.Save(); err == nil {
+					a.cfg = d.Body
+					a.cfgRev = d.Revision
+					a.cfgHash = hash
+				}
 			}
-			a.State.File.EndpointGeneration = cr.Migration.Generation
-			_ = a.State.Save()
 		}
 	}
+	// Never replace a known controller URL with an unverified candidate. The
+	// migration state machine is explicitly unavailable until its release gate.
+	a.mu.Lock()
+	for _, id := range cr.ReceiptAcks {
+		job, ok := a.jobs[id]
+		if !ok {
+			continue
+		}
+		switch job.Status {
+		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported, protocol.TargetExpired, protocol.TargetRolledBack:
+			delete(a.jobs, id)
+		}
+		// An ACK for acceptance is not an ACK for completion. Keep pending
+		// work durable until its actual result has been sent and acknowledged.
+	}
+	_ = a.saveJobsLocked()
+	a.mu.Unlock()
 	for _, job := range cr.Jobs {
 		a.handleJob(job)
 	}
 }
 
 func (a *Agent) handleJob(job protocol.JobEnvelope) {
-	rec := protocol.JobReceipt{JobID: job.JobID, OperationID: job.OperationID, Status: protocol.TargetSucceeded, Stage: "applied", Message: job.Action}
-	now := time.Now().UTC()
-	rec.AcceptedAt = &now
-	switch job.Action {
-	case "agent.collect_now", "agent.discover_now":
-		rec.Stage = "fresh_job_result"
-		rec.Message = "collection scheduled"
-	case "agent.diagnostics":
-		rec.Stage = "bounded_redacted_receipt"
-		rec.Evidence = map[string]any{"os": runtime.GOOS, "arch": runtime.GOARCH, "version": version.Version, "go": runtime.Version()}
-	case "agent.restart":
-		if !a.State.File.Managed {
-			rec.Status = protocol.TargetUnsupported
-			rec.Message = "restart requires managed service host"
-			rec.ErrorCode = "unmanaged"
-		} else {
-			rec.Stage = "restart_requested"
-			rec.Message = "service host will restart worker"
-		}
-	case "update.rollout", "update.rollback":
-		if !a.State.File.Managed {
-			rec.Status = protocol.TargetUnsupported
-			rec.Message = "binary update requires managed service host"
-			rec.ErrorCode = "unmanaged"
-		} else {
-			rec.Status = protocol.TargetAccepted
-			rec.Stage = "update.preflight"
-			rec.Message = "update accepted; service host performs activation"
-			rec.Evidence = map[string]any{"worker_digest": fileDigest(a.selfBin)}
-		}
-	case "rebind.prepare":
-		rec.Stage = "rebind.prepared"
-		rec.Message = "plan persisted"
-	case "rebind.arm":
-		rec.Stage = "rebind.armed"
-		rec.Message = "fallback armed"
-	case "rebind.activate":
-		rec.Stage = "rebind.activating"
-		rec.Message = "candidate endpoint stored"
-	default:
-		rec.Stage = "applied"
-	}
-	applied := time.Now().UTC()
-	rec.AppliedAt = &applied
 	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, exists := a.jobs[job.JobID]; exists {
+		return
+	}
+	if len(a.jobs) >= 1000 {
+		return
+	}
+	now := a.Clock.Now().UTC()
+	rec := protocol.JobReceipt{JobID: job.JobID, OperationID: job.OperationID, Status: protocol.TargetUnsupported, Stage: "unsupported", Message: "action is not implemented by this worker", ErrorCode: "not_implemented", AcceptedAt: &now}
+	if job.SchemaVersion != protocol.SchemaVersion || job.ControllerID != a.State.File.ControllerID {
+		rec.Status = protocol.TargetRejected
+		rec.Message = "controller/schema mismatch"
+	} else if !job.Deadline.After(now) || job.NotBefore.After(now) {
+		rec.Status = protocol.TargetExpired
+		rec.Message = "job is outside its authorized time window"
+	} else {
+		switch job.Action {
+		case "agent.collect_now":
+			rec.Status = protocol.TargetAccepted
+			rec.Stage = "collect_pending"
+			rec.Message = "waiting for a fresh measurement"
+			rec.ErrorCode = ""
+		case "agent.discover_now":
+			if a.cfg.Paused {
+				rec.Status = protocol.TargetRejected
+				rec.Message = "discovery is paused"
+			} else {
+				rec.Status = protocol.TargetAccepted
+				rec.Stage = "discover_pending"
+				rec.Message = "waiting for a new discovery pass"
+				rec.ErrorCode = ""
+				a.forceDiscovery = true
+			}
+		case "agent.diagnostics":
+			rec.Status = protocol.TargetSucceeded
+			rec.Stage = "diagnostics"
+			rec.ErrorCode = ""
+			rec.Message = "redacted diagnostics collected"
+			rec.Evidence = map[string]any{"os": runtime.GOOS, "arch": runtime.GOARCH, "version": version.Version, "go": runtime.Version()}
+		case "profile.apply", "check.apply", "service.pause", "service.ignore":
+			expected, _ := job.Params["_expected_config_hash"].(string)
+			if job.ExpectedRevision != nil && *job.ExpectedRevision == a.cfgRev && expected == a.cfgHash {
+				rec.Status = protocol.TargetSucceeded
+				rec.Stage = "applied_revision_hash"
+				rec.Message = "configuration persisted and applied"
+				rec.ErrorCode = ""
+				rec.Evidence = map[string]any{"revision": a.cfgRev, "hash": a.cfgHash}
+			} else {
+				rec.Status = protocol.TargetRejected
+				rec.Message = "desired revision/hash was not applied or has been superseded"
+			}
+		}
+	}
+	if rec.Status == protocol.TargetSucceeded {
+		rec.AppliedAt = &now
+	}
 	a.jobs[job.JobID] = rec
-	a.mu.Unlock()
+	if err := a.saveJobsLocked(); err != nil {
+		delete(a.jobs, job.JobID)
+	}
 }
 
 func (a *Agent) drain(ctx context.Context) {
-	items, _ := a.Spool.List()
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	items, _ := a.Spool.ListLimit(4)
 	for _, it := range items {
+		if ctx.Err() != nil {
+			return
+		}
 		it.IsLive = false
 		if err := a.send(ctx, it); err != nil {
 			return
@@ -317,4 +437,33 @@ func ListenAddrHint() string {
 		}
 	}
 	return "127.0.0.1"
+}
+
+func (a *Agent) saveJobsLocked() error {
+	b, err := json.Marshal(a.jobs)
+	if err != nil {
+		return err
+	}
+	dir := a.State.File.StateDir
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".job-receipts-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if _, err = f.Write(b); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, filepath.Join(dir, "job-receipts.json"))
 }

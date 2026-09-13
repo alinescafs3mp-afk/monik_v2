@@ -163,7 +163,11 @@ func pendingMigration(st *storage.Store, agentID string) *protocol.MigrationPlan
 	if err != nil {
 		return nil
 	}
-	if plan.Mode == "retired" {
+	var n int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM migration_targets WHERE plan_id=? AND agent_id=?`, id, agentID).Scan(&n); err != nil || n != 1 {
+		return nil
+	}
+	if plan.Mode == "retired" || !plan.ExpiresAt.After(st.Clock.Now()) {
 		return nil
 	}
 	return plan

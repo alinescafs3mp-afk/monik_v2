@@ -36,7 +36,7 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	dial := def.DialTarget
 	if dial == "" {
 		dial = u.Host
-		if !strings.Contains(dial, ":") {
+		if u.Port() == "" {
 			if u.Scheme == "https" {
 				dial = net.JoinHostPort(u.Hostname(), "443")
 			} else {
@@ -70,6 +70,15 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	method := def.Method
 	if method == "" {
 		method = http.MethodHead
+		if def.Kind != "baseline_http" && (def.ExpectText != "" || def.ExpectJSONPath != "") {
+			method = http.MethodGet
+		}
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		obs.Quality = protocol.QualityError
+		obs.Transport = "blocked"
+		obs.AppReason = "only GET/HEAD health probes are allowed"
+		return obs
 	}
 	req, err := http.NewRequestWithContext(ctx, method, def.URL, nil)
 	if err != nil {
@@ -108,7 +117,13 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 		ok := !def.InsecureTLS
 		obs.TLSValid = &ok
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024+1))
+	if readErr != nil || len(body) > 64*1024 {
+		obs.Quality = protocol.QualityError
+		obs.AppResult = "fail"
+		obs.AppReason = "response body failed or exceeded limit"
+		return obs
+	}
 	if method == http.MethodHead && (code == 405 || code == 501) {
 		def.Method = http.MethodGet
 		return Run(ctx, def, locals, headerName, headerVal)
@@ -118,6 +133,10 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 		return obs
 	}
 	obs.AppResult = "pass"
+	if len(def.ExpectedStatus) == 0 {
+		obs.AppResult = "fail"
+		obs.AppReason = "application check has no expected status"
+	}
 	if len(def.ExpectedStatus) > 0 {
 		ok := false
 		for _, exp := range def.ExpectedStatus {

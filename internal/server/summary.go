@@ -1,0 +1,106 @@
+package server
+
+import (
+	"fmt"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/actions"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/rules"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
+	"time"
+)
+
+func actionAvailability() map[string]string {
+	out := map[string]string{}
+	for id := range actions.Registry {
+		if why := actions.UnavailableReason(id); why != "" {
+			out[id] = why
+		}
+	}
+	return out
+}
+func contact(ag *storage.AgentRow, now time.Time) (string, string) {
+	if ag.Revoked {
+		return "revoked", "Регистрация отозвана"
+	}
+	if ag.Archived {
+		return "archived", "В архиве"
+	}
+	return rules.AgentFreshness(ag.LastLiveAt, now)
+}
+
+type serviceSummary struct {
+	*storage.ServiceRow
+	Observation *protocol.CheckObservation `json:"observation"`
+	AgentState  string                     `json:"agent_state"`
+	State       string                     `json:"state"`
+	Summary     string                     `json:"summary"`
+	Fresh       bool                       `json:"fresh"`
+}
+
+func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary, error) {
+	rows, err := a.Store.Services(agentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]serviceSummary, 0, len(rows))
+	contacts := map[string]string{}
+	for _, sv := range rows {
+		st, known := contacts[sv.AgentID]
+		if !known {
+			ag, err := a.Store.Agent(sv.AgentID)
+			if err != nil {
+				return nil, err
+			}
+			st, _ = contact(ag, now)
+			contacts[sv.AgentID] = st
+		}
+		obs, err := a.Store.LatestCheckObs(sv.ID)
+		if err != nil && err != storage.ErrNotFound {
+			return nil, err
+		}
+		item := serviceSummary{ServiceRow: sv, Observation: obs, AgentState: st, State: "unknown", Summary: "Нет измерений"}
+		if obs != nil {
+			item.Fresh = st == "ok" && now.Sub(obs.ObservedAt) <= protocol.StaleContact && !obs.ObservedAt.After(now.Add(5*time.Second))
+			item.State = "responds"
+			item.Summary = "HTTP отвечает; здоровье приложения не настроено"
+			if obs.HTTPStatus != nil {
+				item.Summary = fmt.Sprintf("HTTP %d", *obs.HTTPStatus)
+				if obs.LatencyMS != nil {
+					item.Summary += fmt.Sprintf(" · %.0f мс", *obs.LatencyMS)
+				}
+			}
+			switch {
+			case !item.Fresh:
+				item.State = "stale"
+				item.Summary += " · нет свежих данных"
+			case obs.Quality != protocol.QualityOK:
+				item.State = "unknown"
+				item.Summary = string(obs.Quality) + " · " + obs.AppReason
+			case obs.Transport != "ok":
+				item.State = "transport_fail"
+				item.Summary = obs.Transport
+				if obs.TLSReason != "" {
+					item.Summary += " · " + obs.TLSReason
+				}
+			case obs.AppResult == "fail":
+				item.State = "app_fail"
+				item.Summary += " · " + obs.AppReason
+			case obs.HTTPStatus != nil && *obs.HTTPStatus >= 500:
+				item.State = "http_error"
+				item.Summary += " · ошибка сервера"
+			case obs.AppResult == "pass":
+				item.State = "ok"
+				item.Summary += " · проверка пройдена"
+			default:
+				item.Summary += " · здоровье приложения не настроено"
+			}
+		}
+		if sv.Paused || sv.Ignored || obs != nil && obs.Quality == protocol.QualityPaused {
+			item.State = "paused"
+			item.Summary = "Проверки приостановлены"
+			item.Fresh = false
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}

@@ -125,15 +125,19 @@ func (h *Host) handle(c net.Conn) {
 		}
 		resp = Response{OK: true, Message: msg, PID: pid}
 	case "restart_worker":
+		if runtime.GOOS == "windows" {
+			resp = Response{OK: false, Message: "unauthenticated TCP control cannot authorize restart"}
+			break
+		}
 		if err := h.restartWorker(); err != nil {
 			resp = Response{OK: false, Message: err.Error()}
 		} else {
 			resp = Response{OK: true, Message: "restarted"}
 		}
 	case "activate_update":
-		resp = h.activateUpdate(req.Params)
+		resp = Response{OK: false, Message: "update activation disabled: trusted TUF verification and probation are not implemented", Stage: "blocked"}
 	case "rollback_update":
-		resp = h.rollbackUpdate()
+		resp = Response{OK: false, Message: "remote rollback disabled: eligible signed rollback verification is not implemented", Stage: "blocked"}
 	default:
 		resp = Response{OK: false, Message: "unknown or forbidden action"}
 	}
@@ -224,6 +228,9 @@ func (h *Host) recoverJournal() error {
 func (h *Host) startWorker() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.alive {
+		return nil
+	}
 	cmd := exec.Command(h.WorkerBin, "run", "--config", h.WorkerCfg)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -292,7 +299,14 @@ func (h *Host) reap(ctx context.Context) {
 				backoff = time.Second
 				continue
 			}
-			time.Sleep(backoff)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if ctx.Err() != nil {
+				return
+			}
 			if backoff < 30*time.Second {
 				backoff *= 2
 			}

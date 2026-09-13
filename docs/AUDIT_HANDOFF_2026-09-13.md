@@ -2,6 +2,8 @@
 
 Date: 2026-09-13.
 
+**Integration note:** this document is the information-only `aa83ae3` handoff and is kept on `main`. The corrective application code from `monik-audit-corrective-package-2026-09-13` is in the following commit. Signed worker/service-host updates and safe rebind remain mandatory release blockers; fail-closed guards were not removed. The owner's running installation was not changed by that integration.
+
 **This is an information-only commit. It does NOT contain the corrective application code.** The OpenAI execution environment rejected a source-file write while publishing the tested changes. No incomplete application tree was attached to main. Repository write permission was available; this was not a GitHub permission error. The owner's running installation was not accessed or changed.
 
 ## Exact reviewed and corrected source

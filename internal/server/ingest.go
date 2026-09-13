@@ -78,7 +78,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var rep protocol.AgentReport
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<20)).Decode(&rep); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&rep); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid report")
 		return
 	}
@@ -86,70 +86,89 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 403, "forbidden", "cannot submit for another agent")
 		return
 	}
-	if ag.SessionID != "" && rep.SessionID != "" && ag.SessionID != rep.SessionID && rep.IsLive {
-		if ag.LastLiveAt != nil && a.Clock.Now().Sub(*ag.LastLiveAt) < 30*time.Second {
-			_ = a.Store.MarkConflict(ag.ID)
-		}
-	}
-	versions := map[string]string{
-		"worker": rep.WorkerVersion, "worker_digest": rep.WorkerDigest,
-		"service_host": rep.ServiceHostVersion, "service_host_digest": rep.ServiceHostDigest,
-	}
-	if rep.ManagedReady {
-		versions["managed"] = "1"
-	}
-	if err := a.Store.TouchAgent(ag.ID, rep.SessionID, rep.Sequence, rep.IsLive, rep.Host, rep.Capabilities, versions); err != nil {
-		a.writeErr(w, 500, "db", "touch failed")
+	// Serialize config publication against discovery-generated desired revisions.
+	a.controlMu.Lock()
+	defer a.controlMu.Unlock()
+	accepted, err := a.Store.AcceptReport(rep)
+	if err != nil {
+		a.writeErr(w, 409, "report_rejected", "report not committed: "+err.Error())
 		return
 	}
-	if rep.IsLive && rep.Host != nil {
-		_ = a.Store.InsertHostSample(ag.ID, rep.Sequence, rep.SessionID, rep.ObservedAt, rep.Host)
-		_ = a.Store.SetState("agent", ag.ID, "ok", "")
-		a.evalHostIncidents(ag.ID, rep.Host)
+	if accepted.Live {
+		if rep.Host != nil && a.Clock.Now().Sub(rep.ObservedAt) <= protocol.StaleContact {
+			_ = a.Store.SetState("agent", ag.ID, "ok", "")
+			a.evalHostIncidents(ag.ID, rep.Host, rep.ObservedAt)
+		}
 		_ = a.Store.AppendEvent("metrics", "agent", ag.ID, rep.Sequence, map[string]any{"seq": rep.Sequence, "live": true})
-	}
-	for _, c := range rep.Checks {
-		_ = a.Store.InsertCheckObs(c, ag.ID)
-		a.evalCheck(ag.ID, c)
-	}
-	if rep.Discovery != nil {
-		for _, ep := range rep.Discovery.Confirmed {
-			if ep.ServiceID == "" {
-				ep.ServiceID = idgen.New()
+		for _, c := range rep.Checks {
+			if a.Clock.Now().Sub(c.ObservedAt) <= protocol.StaleContact {
+				a.evalCheck(ag.ID, c)
 			}
-			_ = a.Store.UpsertService(ep, ag.ID)
+		}
+		for _, ep := range accepted.Endpoints {
 			if ep.SpeaksHTTP {
 				a.ensureBaselineCheck(ag.ID, ep)
 			}
 		}
-		_ = a.Store.AppendEvent("discovery", "agent", ag.ID, 0, rep.Discovery)
+		if rep.Discovery != nil {
+			_ = a.Store.AppendEvent("discovery", "agent", ag.ID, 0, rep.Discovery)
+		}
 	}
-	if rep.ConfigRevision > 0 && rep.ConfigHash != "" {
-		_ = a.Store.SetApplied(ag.ID, rep.ConfigRevision, rep.ConfigHash)
+	// Historical replay must never deliver cached commands or rewrite current config.
+	if !rep.IsLive {
+		a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC()})
+		return
 	}
+	receiptAcks := make([]string, 0, len(rep.JobReceipts))
 	for _, rec := range rep.JobReceipts {
-		_ = a.Store.ApplyReceipt(ag.ID, rec)
+		if err := a.Store.ApplyReceipt(ag.ID, rec); err != nil {
+			a.Store.Audit("agent", "receipt_rejected", ag.ID, rec.JobID)
+		} else {
+			receiptAcks = append(receiptAcks, rec.JobID)
+		}
 	}
-
-	fresh, _ := a.Store.Agent(ag.ID)
+	fresh, err := a.Store.Agent(ag.ID)
+	if err != nil {
+		a.writeErr(w, 500, "db", "control lookup failed")
+		return
+	}
 	var desired *protocol.DesiredConfig
-	if fresh != nil && fresh.DesiredConfig != "" {
+	if fresh.DesiredConfig != "" {
 		var body protocol.AgentConfig
-		_ = json.Unmarshal([]byte(fresh.DesiredConfig), &body)
+		if err := json.Unmarshal([]byte(fresh.DesiredConfig), &body); err != nil {
+			a.writeErr(w, 500, "config", "stored config invalid")
+			return
+		}
 		desired = &protocol.DesiredConfig{Revision: fresh.DesiredRevision, Hash: fresh.DesiredHash, Body: body}
 	}
-	jobs, _ := a.Store.PendingJobs(ag.ID, 8)
-	for _, j := range jobs {
-		_ = a.Store.MarkJobDelivered(j.JobID)
-		_ = a.Store.UpdateTarget(j.OperationID, ag.ID, protocol.TargetAccepted, "delivered", "delivered on control channel", "", true, nil)
+	jobs, err := a.Store.PendingJobs(ag.ID, 8)
+	if err != nil {
+		a.writeErr(w, 500, "db", "job lookup failed")
+		return
 	}
-	resp := protocol.ControlResponse{
-		Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true},
-		DesiredConfig: desired, Jobs: jobs,
-		ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(),
-		Migration: pendingMigration(a.Store, ag.ID),
+	for i := range jobs {
+		jobs[i].ControllerID = a.ControllerID()
+		if jobs[i].Action == "profile.apply" || jobs[i].Action == "check.apply" || jobs[i].Action == "service.pause" || jobs[i].Action == "service.ignore" {
+			targets, _ := a.Store.Targets(jobs[i].OperationID)
+			for _, target := range targets {
+				if target.AgentID == ag.ID {
+					if v, ok := target.Evidence["revision"].(float64); ok {
+						rev := int64(v)
+						jobs[i].ExpectedRevision = &rev
+					}
+					if jobs[i].Params == nil {
+						jobs[i].Params = map[string]any{}
+					}
+					jobs[i].Params["_expected_config_hash"] = target.Evidence["hash"]
+				}
+			}
+		}
+		if err := a.Store.MarkJobDelivered(jobs[i].JobID); err != nil {
+			a.writeErr(w, 500, "db", "job delivery recording failed")
+			return
+		}
 	}
-	a.writeJSON(w, 200, resp)
+	a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, DesiredConfig: desired, Jobs: jobs, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks /* controller migration is fail-closed until candidate verification exists */})
 }
 
 func bearer(r *http.Request) (agentID, cred string, ok bool) {
@@ -192,25 +211,32 @@ func (a *App) ensureBaselineCheck(agentID string, ep protocol.DiscoveredEndpoint
 	_ = a.Store.SetDesired(agentID, ag.DesiredRevision+1, hex.EncodeToString(hash[:]), string(body))
 }
 
-func (a *App) evalHostIncidents(agentID string, h *protocol.HostMetrics) {
+func (a *App) evalHostIncidents(agentID string, h *protocol.HostMetrics, at time.Time) {
+	breaches := map[string]rules.Breach{}
 	for _, b := range rules.EvaluateHost(h, rules.DefaultRules()) {
-		id, err := a.Store.FindOpenIncident(agentID, b.Metric)
-		if err != nil {
-			_ = a.Store.InsertIncident(map[string]any{
-				"id": idgen.New(), "entity_type": "agent", "entity_id": agentID,
-				"metric": b.Metric, "severity": b.Severity, "status": "pending", "reason": b.Reason,
-			})
-			_ = a.Store.AppendEvent("incident", "agent", agentID, 0, b)
-		} else {
-			_ = a.Store.ConfirmIncident(id)
+		breaches[b.Metric] = b
+	}
+	for _, rule := range rules.DefaultRules() {
+		known := false
+		switch rule.Metric {
+		case "cpu":
+			known = h.CPUPercent != nil
+		case "ram":
+			known = h.RAMTotal > 0
+		case "disk":
+			known = len(h.Disks) > 0
+		}
+		b, failed := breaches[rule.Metric]
+		if err := a.Store.ObserveIncident("agent", agentID, rule.Metric, at, known, failed, b.Severity, b.Reason, storage.IncidentPolicy{PersistFor: rule.PersistFor, RecoverFor: rule.RecoverFor, MaxGap: protocol.StaleContact, Failures: 1, Successes: 1}); err != nil {
+			a.Log.Error("host incident evaluation failed", "error", err)
 		}
 	}
 }
 
 func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
-	st := "ok"
-	reason := ""
-	if c.Quality != protocol.QualityOK {
+	st, reason := "ok", ""
+	known := c.Quality == protocol.QualityOK
+	if !known {
 		st, reason = "unknown", string(c.Quality)
 	} else if c.Transport != "ok" {
 		st, reason = "transport_fail", c.Transport
@@ -220,20 +246,8 @@ func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
 		st, reason = "http_error", "server error"
 	}
 	_ = a.Store.SetState("service", c.ServiceID, st, reason)
-	if st == "ok" {
-		if id, err := a.Store.FindOpenIncident(c.ServiceID, "http"); err == nil {
-			_ = a.Store.ResolveIncident(id)
-		}
-		return
-	}
-	if st == "unknown" {
-		return
-	}
-	if _, err := a.Store.FindOpenIncident(c.ServiceID, "http"); err != nil {
-		_ = a.Store.InsertIncident(map[string]any{
-			"id": idgen.New(), "entity_type": "service", "entity_id": c.ServiceID,
-			"metric": "http", "severity": "warning", "status": "pending", "reason": reason,
-		})
+	if err := a.Store.ObserveIncident("service", c.ServiceID, "http", c.ObservedAt, known, known && st != "ok", "warning", reason, storage.IncidentPolicy{MaxGap: protocol.StaleContact, Failures: 3, Successes: 2}); err != nil {
+		a.Log.Error("service incident evaluation failed", "error", err)
 	}
 }
 

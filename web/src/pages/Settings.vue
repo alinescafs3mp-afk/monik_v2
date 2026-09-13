@@ -14,7 +14,7 @@ async function backup() {
   pending.value = true;
   try {
     const r = await submitOp("backup.create", {});
-    emit("toast", "Резервная копия проверяется по sha256", r.op ? `/operations/${r.op.operation_id}` : "");
+    emit("toast", "Снимок базы создан. Полное восстановление ключей и контроллера не проверено.", r.op ? `/operations/${r.op.operation_id}` : "");
   } finally {
     pending.value = false;
   }
@@ -40,7 +40,7 @@ async function reauth() {
     <section class="panel">
       <h2>Диагностика</h2>
       <pre class="muted">{{ JSON.stringify(diag, null, 2) }}</pre>
-      <button :disabled="pending" @click="backup">Создать резервную копию</button>
+      <p class="data-warning">Сейчас сохраняется только согласованный снимок SQLite. Это не полный комплект восстановления: отдельно сохраните каталог TLS, secret-master.key и конфигурацию. Статус проверки восстановления: не проверено.</p><button :disabled="pending" @click="backup">Создать снимок базы</button>
     </section>
     <section class="panel">
       <h2>Недавняя аутентификация</h2>

@@ -1,60 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { get, submitOp } from "../api";
-const emit = defineEmits<{ toast: [string, string?] }>();
-const rels = ref<Array<Record<string, unknown>>>([]);
-const path = ref("");
-const selected = ref("");
-const agents = ref<string[]>([]);
-const pending = ref(false);
-onMounted(async () => {
-  rels.value = (await get<{ releases: Array<Record<string, unknown>> }>("/api/v1/releases")).releases || [];
-});
-async function imp() {
-  pending.value = true;
-  try {
-    const r = await submitOp("update.import", { bundle_path: path.value });
-    emit("toast", "Импорт — это каталог, не установка", r.op ? `/operations/${r.op.operation_id}` : "");
-    rels.value = (await get<{ releases: Array<Record<string, unknown>> }>("/api/v1/releases")).releases || [];
-  } finally {
-    pending.value = false;
-  }
-}
-async function rollout() {
-  pending.value = true;
-  try {
-    const r = await submitOp("update.rollout", { release_id: selected.value }, agents.value, agents.value.length ? "selected" : "all");
-    emit("toast", "Выкат создан; канарейка и пакеты видны в операции", r.op ? `/operations/${r.op.operation_id}` : "");
-  } finally {
-    pending.value = false;
-  }
-}
+import { ref } from "vue";
+import { get } from "../api";
+import { usePolling } from "../composables/usePolling";
+const rows=ref<any[]>([]);
+const {loading,error,refresh}=usePolling(async()=>{rows.value=(await get<any>('/api/v1/releases')).releases || [];});
 </script>
-
-<template>
-  <div>
-    <section class="panel">
-      <h2>Импорт подписанного комплекта</h2>
-      <p class="muted">Ключи root/targets на сервере не хранятся. Импорт проверяет TUF и только после этого попадает в каталог.</p>
-      <input v-model="path" placeholder="/path/to/monik-release.tgz" style="width:100%" />
-      <p><button class="primary" :disabled="pending || !path" @click="imp">Импортировать</button></p>
-    </section>
-    <section class="panel">
-      <h2>Каталог</h2>
-      <p v-if="!rels.length">Подписанных релизов нет.</p>
-      <table>
-        <thead><tr><th></th><th>Версия</th><th>Digest</th><th>Доверие</th><th>Когда</th></tr></thead>
-        <tbody>
-          <tr v-for="r in rels" :key="String(r.id)">
-            <td><input type="radio" name="rel" :value="r.id" v-model="selected" /></td>
-            <td>{{ r.version }}</td>
-            <td class="muted">{{ r.digest }}</td>
-            <td>{{ r.trust_ok ? "проверен" : "нет" }}</td>
-            <td>{{ r.imported_at }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><button :disabled="!selected || pending" @click="rollout">Выкатить (канарейка по умолчанию)</button></p>
-    </section>
-  </div>
-</template>
+<template><section class="panel"><h2>Обновления агентов</h2><p class="data-warning" role="status">Подписанные обновления обязательны для релиза, но текущий механизм не прошёл необходимые проверки безопасности. Импорт и активация заблокированы на сервере и в служебном IPC, а не только этими кнопками.</p><p>Не реализованы: независимый доверенный TUF root, проверка срока/версий метаданных, безопасная пробная установка, подтверждение новой версии, нативный откат и обновление самого service-host.</p><button disabled>Обновление недоступно</button> <router-link to="/agents">Состояние агентов</router-link></section><section class="panel"><h3>Ранее импортированные записи</h3><p v-if="loading">Загрузка…</p><p v-if="error" role="alert">{{ error }} <button @click="refresh">Повторить</button></p><p v-else-if="!rows.length&&!loading">Каталог пуст.</p><p v-for="r in rows" :key="r.id">{{ r.version }} · {{ r.imported_at }} · <span class="data-warning">Доверие требует повторной проверки новым механизмом</span></p></section></template>

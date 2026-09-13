@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,13 +35,29 @@ func (s *Store) Push(rep protocol.AgentReport) error {
 		return err
 	}
 	name := filepath.Join(s.dir, rep.ObservedAt.UTC().Format("20060102T150405.000000000")+".json")
-	if err := os.WriteFile(name, b, 0o600); err != nil {
+	tmp, err := os.CreateTemp(s.dir, ".pending-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err = tmp.Write(b); err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), name); err != nil {
 		return err
 	}
 	return s.trimLocked()
 }
 
-func (s *Store) List() ([]protocol.AgentReport, error) {
+func (s *Store) List() ([]protocol.AgentReport, error) { return s.ListLimit(0) }
+
+func (s *Store) ListLimit(limit int) ([]protocol.AgentReport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ents, err := os.ReadDir(s.dir)
@@ -50,7 +67,10 @@ func (s *Store) List() ([]protocol.AgentReport, error) {
 	sort.Slice(ents, func(i, j int) bool { return ents[i].Name() < ents[j].Name() })
 	var out []protocol.AgentReport
 	for _, e := range ents {
-		if e.IsDir() {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
 		b, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
@@ -79,6 +99,9 @@ func (s *Store) Status() protocol.SpoolStatus {
 	n := 0
 	ents, _ := os.ReadDir(s.dir)
 	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
 		info, err := e.Info()
 		if err == nil {
 			bytes += info.Size()
@@ -101,6 +124,9 @@ func (s *Store) trimLocked() error {
 	var rs []rec
 	var total int64
 	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
 		info, err := e.Info()
 		if err != nil {
 			continue

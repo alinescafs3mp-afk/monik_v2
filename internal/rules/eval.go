@@ -28,10 +28,10 @@ func DefaultRules() []Rule {
 }
 
 type Breach struct {
-	Metric   string
-	Severity string
-	Value    float64
-	Reason   string
+	Metric   string  `json:"metric"`
+	Severity string  `json:"severity"`
+	Value    float64 `json:"value"`
+	Reason   string  `json:"reason"`
 }
 
 func EvaluateHost(h *protocol.HostMetrics, rules []Rule) []Breach {

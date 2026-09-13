@@ -33,3 +33,13 @@ tmp/
 
 # Go
 vendor/
+
+/web/node_modules
+
+# Build the embedded UI from the matching reviewed sources.
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+
+# Python test cache
+__pycache__/
+*.pyc

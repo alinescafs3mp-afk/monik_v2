@@ -385,3 +385,24 @@ CREATE TABLE IF NOT EXISTS backups (
   created_at TEXT NOT NULL,
   verified INTEGER NOT NULL DEFAULT 0
 );
+
+-- Durable, per-session deduplication of accepted telemetry envelopes.
+CREATE TABLE IF NOT EXISTS ingest_receipts (
+ agent_id TEXT NOT NULL, session_id TEXT NOT NULL, seq INTEGER NOT NULL,
+ observed_at TEXT NOT NULL, received_at TEXT NOT NULL, payload_hash TEXT NOT NULL,
+ has_host INTEGER NOT NULL DEFAULT 0, has_discovery INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(agent_id,session_id,seq)
+);
+CREATE INDEX IF NOT EXISTS idx_ingest_received ON ingest_receipts(received_at);
+
+CREATE TABLE IF NOT EXISTS incident_streaks (
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  last_at TEXT NOT NULL,
+  bad_since TEXT NOT NULL,
+  good_since TEXT NOT NULL,
+  bad_count INTEGER NOT NULL,
+  good_count INTEGER NOT NULL,
+  PRIMARY KEY(entity_type,entity_id,metric)
+);

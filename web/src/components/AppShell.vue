@@ -62,6 +62,7 @@ function connectSSE() {
     conn.value = "paused";
     setStream("paused");
   };
+  for (const type of ["metrics","discovery","agent","incident","operation","resnapshot"]) es.addEventListener(type,()=>window.dispatchEvent(new Event("monik:refresh")));
   es.addEventListener("operation", () => {
     void refreshOps();
   });
@@ -71,7 +72,7 @@ onMounted(() => {
   void refreshOps();
   connectSSE();
   poll = window.setInterval(() => {
-    if (conn.value !== "live") void refreshOps();
+    void refreshOps();
   }, 8000);
 });
 onUnmounted(() => {

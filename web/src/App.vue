@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, onErrorCaptured, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { get, post, setCsrf, setStream, streamState } from "./api";
 import AppShell from "./components/AppShell.vue";
@@ -11,6 +11,11 @@ const me = ref<Record<string, unknown> | null>(null);
 const setupRequired = ref(false);
 const toast = ref("");
 const toastLink = ref("");
+const actionError = ref(""), errorOperation = ref("");
+function handleError(e: any) { const err=e.detail || e; actionError.value=err?.message || "Ошибка действия"; errorOperation.value=err?.operation_id || ""; }
+onMounted(()=>window.addEventListener("monik:error",handleError));
+onUnmounted(()=>window.removeEventListener("monik:error",handleError));
+onErrorCaptured((e)=>{handleError(e);return false;});
 
 onMounted(async () => {
   try {
@@ -74,6 +79,7 @@ defineExpose({ onToast });
   <div v-if="!ready" class="main"><div class="skeleton" /></div>
   <router-view v-else-if="publicPage" @toast="onToast" />
   <AppShell v-else :me="me" :stream="streamState()" @logout="logout">
+    <div v-if="actionError" class="global-error" role="alert">{{ actionError }} <router-link :to="errorOperation?'/operations/'+errorOperation:'/operations'">Центр операций</router-link> <button @click="actionError=''">Закрыть сообщение</button></div>
     <router-view @toast="onToast" />
   </AppShell>
   <div v-if="toast" class="toast" role="status">

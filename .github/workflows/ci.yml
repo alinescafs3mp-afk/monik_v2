@@ -33,6 +33,9 @@ jobs:
       - name: Install locked frontend dependencies
         working-directory: web
         run: npm ci --no-audit --no-fund
+      - name: Test frontend request safety and TypeScript
+        working-directory: web
+        run: npm test && npx --no-install tsc --noEmit
       - name: Build production UI
         working-directory: web
         run: npm run build
@@ -53,4 +56,20 @@ jobs:
           path: |
             dist/
             internal/webui/dist/
+          retention-days: 3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare isolated browser acceptance
+        run: |
+          python -m pip install -r tests/browser/requirements.txt
+          python -m playwright install --with-deps chromium
+          go build -o "$RUNNER_TEMP/monik-audit-server" ./tests/fixtures/audit-server
+      - name: Exercise real UI against loopback fixture
+        run: python tests/browser/audit.py --fixture "$RUNNER_TEMP/monik-audit-server" --output "$RUNNER_TEMP/browser-evidence"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-${{ github.sha }}
+          path: ${{ runner.temp }}/browser-evidence/
           retention-days: 3

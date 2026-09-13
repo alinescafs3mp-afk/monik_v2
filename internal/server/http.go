@@ -23,7 +23,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/setup/status", a.handleSetupStatus)
 	mux.HandleFunc("POST /api/v1/setup", a.handleSetup)
 	mux.HandleFunc("POST /api/v1/login", a.handleLogin)
-	mux.HandleFunc("POST /api/v1/logout", a.handleLogout)
+	mux.HandleFunc("POST /api/v1/logout", a.needAuth(func(w http.ResponseWriter, r *http.Request, s *storage.Session) { a.handleLogout(w, r) }))
 	mux.HandleFunc("GET /api/v1/me", a.needAuth(a.handleMe))
 	mux.HandleFunc("GET /api/v1/overview", a.needAuth(a.handleOverview))
 	mux.HandleFunc("GET /api/v1/agents", a.needAuth(a.handleAgents))
@@ -48,7 +48,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/secrets", a.needAuth(a.handleSecrets))
 	mux.HandleFunc("GET /api/v1/backups", a.needAuth(a.handleBackups))
 	mux.HandleFunc("GET /api/v1/actions", a.needAuth(func(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-		a.writeJSON(w, 200, map[string]any{"actions": actions.Registry})
+		a.writeJSON(w, 200, map[string]any{"actions": actions.Registry, "unavailable": actionAvailability()})
 	}))
 	mux.HandleFunc("GET /api/v1/agent/identity", a.handleControllerIdentity)
 	mux.HandleFunc("POST /api/v1/agent/enroll", a.handleEnroll)
@@ -98,11 +98,11 @@ func (a *App) setSessionCookie(w http.ResponseWriter, raw string, exp time.Time)
 
 func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, 200, map[string]any{
-		"setup_required":  !a.SetupComplete(),
-		"advertised_url":  a.Cfg.AdvertisedURL,
-		"default_url":     protocol.DefaultBootstrapURL,
-		"listen":          a.Cfg.Listen,
-		"version":         version.Version,
+		"setup_required":      !a.SetupComplete(),
+		"advertised_url":      a.Cfg.AdvertisedURL,
+		"default_url":         protocol.DefaultBootstrapURL,
+		"listen":              a.Cfg.Listen,
+		"version":             version.Version,
 		"loopback_only_setup": !a.SetupComplete(),
 	})
 }
@@ -176,49 +176,84 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request, s *storage.Sessio
 }
 
 func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	agents, _ := a.Store.Agents()
-	svcs, _ := a.Store.Services("")
-	incs, _ := a.Store.OpenIncidents()
-	ops, _ := a.Store.Operations(20)
-	attn := 0
+	agents, err := a.Store.Agents()
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not load agents")
+		return
+	}
+	now := a.Clock.Now()
+	svcs, err := a.serviceSummaries("", now)
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not load services")
+		return
+	}
+	incs, err := a.Store.OpenIncidents()
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not load incidents")
+		return
+	}
+	ops, err := a.Store.Operations(200)
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not load operations")
+		return
+	}
+	attention := 0
 	for _, o := range ops {
 		if o.Status == protocol.OpAttentionRequired || o.Status == protocol.OpCompletedWithErrs {
-			attn++
+			attention++
 		}
 	}
-	reporting := 0
-	now := a.Clock.Now()
-	var cards []map[string]any
+	reporting, total := 0, 0
+	cards := make([]map[string]any, 0, len(agents))
 	for _, ag := range agents {
-		st, reason, _, _ := a.Store.State("agent", ag.ID)
+		if ag.Archived {
+			continue
+		}
+		total++
+		st, reason := contact(ag, now)
 		if st == "ok" {
 			reporting++
 		}
-		host, obs, err := a.Store.LatestHost(ag.ID)
-		card := map[string]any{
-			"id": ag.ID, "name": display(ag), "os": ag.OS, "arch": ag.Arch,
-			"state": st, "reason": reason, "pinned": ag.Pinned, "managed_ready": ag.ManagedReady,
-			"version": ag.WorkerVersion, "last_live_at": ag.LastLiveAt,
+		if ag.Hidden {
+			continue
 		}
-		if err == nil && host != nil {
+		card := map[string]any{"id": ag.ID, "name": display(ag), "os": ag.OS, "arch": ag.Arch, "state": st, "reason": reason, "pinned": ag.Pinned, "managed_ready": ag.ManagedReady, "version": ag.WorkerVersion, "last_live_at": ag.LastLiveAt, "has_problem": st != "ok"}
+		host, obs, err := a.Store.LatestHost(ag.ID)
+		if err != nil && err != storage.ErrNotFound {
+			a.writeErr(w, 500, "db", "could not load measurements")
+			return
+		}
+		if host != nil {
+			fresh := st == "ok" && now.Sub(obs) <= protocol.StaleContact && !obs.After(now.Add(5*time.Second))
 			card["cpu"] = host.CPUPercent
 			card["ram_used"] = host.RAMUsed
 			card["ram_total"] = host.RAMTotal
+			card["ram_available"] = host.RAMAvailable
 			card["disks"] = host.Disks
 			card["ping"] = host.Ping
 			card["temperatures"] = host.Temperatures
 			card["observed_at"] = obs
 			card["age_seconds"] = now.Sub(obs).Seconds()
-			card["breaches"] = rules.EvaluateHost(host, rules.DefaultRules())
+			card["metrics_fresh"] = fresh
+			breaches := rules.EvaluateHost(host, rules.DefaultRules())
+			card["breaches"] = breaches
+			if fresh && len(breaches) > 0 || !fresh {
+				card["has_problem"] = true
+			}
 		}
+		services := make([]serviceSummary, 0)
+		for _, sv := range svcs {
+			if sv.AgentID == ag.ID && !sv.Hidden {
+				services = append(services, sv)
+				if sv.State != "ok" && sv.State != "responds" && sv.State != "paused" {
+					card["has_problem"] = true
+				}
+			}
+		}
+		card["services"] = services
 		cards = append(cards, card)
 	}
-	a.writeJSON(w, 200, map[string]any{
-		"agents_total": len(agents), "agents_reporting": reporting,
-		"services": len(svcs), "open_incidents": len(incs),
-		"operations_attention": attn, "cards": cards, "incidents": incs,
-		"server_time": now,
-	})
+	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
 }
 
 func display(ag *storage.AgentRow) string {
@@ -239,7 +274,7 @@ func (a *App) handleAgents(w http.ResponseWriter, r *http.Request, s *storage.Se
 	}
 	out := make([]map[string]any, 0, len(agents))
 	for _, ag := range agents {
-		st, reason, _, _ := a.Store.State("agent", ag.ID)
+		st, reason := contact(ag, a.Clock.Now())
 		out = append(out, map[string]any{
 			"id": ag.ID, "display_name": display(ag), "hostname": ag.Hostname, "os": ag.OS, "arch": ag.Arch,
 			"worker_version": ag.WorkerVersion, "service_host_version": ag.ServiceHostVersion,
@@ -269,31 +304,25 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 		return
 	}
 	host, obs, _ := a.Store.LatestHost(id)
-	svcs, _ := a.Store.Services(id)
-	st, reason, since, _ := a.Store.State("agent", id)
+	svcs, err := a.serviceSummaries(id, a.Clock.Now())
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not load services")
+		return
+	}
+	st, reason := contact(ag, a.Clock.Now())
+	_, _, since, _ := a.Store.State("agent", id)
 	a.writeJSON(w, 200, map[string]any{
-		"agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
+		"agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs, "age_seconds": a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
 	})
 }
 
 func (a *App) handleServices(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	svcs, err := a.Store.Services(r.URL.Query().Get("agent_id"))
+	rows, err := a.serviceSummaries(r.URL.Query().Get("agent_id"), a.Clock.Now())
 	if err != nil {
-		a.writeErr(w, 500, "db", err.Error())
+		a.writeErr(w, 500, "db", "could not load services")
 		return
 	}
-	type row struct {
-		*storage.ServiceRow
-		Observation *protocol.CheckObservation `json:"observation,omitempty"`
-		AgentState  string                     `json:"agent_state,omitempty"`
-	}
-	var out []row
-	for _, sv := range svcs {
-		obs, _ := a.Store.LatestCheckObs(sv.ID)
-		st, _, _, _ := a.Store.State("agent", sv.AgentID)
-		out = append(out, row{sv, obs, st})
-	}
-	a.writeJSON(w, 200, map[string]any{"services": out})
+	a.writeJSON(w, 200, map[string]any{"services": rows})
 }
 
 func (a *App) handleService(w http.ResponseWriter, r *http.Request, s *storage.Session) {
@@ -334,13 +363,27 @@ func (a *App) handleLookupOp(w http.ResponseWriter, r *http.Request, s *storage.
 		ClientRequestKey string          `json:"client_request_key"`
 		Action           string          `json:"action"`
 		TargetIDs        []string        `json:"target_ids"`
+		TargetMode       string          `json:"target_mode"`
 		Params           json.RawMessage `json:"params"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
-	h := storage.RequestHash(body.Action, body.TargetIDs, body.Params)
+	if body.Action == "" {
+		op, err := a.Store.OperationByRequestKey(s.Username, body.ClientRequestKey)
+		if errors.Is(err, storage.ErrNotFound) {
+			a.writeJSON(w, 200, map[string]any{"found": false})
+			return
+		}
+		if err != nil {
+			a.writeErr(w, 500, "db", "operation lookup failed")
+			return
+		}
+		a.writeJSON(w, 200, map[string]any{"found": true, "operation": op})
+		return
+	}
+	h := storage.RequestHash(body.Action+"|"+body.TargetMode, body.TargetIDs, body.Params)
 	op, err := a.Store.LookupIdempotency(s.Username, body.ClientRequestKey, h)
 	if errors.Is(err, storage.ErrIdempotencyConflict) {
 		a.writeErr(w, 409, "idempotency_conflict", "same key used with a different request")
@@ -370,11 +413,16 @@ func (a *App) handleSSE(w http.ResponseWriter, r *http.Request, s *storage.Sessi
 		cursor, _ = strconv.ParseInt(q, 10, 64)
 	}
 	max, _ := a.Store.MaxEventID()
-	if cursor > 0 && cursor < max-10000 {
-		cursor = 0
+	if cursor < 0 || cursor > max || cursor > 0 && cursor < max-10000 {
+		cursor = max
 		_, _ = w.Write([]byte("event: resnapshot\ndata: {\"reason\":\"cursor_expired\"}\n\n"))
 		fl.Flush()
 	}
+	if cursor == 0 {
+		cursor = max
+	}
+	_, _ = w.Write([]byte("retry: 3000\n: connected\n\n"))
+	fl.Flush()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
@@ -382,6 +430,10 @@ func (a *App) handleSSE(w http.ResponseWriter, r *http.Request, s *storage.Sessi
 		case <-r.Context().Done():
 			return
 		case <-tick.C:
+			if a.sessionFrom(r) == nil {
+				return
+			}
+			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Second))
 			evs, err := a.Store.EventsAfter(cursor, 100)
 			if err != nil {
 				return
@@ -392,9 +444,12 @@ func (a *App) handleSSE(w http.ResponseWriter, r *http.Request, s *storage.Sessi
 				_, _ = w.Write([]byte("event: " + e.Type + "\n"))
 				_, _ = w.Write([]byte("data: " + e.Payload + "\n\n"))
 			}
-			if len(evs) > 0 {
-				fl.Flush()
+			if len(evs) == 0 {
+				if _, err := w.Write([]byte(": heartbeat\n\n")); err != nil {
+					return
+				}
 			}
+			fl.Flush()
 		}
 	}
 }
@@ -413,8 +468,8 @@ func (a *App) handleHistoryPoint(w http.ResponseWriter, r *http.Request, s *stor
 	}
 	age := at.Sub(obs)
 	a.writeJSON(w, 200, map[string]any{
-		"at": at, "observed_at": obs, "age_seconds": age.Seconds(),
-		"host": host, "precision": "raw_if_within_48h", "view": "event_time_corrected",
+		"at": at, "found": true, "observed_at": obs, "age_seconds": age.Seconds(), "fresh": age <= protocol.StaleContact,
+		"host": host, "precision": "raw", "view": "event_time_corrected",
 	})
 }
 
@@ -425,20 +480,39 @@ func (a *App) handleHistorySeries(w http.ResponseWriter, r *http.Request, s *sto
 		a.writeErr(w, 400, "bad_range", "from/to must be RFC3339 and to>from")
 		return
 	}
-	if to.Sub(from) > 24*time.Hour+time.Minute {
-		// still allowed; label precision
+	if to.Sub(from) > 24*time.Hour {
+		a.writeErr(w, 422, "range_limit", "raw history is limited to 24 hours per query; long-term aggregates are not implemented")
+		return
 	}
 	agentID := r.URL.Query().Get("agent_id")
 	serviceID := r.URL.Query().Get("service_id")
 	step := plotStep(to.Sub(from))
 	out := map[string]any{"from": from, "to": to, "step_seconds": int(step.Seconds()), "mode": r.URL.Query().Get("mode"), "preserve_extrema": true}
 	if agentID != "" {
-		pts, _ := a.Store.HostSeries(agentID, from, to)
+		pts, err := a.Store.HostSeries(agentID, from, to)
+		if err != nil {
+			a.writeErr(w, 500, "db", "history query failed")
+			return
+		}
+		if len(pts) > 20000 {
+			a.writeErr(w, 422, "point_budget", "choose a smaller interval")
+			return
+		}
 		out["host"] = downsample(pts, step)
-		out["raw_available"] = to.Sub(from) <= protocol.RawRetention
+		out["raw_available"] = len(pts) > 0
+		out["retention_window_contains_range"] = !from.Before(a.Clock.Now().Add(-protocol.RawRetention))
+		out["long_term_aggregates_available"] = false
 	}
 	if serviceID != "" {
-		obs, _ := a.Store.CheckSeries(serviceID, from, to)
+		obs, err := a.Store.CheckSeries(serviceID, from, to)
+		if err != nil {
+			a.writeErr(w, 500, "db", "history query failed")
+			return
+		}
+		if len(obs) > 20000 {
+			a.writeErr(w, 422, "point_budget", "choose a smaller interval")
+			return
+		}
 		out["service"] = obs
 	}
 	a.writeJSON(w, 200, out)
@@ -463,48 +537,80 @@ func plotStep(d time.Duration) time.Duration {
 }
 
 func downsample(pts []map[string]any, step time.Duration) []map[string]any {
-	if len(pts) == 0 {
-		return pts
+	out := make([]map[string]any, 0)
+	if step <= 0 {
+		step = 5 * time.Second
 	}
-	// Keep extrema: for each bucket retain min/max cpu plus last sample.
-	type bkt struct {
-		samples []map[string]any
-	}
-	var buckets []bkt
-	var cur *bkt
-	var start time.Time
-	for _, p := range pts {
-		t, _ := time.Parse(time.RFC3339Nano, p["observed_at"].(string))
-		if cur == nil || t.Sub(start) >= step {
-			buckets = append(buckets, bkt{})
-			cur = &buckets[len(buckets)-1]
-			start = t
+	var bucket []map[string]any
+	var anchor time.Time
+	flush := func() {
+		if len(bucket) == 0 {
+			return
 		}
-		cur.samples = append(cur.samples, p)
+		last := make(map[string]any, len(bucket[len(bucket)-1])+4)
+		for k, v := range bucket[len(bucket)-1] {
+			last[k] = v
+		}
+		minima, maxima := map[string]any{}, map[string]any{}
+		keys := map[string]bool{}
+		for _, point := range bucket {
+			for key, value := range point {
+				switch value.(type) {
+				case float64, int64:
+					keys[key] = true
+				}
+			}
+		}
+		for key := range keys {
+			var lo, hi float64
+			count := 0
+			for _, p := range bucket {
+				var v float64
+				switch n := p[key].(type) {
+				case float64:
+					v = n
+				case int64:
+					v = float64(n)
+				default:
+					continue
+				}
+				if count == 0 || v < lo {
+					lo = v
+				}
+				if count == 0 || v > hi {
+					hi = v
+				}
+				count++
+			}
+			if count > 0 {
+				minima[key] = lo
+				maxima[key] = hi
+			}
+		}
+		last["min"] = minima
+		last["max"] = maxima
+		last["sample_count"] = len(bucket)
+		last["bucket_start"] = anchor.UTC().Format(time.RFC3339Nano)
+		out = append(out, last)
+		bucket = nil
 	}
-	var out []map[string]any
-	for _, b := range buckets {
-		if len(b.samples) == 0 {
+	for _, p := range pts {
+		raw, ok := p["observed_at"].(string)
+		if !ok {
 			continue
 		}
-		minP, maxP := b.samples[0], b.samples[0]
-		for _, s := range b.samples {
-			cv, ok1 := s["cpu_pct"].(float64)
-			mn, ok2 := minP["cpu_pct"].(float64)
-			mx, ok3 := maxP["cpu_pct"].(float64)
-			if ok1 && ok2 && cv < mn {
-				minP = s
-			}
-			if ok1 && ok3 && cv > mx {
-				maxP = s
-			}
+		at, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			continue
 		}
-		last := b.samples[len(b.samples)-1]
-		last["min"] = minP
-		last["max"] = maxP
-		last["count"] = len(b.samples)
-		out = append(out, last)
+		start := at.Truncate(step)
+		if len(bucket) > 0 && !start.Equal(anchor) {
+			flush()
+		}
+		anchor = start
+		bucket = append(bucket, p)
 	}
+	flush()
 	return out
 }
 
@@ -531,28 +637,9 @@ func (a *App) handleSettingsPost(w http.ResponseWriter, r *http.Request, s *stor
 		a.writeErr(w, 403, "forbidden", "owner role required")
 		return
 	}
-	var body struct {
-		AdvertisedURL string `json:"advertised_url"`
-		Listen        string `json:"listen"`
-	}
-	if err := parseJSON(r, &body); err != nil {
-		a.writeErr(w, 400, "malformed", "invalid json")
-		return
-	}
-	if body.AdvertisedURL != "" {
-		if !strings.HasPrefix(body.AdvertisedURL, "https://") {
-			a.writeErr(w, 400, "bad_url", "advertised_url must be https")
-			return
-		}
-		_ = a.Store.SetSetting("advertised_url", body.AdvertisedURL)
-		a.Cfg.AdvertisedURL = body.AdvertisedURL
-	}
-	if body.Listen != "" {
-		_ = a.Store.SetSetting("listen", body.Listen)
-		a.Cfg.Listen = body.Listen
-	}
-	a.Store.Audit(s.Username, "settings.save", "server", "settings updated")
-	a.handleSettings(w, r, s)
+	// A listener or advertised URL is not an ordinary live setting. Changing it
+	// without certificate preparation and agent migration can strand the fleet.
+	a.writeErr(w, 501, "not_implemented", "Online listener/address changes are unavailable. Prepare TLS/routing and use the documented local deployment procedure; this endpoint has changed nothing.")
 }
 
 func (a *App) handleReauth(w http.ResponseWriter, r *http.Request, s *storage.Session) {
@@ -592,8 +679,8 @@ func (a *App) handleReleases(w http.ResponseWriter, r *http.Request, s *storage.
 
 func (a *App) handleEnrollmentGet(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	a.writeJSON(w, 200, map[string]any{
-		"advertised_url": a.Cfg.AdvertisedURL,
-		"ca_cert_pem":    string(a.CACertPEM()),
+		"advertised_url":    a.Cfg.AdvertisedURL,
+		"ca_cert_pem":       string(a.CACertPEM()),
 		"bootstrap_default": protocol.DefaultBootstrapURL,
 		"instructions": map[string]string{
 			"linux":   "monik-agent setup --profile enrollment.yaml",
@@ -658,9 +745,9 @@ func (a *App) requireRecent(w http.ResponseWriter, s *storage.Session) bool {
 
 func newEnrollmentProfile(url, ca, code string) map[string]any {
 	return map[string]any{
-		"schema_version": 3,
-		"controller_url": url,
-		"ca_cert_pem":    ca,
+		"schema_version":  3,
+		"controller_url":  url,
+		"ca_cert_pem":     ca,
 		"enrollment_code": code,
 	}
 }

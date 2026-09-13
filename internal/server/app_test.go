@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 )
@@ -98,7 +99,7 @@ func TestLoginOverviewEnrollReport(t *testing.T) {
 
 	cpu := 12.0
 	rep := protocol.AgentReport{
-		SchemaVersion: 3, AgentID: "agent-1", SessionID: "s1", Sequence: 1, IsLive: true,
+		SchemaVersion: 3, AgentID: "agent-1", SessionID: "s1", Sequence: 1, IsLive: true, ObservedAt: time.Now().UTC(),
 		Host: &protocol.HostMetrics{Hostname: "testhost", OS: "linux", Arch: "amd64", CPUPercent: &cpu, RAMTotal: 100, RAMUsed: 10},
 	}
 	rb, _ := json.Marshal(rep)

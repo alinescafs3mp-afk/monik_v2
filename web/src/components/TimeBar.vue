@@ -13,7 +13,7 @@ const hours = [1, 2, 3, 6, 12, 24];
       :key="h"
       type="button"
       :aria-pressed="props.hours === h"
-      @click="emit('update:hours', h); emit('update:mode', 'history')"
+      @click="emit('update:hours', h)"
     >
       {{ h }}ч
     </button>

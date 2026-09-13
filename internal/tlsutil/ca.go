@@ -13,11 +13,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 type Bundle struct {
+	renewMu   sync.Mutex
 	CACertPEM []byte
 	CAKeyPEM  []byte
 	LeafCert  []byte
@@ -26,15 +28,16 @@ type Bundle struct {
 }
 
 func LoadOrCreate(dir string, dns []string, ips []net.IP, leafTTL time.Duration) (*Bundle, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
 	b := &Bundle{}
-	caCrt := filepath.Join(dir, "ca.crt")
-	caKey := filepath.Join(dir, "ca.key")
-	leafCrt := filepath.Join(dir, "leaf.crt")
-	leafKey := filepath.Join(dir, "leaf.key")
+	caCrt, caKey := filepath.Join(dir, "ca.crt"), filepath.Join(dir, "ca.key")
 	if _, err := os.Stat(caCrt); os.IsNotExist(err) {
+		// Never overwrite an existing half of a controller identity.
+		if _, keyErr := os.Stat(caKey); keyErr == nil {
+			return nil, fmt.Errorf("CA certificate missing while private key exists; restore the matching CA")
+		}
 		if err := generateCA(caCrt, caKey); err != nil {
 			return nil, err
 		}
@@ -46,36 +49,78 @@ func LoadOrCreate(dir string, dns []string, ips []net.IP, leafTTL time.Duration)
 	if b.CAKeyPEM, err = os.ReadFile(caKey); err != nil {
 		return nil, err
 	}
-	needLeaf := false
-	if _, err := os.Stat(leafCrt); os.IsNotExist(err) {
-		needLeaf = true
-	} else {
-		certPEM, _ := os.ReadFile(leafCrt)
-		block, _ := pem.Decode(certPEM)
-		if block != nil {
-			c, err := x509.ParseCertificate(block.Bytes)
-			if err != nil || time.Until(c.NotAfter) < leafTTL/3 {
-				needLeaf = true
-			}
-		}
+	leaf, key, err := readLeafPair(dir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
 	}
-	if needLeaf {
-		if err := issueLeaf(caCrt, caKey, leafCrt, leafKey, dns, ips, leafTTL); err != nil {
+	if os.IsNotExist(err) {
+		if err := issueLeaf(caCrt, caKey, filepath.Join(dir, "leaf.crt"), filepath.Join(dir, "leaf.key"), dns, ips, leafTTL); err != nil {
+			return nil, err
+		}
+		leaf, key, err = readLeafPair(dir)
+		if err != nil {
 			return nil, err
 		}
 	}
-	if b.LeafCert, err = os.ReadFile(leafCrt); err != nil {
-		return nil, err
-	}
-	if b.LeafKey, err = os.ReadFile(leafKey); err != nil {
-		return nil, err
-	}
-	cert, err := tls.X509KeyPair(b.LeafCert, b.LeafKey)
+	cert, err := tls.X509KeyPair(leaf, key)
 	if err != nil {
 		return nil, err
 	}
+	b.LeafCert, b.LeafKey = leaf, key
 	b.leaf.Store(&cert)
+	// Migrate the legacy two-file pair only after validating it.
+	if _, err := os.Stat(filepath.Join(dir, "leaf.bundle.pem")); os.IsNotExist(err) {
+		if err := writeLeafBundle(dir, leaf, key); err != nil {
+			return nil, err
+		}
+	}
+	if err := b.MaybeRenew(dir, dns, ips, leafTTL); err != nil {
+		return nil, err
+	}
 	return b, nil
+}
+
+func readLeafPair(dir string) ([]byte, []byte, error) {
+	if bundle, err := os.ReadFile(filepath.Join(dir, "leaf.bundle.pem")); err == nil {
+		return bundle, bundle, nil
+	} else if !os.IsNotExist(err) {
+		return nil, nil, err
+	}
+	cert, err := os.ReadFile(filepath.Join(dir, "leaf.crt"))
+	if err != nil {
+		return nil, nil, err
+	}
+	key, err := os.ReadFile(filepath.Join(dir, "leaf.key"))
+	return cert, key, err
+}
+
+func writeLeafBundle(dir string, cert, key []byte) error {
+	if _, err := tls.X509KeyPair(cert, key); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".leaf-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	// The bundle contains private key material: CreateTemp creates mode 0600.
+	if _, err = tmp.Write(append(append([]byte{}, cert...), key...)); err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err = os.Rename(tmp.Name(), filepath.Join(dir, "leaf.bundle.pem")); err != nil {
+		return err
+	}
+	if d, e := os.Open(dir); e == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
 }
 
 func (b *Bundle) TLSConfig() *tls.Config {
@@ -89,11 +134,7 @@ func (b *Bundle) TLSConfig() *tls.Config {
 }
 
 func (b *Bundle) ReloadLeaf(dir string) error {
-	certPEM, err := os.ReadFile(filepath.Join(dir, "leaf.crt"))
-	if err != nil {
-		return err
-	}
-	keyPEM, err := os.ReadFile(filepath.Join(dir, "leaf.key"))
+	certPEM, keyPEM, err := readLeafPair(dir)
 	if err != nil {
 		return err
 	}
@@ -101,45 +142,64 @@ func (b *Bundle) ReloadLeaf(dir string) error {
 	if err != nil {
 		return err
 	}
-	b.LeafCert, b.LeafKey = certPEM, keyPEM
+	// The atomic certificate, not mutable exported byte slices, is authoritative.
 	b.leaf.Store(&cert)
 	return nil
 }
 
 func (b *Bundle) MaybeRenew(dir string, dns []string, ips []net.IP, leafTTL time.Duration) error {
-	block, _ := pem.Decode(b.LeafCert)
-	if block == nil {
+	b.renewMu.Lock()
+	defer b.renewMu.Unlock()
+	if leafTTL <= 0 {
+		leafTTL = 90 * 24 * time.Hour
+	}
+	active, ok := b.leaf.Load().(*tls.Certificate)
+	if !ok || len(active.Certificate) == 0 {
 		return fmt.Errorf("no leaf")
 	}
-	c, err := x509.ParseCertificate(block.Bytes)
+	c, err := x509.ParseCertificate(active.Certificate[0])
 	if err != nil {
 		return err
 	}
 	if time.Until(c.NotAfter) > leafTTL/3 {
 		return nil
 	}
-	caCrt := filepath.Join(dir, "ca.crt")
-	caKey := filepath.Join(dir, "ca.key")
-	tmpCrt := filepath.Join(dir, "leaf.crt.new")
-	tmpKey := filepath.Join(dir, "leaf.key.new")
-	if err := issueLeaf(caCrt, caKey, tmpCrt, tmpKey, dns, ips, leafTTL); err != nil {
+	// Ordinary renewal cannot silently delete the enrolled IP/DNS identities.
+	if len(dns) == 0 {
+		dns = c.DNSNames
+	}
+	if len(ips) == 0 {
+		ips = c.IPAddresses
+	}
+	staging, err := os.MkdirTemp(dir, ".renew-*")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmpCrt, filepath.Join(dir, "leaf.crt")); err != nil {
+	defer os.RemoveAll(staging)
+	certPath, keyPath := filepath.Join(staging, "leaf.crt"), filepath.Join(staging, "leaf.key")
+	if err := issueLeaf(filepath.Join(dir, "ca.crt"), filepath.Join(dir, "ca.key"), certPath, keyPath, dns, ips, leafTTL); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpKey, filepath.Join(dir, "leaf.key")); err != nil {
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		return err
+	}
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		return err
+	}
+	if err := writeLeafBundle(dir, certPEM, keyPEM); err != nil {
 		return err
 	}
 	return b.ReloadLeaf(dir)
 }
 
 func (b *Bundle) LeafExpiry() (time.Time, error) {
-	block, _ := pem.Decode(b.LeafCert)
-	if block == nil {
+	active, ok := b.leaf.Load().(*tls.Certificate)
+	if !ok || len(active.Certificate) == 0 {
 		return time.Time{}, fmt.Errorf("no leaf")
 	}
-	c, err := x509.ParseCertificate(block.Bytes)
+	c, err := x509.ParseCertificate(active.Certificate[0])
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -186,11 +246,17 @@ func issueLeaf(caCrt, caKey, leafCrt, leafKey string, dns []string, ips []net.IP
 		return err
 	}
 	cb, _ := pem.Decode(caPEM)
+	if cb == nil {
+		return fmt.Errorf("invalid CA certificate PEM")
+	}
 	caCert, err := x509.ParseCertificate(cb.Bytes)
 	if err != nil {
 		return err
 	}
 	kb, _ := pem.Decode(caKeyPEM)
+	if kb == nil {
+		return fmt.Errorf("invalid CA key PEM")
+	}
 	caPriv, err := x509.ParseECPrivateKey(kb.Bytes)
 	if err != nil {
 		return err
@@ -212,6 +278,12 @@ func issueLeaf(caCrt, caKey, leafCrt, leafKey string, dns []string, ips []net.IP
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     dns,
 		IPAddresses:  ips,
+	}
+	if !caCert.NotAfter.After(time.Now()) {
+		return fmt.Errorf("controller CA expired; trust rotation is required")
+	}
+	if tmpl.NotAfter.After(caCert.NotAfter) {
+		tmpl.NotAfter = caCert.NotAfter
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &key.PublicKey, caPriv)
 	if err != nil {

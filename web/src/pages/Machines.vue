@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { usePolling } from "../composables/usePolling";
 import { get } from "../api";
 
 const route = useRoute();
 const rows = ref<Array<Record<string, unknown>>>([]);
 const err = ref("");
-onMounted(async () => {
+const { loading, error: loadError, refresh } = usePolling(async () => {
   try {
     const d = await get<{ agents: Array<Record<string, unknown>> }>("/api/v1/agents");
     rows.value = d.agents || [];
@@ -23,6 +24,8 @@ const filtered = computed(() => {
 
 <template>
   <div>
+    <p v-if="loadError" class="panel err" role="alert">{{ loadError }} <button @click="refresh">Повторить чтение</button></p>
+    <p v-if="loading" role="status">Загружаем данные…</p>
     <p v-if="err" class="err">{{ err }}</p>
     <p v-if="!rows.length" class="panel">Нет машин. <router-link to="/add">Добавить машину</router-link></p>
     <div class="table-wrap">

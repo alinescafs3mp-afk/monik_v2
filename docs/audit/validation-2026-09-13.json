@@ -1,0 +1,47 @@
+{
+  "base_commit": "2515a91b34d3cbbd1b4a68f74513b5462c53145c",
+  "date": "2026-09-13",
+  "environment": "isolated Linux container; locked CI dependencies; no production access",
+  "go": "1.27.0",
+  "node": "22.16.0",
+  "go_race": {
+    "status": "PASS",
+    "top_level_tests": 55,
+    "test_and_subtest_pass_events": 73,
+    "tested_packages": 12,
+    "failed_events": 0
+  },
+  "go_vet": "PASS",
+  "frontend_node_tests": {
+    "status": "PASS",
+    "tests": 9
+  },
+  "typescript_no_emit": "PASS",
+  "vite_production_build": "PASS",
+  "builds": {
+    "status": "PASS",
+    "targets": [
+      "linux/amd64",
+      "windows/amd64"
+    ],
+    "commands": [
+      "monik-server",
+      "monik-agent",
+      "monik-service-host",
+      "monik-release"
+    ],
+    "total": 8,
+    "native_windows_execution": "NOT RUN"
+  },
+  "python_browser_script_syntax": "PASS",
+  "browser_local": {
+    "status": "BLOCKED",
+    "error": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "target": "isolated loopback fixture",
+    "visual_acceptance": "NOT RUN"
+  },
+  "browser_ci": "NOT RUN at report creation; inspect the workflow for the resulting commit",
+  "v3_full_acceptance": "NOT RUN; required release features remain unimplemented",
+  "load_and_soak": "NOT RUN",
+  "live_owner_installation": "NOT ACCESSED OR CHANGED"
+}

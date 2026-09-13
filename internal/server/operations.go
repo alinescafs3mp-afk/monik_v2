@@ -29,6 +29,12 @@ func (a *App) handleSubmitOp(w http.ResponseWriter, r *http.Request, s *storage.
 }
 
 func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req protocol.SubmitOperation) {
+	a.controlMu.Lock()
+	defer a.controlMu.Unlock()
+	if reason := actions.UnavailableReason(req.Action); reason != "" {
+		a.writeErr(w, 501, "not_implemented", reason)
+		return
+	}
 	if req.ClientRequestKey == "" {
 		a.writeErr(w, 400, "missing_key", "client_request_key required")
 		return
@@ -49,7 +55,7 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	if params == nil {
 		params = []byte("{}")
 	}
-	h := storage.RequestHash(req.Action, req.TargetIDs, params)
+	h := storage.RequestHash(req.Action+"|"+req.TargetMode, req.TargetIDs, params)
 	if existing, err := a.Store.LookupIdempotency(s.Username, req.ClientRequestKey, h); err == nil {
 		status := 200
 		if existing.Status == protocol.OpQueued || existing.Status == protocol.OpRunning {
@@ -78,7 +84,7 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	}
 	if def.Scope == actions.ScopeAgents || def.Scope == actions.ScopeServerJob {
 		dl := now.Add(protocol.OneShotExpiry)
-		if disruptive(def.Risk) {
+		if req.Action == "profile.apply" || req.Action == "check.apply" || req.Action == "service.pause" || req.Action == "service.ignore" {
 			dl = now.Add(24 * time.Hour)
 		}
 		op.Deadline = &dl
@@ -98,6 +104,9 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		op.Targets = append(op.Targets, protocol.TargetResult{AgentID: id, Status: st, Stage: stage, Message: msg, Retryable: st == protocol.TargetWaitingOffline})
 	}
 	if def.Scope == actions.ScopeServer || def.Scope == actions.ScopeServerJob {
+		if req.Action != "credential.revoke" {
+			op.Targets = nil
+		}
 		if len(op.Targets) == 0 {
 			op.Targets = []protocol.TargetResult{{AgentID: "server", Status: protocol.TargetSucceeded, Stage: "commit", Message: "server-only"}}
 		}
@@ -108,7 +117,9 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	}
 	a.Store.Audit(s.Username, req.Action, op.ID, "operation created")
 	if err := a.executeServerSide(op, def, s, req); err != nil {
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
+		for _, target := range op.Targets {
+			_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
+		}
 		loaded, _ := a.Store.Operation(op.ID)
 		a.writeJSON(w, 202, loaded)
 		return
@@ -193,7 +204,10 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		if id == "" {
 			id = op.ID
 		}
-		_ = a.Store.CancelPending(id)
+		if err := a.Store.CancelPending(id); err != nil {
+			return err
+		}
+		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit", "cancelled only targets not yet dispatched; delivered targets remain unresolved", "", false, nil)
 	case "history.export":
 		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "bounded_artifact_ready", "use history series API", "", false, nil)
 	case "profile.apply", "check.apply", "service.pause", "service.ignore":
@@ -213,6 +227,13 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 
 func (a *App) applyPreference(req protocol.SubmitOperation) error {
 	switch req.Action {
+	case "preference.save":
+		b, err := json.Marshal(req.Params)
+		if err != nil {
+			return err
+		}
+		_, err = a.Store.DB.Exec(`INSERT INTO dashboard_preferences(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body,revision=revision+1`, "owner", string(b))
+		return err
 	case "agent.rename":
 		id, _ := req.Params["agent_id"].(string)
 		name, _ := req.Params["display_name"].(string)
@@ -259,6 +280,15 @@ func (a *App) bumpDesired(op *protocol.Operation, req protocol.SubmitOperation) 
 			cfg = protocol.DefaultAgentConfig()
 		}
 		applyConfigPatch(&cfg, req)
+		if err := protocol.ValidateAgentConfig(cfg); err != nil {
+			return err
+		}
+		for _, check := range cfg.Checks {
+			sv, err := a.Store.Service(check.ServiceID)
+			if err != nil || sv.AgentID != ag.ID {
+				return fmt.Errorf("check service does not belong to selected agent")
+			}
+		}
 		body, _ := json.Marshal(cfg)
 		hash := secure.SHA256Bytes(body)
 		rev := ag.DesiredRevision + 1
@@ -276,7 +306,7 @@ func (a *App) bumpDesired(op *protocol.Operation, req protocol.SubmitOperation) 
 }
 
 func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) {
-	if v, ok := req.Params["paused"].(bool); ok {
+	if v, ok := req.Params["paused"].(bool); ok && req.Action == "profile.apply" {
 		cfg.Paused = v
 	}
 	if v, ok := req.Params["display_name"].(string); ok {
@@ -367,7 +397,7 @@ func (a *App) runBackup(op *protocol.Operation) error {
 	if err := a.Store.InsertBackup(id, dst, sum, size); err != nil {
 		return err
 	}
-	_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_complete_artifact", "backup written", "", false, map[string]any{"path": dst, "sha256": sum, "size": size})
+	_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "database_snapshot_written", "database snapshot written; complete controller restore has not been verified", "", false, map[string]any{"path": dst, "sha256": sum, "size": size, "restore_verified": false, "scope": "database_only"})
 	return nil
 }
 

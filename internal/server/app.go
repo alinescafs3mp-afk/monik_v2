@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,15 +37,16 @@ type Config struct {
 }
 
 type App struct {
-	Cfg      Config
-	Store    *storage.Store
-	TLS      *tlsutil.Bundle
-	Log      *slog.Logger
-	Clock    clock.Clock
-	Master   []byte
-	HTTP     *http.Server
-	mu       sync.Mutex
-	limiters sync.Map
+	controlMu sync.Mutex
+	Cfg       Config
+	Store     *storage.Store
+	TLS       *tlsutil.Bundle
+	Log       *slog.Logger
+	Clock     clock.Clock
+	Master    []byte
+	HTTP      *http.Server
+	mu        sync.Mutex
+	limiters  sync.Map
 }
 
 func Open(cfg Config) (*App, error) {
@@ -63,12 +65,20 @@ func Open(cfg Config) (*App, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
 	}
+	for _, rule := range cfg.AdminAllowlist {
+		if _, err := netip.ParsePrefix(rule); err != nil {
+			if _, ipErr := netip.ParseAddr(rule); ipErr != nil {
+				return nil, fmt.Errorf("invalid admin allowlist entry %q", rule)
+			}
+		}
+	}
 	st, err := storage.Open(filepath.Join(cfg.DataDir, "monik.db"), cfg.Clock)
 	if err != nil {
 		return nil, err
 	}
 	master, err := secure.LoadOrCreateKey(filepath.Join(cfg.DataDir, "secret-master.key"), 32)
 	if err != nil {
+		_ = st.Close()
 		return nil, err
 	}
 	a := &App{Cfg: cfg, Store: st, Log: cfg.Logger, Clock: cfg.Clock, Master: master}
@@ -109,6 +119,8 @@ type SetupRequest struct {
 }
 
 func (a *App) CompleteSetup(req SetupRequest) error {
+	a.controlMu.Lock()
+	defer a.controlMu.Unlock()
 	if a.SetupComplete() {
 		return fmt.Errorf("setup already completed")
 	}
@@ -122,9 +134,7 @@ func (a *App) CompleteSetup(req SetupRequest) error {
 	if err != nil {
 		return err
 	}
-	if _, err := a.Store.CreateUser(req.Username, hash, "owner"); err != nil {
-		return err
-	}
+
 	if req.AdvertisedURL == "" {
 		req.AdvertisedURL = protocol.DefaultBootstrapURL
 	}
@@ -135,8 +145,14 @@ func (a *App) CompleteSetup(req SetupRequest) error {
 	_ = a.Store.SetSetting("listen", req.Listen)
 	a.Cfg.AdvertisedURL = req.AdvertisedURL
 	a.Cfg.Listen = req.Listen
+	if err := a.ensureTLS(req.SANs); err != nil {
+		return err
+	}
+	if _, err := a.Store.CreateUser(req.Username, hash, "owner"); err != nil {
+		return err
+	}
 	a.Store.Audit(req.Username, "setup", "server", "initial owner created")
-	return a.ensureTLS(req.SANs)
+	return nil
 }
 
 func (a *App) ensureTLS(extra []string) error {
@@ -227,7 +243,9 @@ func (a *App) background(ctx context.Context) {
 			return
 		case <-t.C():
 			_ = a.Store.RetainRaw(protocol.RawRetention)
-			_ = a.TLS.MaybeRenew(filepath.Join(a.Cfg.DataDir, "tls"), nil, nil, 90*24*time.Hour)
+			if err := a.TLS.MaybeRenew(filepath.Join(a.Cfg.DataDir, "tls"), nil, nil, 90*24*time.Hour); err != nil {
+				a.Log.Error("TLS renewal failed", "error", err)
+			}
 			a.refreshAgentStates()
 		}
 	}
@@ -256,11 +274,16 @@ func (a *App) refreshAgentStates() {
 }
 
 func (a *App) writeJSON(w http.ResponseWriter, status int, v any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		status = http.StatusInternalServerError
+		body = []byte(`{"error":"encode","message":"response serialization failed"}`)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(append(body, '\n'))
 }
 
 func (a *App) writeErr(w http.ResponseWriter, status int, code, msg string) {
@@ -273,12 +296,27 @@ func hashBody(b []byte) string {
 }
 
 func (a *App) allowAdmin(r *http.Request) bool {
-	if !a.SetupComplete() {
-		host, _, _ := net.SplitHostPort(r.RemoteAddr)
-		ip := net.ParseIP(host)
-		return ip != nil && ip.IsLoopback()
+	ip, err := netip.ParseAddr(clientIP(r))
+	if err != nil {
+		return false
 	}
-	return true
+	ip = ip.Unmap()
+	if !a.SetupComplete() {
+		return ip.IsLoopback()
+	}
+	if len(a.Cfg.AdminAllowlist) == 0 {
+		return true
+	}
+	for _, rule := range a.Cfg.AdminAllowlist {
+		if prefix, err := netip.ParsePrefix(rule); err == nil && prefix.Contains(ip) {
+			return true
+		}
+		if exact, err := netip.ParseAddr(rule); err == nil && exact.Unmap() == ip {
+			return true
+		}
+	}
+	// Forwarded headers are deliberately not an authorization source.
+	return false
 }
 
 func clientIP(r *http.Request) string {
@@ -321,6 +359,11 @@ func (a *App) csrfAndSecurity(next http.Handler) http.Handler {
 			a.writeErr(w, http.StatusRequestEntityTooLarge, "too_large", "request too large")
 			return
 		}
+		if !strings.HasPrefix(r.URL.Path, "/api/v1/agent/") && r.URL.Path != "/health" && !a.allowAdmin(r) {
+			a.writeErr(w, http.StatusForbidden, "admin_network", "administrative access is not allowed from this network")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 		next.ServeHTTP(w, r)
 	})
 }

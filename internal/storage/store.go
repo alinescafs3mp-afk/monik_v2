@@ -25,15 +25,18 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+const dbTimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
+
 var ErrNotFound = errors.New("not found")
 var ErrConflict = errors.New("conflict")
 var ErrIdempotencyConflict = errors.New("idempotency key reused with different request")
 
 type Store struct {
-	DB    *sql.DB
-	Clock clock.Clock
-	mu    sync.Mutex
-	path  string
+	DB       *sql.DB
+	executor sqlExecutor
+	Clock    clock.Clock
+	mu       sync.Mutex
+	path     string
 }
 
 func Open(path string, clk clock.Clock) (*Store, error) {
@@ -55,6 +58,10 @@ func Open(path string, clk clock.Clock) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := s.normalizeTimes(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -66,7 +73,7 @@ func (s *Store) now() time.Time { return s.Clock.Now().UTC() }
 
 func (s *Store) Setting(key string) (string, error) {
 	var v string
-	err := s.DB.QueryRow(`SELECT value FROM settings WHERE key=?`, key).Scan(&v)
+	err := s.db().QueryRow(`SELECT value FROM settings WHERE key=?`, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
@@ -84,7 +91,7 @@ func (s *Store) MustSetting(key, def string) string {
 func (s *Store) SetSetting(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.DB.Exec(`INSERT INTO settings(key,value,revision) VALUES(?,?,1)
+	_, err := s.db().Exec(`INSERT INTO settings(key,value,revision) VALUES(?,?,1)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value, revision=revision+1`, key, value)
 	return err
 }
@@ -98,14 +105,14 @@ type User struct {
 
 func (s *Store) CreateUser(username, passwordHash, role string) (*User, error) {
 	u := &User{ID: idgen.New(), Username: username, PasswordHash: passwordHash, Role: role}
-	_, err := s.DB.Exec(`INSERT INTO admin_users(id,username,password_hash,role,created_at) VALUES(?,?,?,?,?)`,
-		u.ID, u.Username, u.PasswordHash, u.Role, s.now().Format(time.RFC3339Nano))
+	_, err := s.db().Exec(`INSERT INTO admin_users(id,username,password_hash,role,created_at) VALUES(?,?,?,?,?)`,
+		u.ID, u.Username, u.PasswordHash, u.Role, s.now().UTC().Format(dbTimeFormat))
 	return u, err
 }
 
 func (s *Store) UserByName(username string) (*User, error) {
 	u := &User{}
-	err := s.DB.QueryRow(`SELECT id,username,password_hash,role FROM admin_users WHERE username=?`, username).
+	err := s.db().QueryRow(`SELECT id,username,password_hash,role FROM admin_users WHERE username=?`, username).
 		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -115,7 +122,7 @@ func (s *Store) UserByName(username string) (*User, error) {
 
 func (s *Store) UserCount() (int, error) {
 	var n int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM admin_users`).Scan(&n)
+	err := s.db().QueryRow(`SELECT COUNT(*) FROM admin_users`).Scan(&n)
 	return n, err
 }
 
@@ -146,10 +153,10 @@ func (s *Store) CreateSession(user *User, ttl, recentAuth time.Duration) (rawTok
 	}
 	rau := now.Add(recentAuth)
 	sess.RecentAuthUntil = &rau
-	_, err = s.DB.Exec(`INSERT INTO admin_sessions(id,user_id,token_hash,csrf,expires_at,created_at,last_seen_at,recent_auth_until)
+	_, err = s.db().Exec(`INSERT INTO admin_sessions(id,user_id,token_hash,csrf,expires_at,created_at,last_seen_at,recent_auth_until)
 		VALUES(?,?,?,?,?,?,?,?)`, sess.ID, sess.UserID, sess.TokenHash, sess.CSRF,
-		sess.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), rau.Format(time.RFC3339Nano))
-	_, _ = s.DB.Exec(`UPDATE admin_users SET last_login_at=? WHERE id=?`, now.Format(time.RFC3339Nano), user.ID)
+		sess.ExpiresAt.UTC().Format(dbTimeFormat), now.UTC().Format(dbTimeFormat), now.UTC().Format(dbTimeFormat), rau.UTC().Format(dbTimeFormat))
+	_, _ = s.db().Exec(`UPDATE admin_users SET last_login_at=? WHERE id=?`, now.UTC().Format(dbTimeFormat), user.ID)
 	return rawToken, sess, err
 }
 
@@ -157,7 +164,7 @@ func (s *Store) SessionByToken(raw string) (*Session, error) {
 	h := secure.HashToken(raw)
 	sess := &Session{}
 	var exp, rau sql.NullString
-	err := s.DB.QueryRow(`SELECT s.id,s.user_id,s.token_hash,s.csrf,s.expires_at,s.recent_auth_until,u.role,u.username
+	err := s.db().QueryRow(`SELECT s.id,s.user_id,s.token_hash,s.csrf,s.expires_at,s.recent_auth_until,u.role,u.username
 		FROM admin_sessions s JOIN admin_users u ON u.id=s.user_id WHERE s.token_hash=?`, h).
 		Scan(&sess.ID, &sess.UserID, &sess.TokenHash, &sess.CSRF, &exp, &rau, &sess.Role, &sess.Username)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -178,7 +185,7 @@ func (s *Store) SessionByToken(raw string) (*Session, error) {
 }
 
 func (s *Store) DeleteSession(id string) error {
-	_, err := s.DB.Exec(`DELETE FROM admin_sessions WHERE id=?`, id)
+	_, err := s.db().Exec(`DELETE FROM admin_sessions WHERE id=?`, id)
 	return err
 }
 
@@ -189,8 +196,8 @@ func (s *Store) CreateEnrollmentCode(actor string, ttl time.Duration) (plain str
 	}
 	plain = strings.ToUpper(plain[:12])
 	expires = s.now().Add(ttl)
-	_, err = s.DB.Exec(`INSERT INTO enrollment_codes(id,code_hash,created_by,created_at,expires_at) VALUES(?,?,?,?,?)`,
-		idgen.New(), secure.HashToken(plain), actor, s.now().Format(time.RFC3339Nano), expires.Format(time.RFC3339Nano))
+	_, err = s.db().Exec(`INSERT INTO enrollment_codes(id,code_hash,created_by,created_at,expires_at) VALUES(?,?,?,?,?)`,
+		idgen.New(), secure.HashToken(plain), actor, s.now().UTC().Format(dbTimeFormat), expires.UTC().Format(dbTimeFormat))
 	return plain, expires, err
 }
 
@@ -198,8 +205,8 @@ func (s *Store) ConsumeEnrollmentCode(plain string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	h := secure.HashToken(plain)
-	now := s.now().Format(time.RFC3339Nano)
-	res, err := s.DB.Exec(`UPDATE enrollment_codes SET consumed_at=? WHERE code_hash=? AND consumed_at IS NULL AND expires_at>?`,
+	now := s.now().UTC().Format(dbTimeFormat)
+	res, err := s.db().Exec(`UPDATE enrollment_codes SET consumed_at=? WHERE code_hash=? AND consumed_at IS NULL AND expires_at>?`,
 		now, h, now)
 	if err != nil {
 		return err
@@ -212,35 +219,35 @@ func (s *Store) ConsumeEnrollmentCode(plain string) error {
 }
 
 type AgentRow struct {
-	ID                 string
-	DisplayName        string
-	Hostname           string
-	OS                 string
-	Arch               string
-	CredentialHash     string
-	Revoked            bool
-	Archived           bool
-	Pinned             bool
-	Hidden             bool
-	DesiredRevision    int64
-	DesiredHash        string
-	DesiredConfig      string
-	AppliedRevision    int64
-	AppliedHash        string
-	LastSeenAt         *time.Time
-	LastLiveAt         *time.Time
-	SessionID          string
-	LastSeq            int64
-	WorkerVersion      string
-	WorkerDigest       string
-	ServiceHostVersion string
-	ServiceHostDigest  string
-	ManagedReady       bool
-	Capabilities       string
-	Addresses          string
-	EndpointGeneration int64
-	Conflict           bool
-	CreatedAt          time.Time
+	ID                 string     `json:"id"`
+	DisplayName        string     `json:"display_name"`
+	Hostname           string     `json:"hostname"`
+	OS                 string     `json:"os"`
+	Arch               string     `json:"arch"`
+	CredentialHash     string     `json:"-"`
+	Revoked            bool       `json:"revoked"`
+	Archived           bool       `json:"archived"`
+	Pinned             bool       `json:"pinned"`
+	Hidden             bool       `json:"hidden"`
+	DesiredRevision    int64      `json:"desired_revision"`
+	DesiredHash        string     `json:"desired_hash"`
+	DesiredConfig      string     `json:"-"`
+	AppliedRevision    int64      `json:"applied_revision"`
+	AppliedHash        string     `json:"applied_hash"`
+	LastSeenAt         *time.Time `json:"last_seen_at"`
+	LastLiveAt         *time.Time `json:"last_live_at"`
+	SessionID          string     `json:"session_id"`
+	LastSeq            int64      `json:"last_seq"`
+	WorkerVersion      string     `json:"worker_version"`
+	WorkerDigest       string     `json:"worker_digest"`
+	ServiceHostVersion string     `json:"service_host_version"`
+	ServiceHostDigest  string     `json:"service_host_digest"`
+	ManagedReady       bool       `json:"managed_ready"`
+	Capabilities       string     `json:"capabilities"`
+	Addresses          string     `json:"addresses"`
+	EndpointGeneration int64      `json:"endpoint_generation"`
+	Conflict           bool       `json:"conflict"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 func scanAgent(sc interface{ Scan(...any) error }) (*AgentRow, error) {
@@ -283,7 +290,7 @@ session_id,last_seq,worker_version,worker_digest,service_host_version,service_ho
 capabilities,addresses,endpoint_generation,conflict,created_at`
 
 func (s *Store) Agent(id string) (*AgentRow, error) {
-	row := s.DB.QueryRow(`SELECT `+agentCols+` FROM agents WHERE id=?`, id)
+	row := s.db().QueryRow(`SELECT `+agentCols+` FROM agents WHERE id=?`, id)
 	a, err := scanAgent(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -292,7 +299,7 @@ func (s *Store) Agent(id string) (*AgentRow, error) {
 }
 
 func (s *Store) Agents() ([]*AgentRow, error) {
-	rows, err := s.DB.Query(`SELECT ` + agentCols + ` FROM agents ORDER BY display_name, hostname`)
+	rows, err := s.db().Query(`SELECT ` + agentCols + ` FROM agents ORDER BY display_name, hostname`)
 	if err != nil {
 		return nil, err
 	}
@@ -309,15 +316,15 @@ func (s *Store) Agents() ([]*AgentRow, error) {
 }
 
 func (s *Store) InsertAgent(a *AgentRow, credentialHash string) error {
-	now := s.now().Format(time.RFC3339Nano)
-	_, err := s.DB.Exec(`INSERT INTO agents(id,display_name,hostname,os,arch,credential_hash,desired_revision,desired_hash,desired_config,created_at,endpoint_generation)
+	now := s.now().UTC().Format(dbTimeFormat)
+	_, err := s.db().Exec(`INSERT INTO agents(id,display_name,hostname,os,arch,credential_hash,desired_revision,desired_hash,desired_config,created_at,endpoint_generation)
 		VALUES(?,?,?,?,?,?,?,?,?,?,1)`, a.ID, a.DisplayName, a.Hostname, a.OS, a.Arch, credentialHash,
 		a.DesiredRevision, a.DesiredHash, a.DesiredConfig, now)
 	return err
 }
 
 func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *protocol.HostMetrics, caps any, versions map[string]string) error {
-	now := s.now().Format(time.RFC3339Nano)
+	now := s.now().UTC().Format(dbTimeFormat)
 	capJSON, _ := json.Marshal(caps)
 	addrJSON := "[]"
 	if host != nil {
@@ -337,7 +344,7 @@ func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *proto
 	args = append(args, session, seq, capJSON, addrJSON, hn, osn, arch, dn,
 		versions["worker"], versions["worker_digest"], versions["service_host"], versions["service_host_digest"],
 		versions["managed"], id)
-	_, err := s.DB.Exec(`UPDATE agents SET `+liveSQL+`, session_id=?, last_seq=?, capabilities=?, addresses=?,
+	_, err := s.db().Exec(`UPDATE agents SET `+liveSQL+`, session_id=?, last_seq=?, capabilities=?, addresses=?,
 		hostname=COALESCE(NULLIF(?,''),hostname), os=COALESCE(NULLIF(?,''),os), arch=COALESCE(NULLIF(?,''),arch),
 		display_name=COALESCE(NULLIF(?,''),display_name),
 		worker_version=COALESCE(NULLIF(?,''),worker_version), worker_digest=COALESCE(NULLIF(?,''),worker_digest),
@@ -348,27 +355,40 @@ func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *proto
 }
 
 func (s *Store) SetApplied(id string, rev int64, hash string) error {
-	_, err := s.DB.Exec(`UPDATE agents SET applied_revision=?, applied_hash=? WHERE id=?`, rev, hash, id)
-	return err
-}
-
-func (s *Store) SetDesired(id string, rev int64, hash, body string) error {
-	_, err := s.DB.Exec(`UPDATE agents SET desired_revision=?, desired_hash=?, desired_config=? WHERE id=?`, rev, hash, body, id)
+	res, err := s.db().Exec(`UPDATE agents SET applied_revision=?, applied_hash=? WHERE id=? AND applied_revision<=?
+ AND EXISTS(SELECT 1 FROM config_revisions WHERE agent_id=? AND revision=? AND hash=?)`, rev, hash, id, rev, id, rev, hash)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec(`INSERT INTO config_revisions(agent_id,revision,hash,body,created_at) VALUES(?,?,?,?,?)`,
-		id, rev, hash, body, s.now().Format(time.RFC3339Nano))
-	return err
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return ErrConflict
+	}
+	return nil
+}
+
+func (s *Store) SetDesired(id string, rev int64, hash, body string) error {
+	return s.WithTx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`UPDATE agents SET desired_revision=?,desired_hash=?,desired_config=? WHERE id=? AND desired_revision<=?`, rev, hash, body, id, rev)
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		if n != 1 {
+			return ErrConflict
+		}
+		_, err = tx.Exec(`INSERT INTO config_revisions(agent_id,revision,hash,body,created_at) VALUES(?,?,?,?,?)`, id, rev, hash, body, s.now().UTC().Format(dbTimeFormat))
+		return err
+	})
 }
 
 func (s *Store) MarkConflict(id string) error {
-	_, err := s.DB.Exec(`UPDATE agents SET conflict=1 WHERE id=?`, id)
+	_, err := s.db().Exec(`UPDATE agents SET conflict=1 WHERE id=?`, id)
 	return err
 }
 
 func (s *Store) RevokeAgent(id string) error {
-	_, err := s.DB.Exec(`UPDATE agents SET revoked=1, credential_hash='' WHERE id=?`, id)
+	_, err := s.db().Exec(`UPDATE agents SET revoked=1, credential_hash='' WHERE id=?`, id)
 	return err
 }
 
@@ -383,8 +403,15 @@ func (s *Store) UpdateAgentFlags(id string, fields map[string]any) error {
 		args = append(args, v)
 	}
 	args = append(args, id)
-	_, err := s.DB.Exec(`UPDATE agents SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
-	return err
+	res, err := s.db().Exec(`UPDATE agents SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) InsertHostSample(agentID string, seq int64, session string, observed time.Time, host *protocol.HostMetrics) error {
@@ -400,23 +427,23 @@ func (s *Store) InsertHostSample(agentID string, seq int64, session string, obse
 			pingLoss = host.Ping.LossPct
 		}
 	}
-	_, err := s.DB.Exec(`INSERT INTO host_samples(agent_id,observed_at,received_at,seq,session_id,cpu_pct,ram_used,ram_avail,ram_total,ping_mean_ms,ping_loss,payload)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, agentID, observed.UTC().Format(time.RFC3339Nano), s.now().Format(time.RFC3339Nano),
+	_, err := s.db().Exec(`INSERT INTO host_samples(agent_id,observed_at,received_at,seq,session_id,cpu_pct,ram_used,ram_avail,ram_total,ping_mean_ms,ping_loss,payload)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, agentID, observed.UTC().Format(dbTimeFormat), s.now().UTC().Format(dbTimeFormat),
 		seq, session, cpu, ramUsed, ramAvail, ramTotal, pingMean, pingLoss, string(payload))
 	return err
 }
 
 func (s *Store) InsertCheckObs(o protocol.CheckObservation, agentID string) error {
 	payload, _ := json.Marshal(o)
-	_, err := s.DB.Exec(`INSERT INTO service_observations(agent_id,service_id,check_id,observed_at,received_at,vantage,transport,http_status,latency_ms,app_result,quality,payload)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, agentID, o.ServiceID, o.CheckID, o.ObservedAt.UTC().Format(time.RFC3339Nano),
-		s.now().Format(time.RFC3339Nano), o.Vantage, o.Transport, o.HTTPStatus, o.LatencyMS, o.AppResult, string(o.Quality), string(payload))
+	_, err := s.db().Exec(`INSERT INTO service_observations(agent_id,service_id,check_id,observed_at,received_at,vantage,transport,http_status,latency_ms,app_result,quality,payload)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, agentID, o.ServiceID, o.CheckID, o.ObservedAt.UTC().Format(dbTimeFormat),
+		s.now().UTC().Format(dbTimeFormat), o.Vantage, o.Transport, o.HTTPStatus, o.LatencyMS, o.AppResult, string(o.Quality), string(payload))
 	return err
 }
 
 func (s *Store) LatestHost(agentID string) (*protocol.HostMetrics, time.Time, error) {
 	var payload, obs string
-	err := s.DB.QueryRow(`SELECT payload, observed_at FROM host_samples WHERE agent_id=? ORDER BY observed_at DESC LIMIT 1`, agentID).Scan(&payload, &obs)
+	err := s.db().QueryRow(`SELECT payload, observed_at FROM host_samples WHERE agent_id=? ORDER BY observed_at DESC LIMIT 1`, agentID).Scan(&payload, &obs)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, time.Time{}, ErrNotFound
 	}
@@ -431,8 +458,8 @@ func (s *Store) LatestHost(agentID string) (*protocol.HostMetrics, time.Time, er
 
 func (s *Store) HostAt(agentID string, at time.Time) (*protocol.HostMetrics, time.Time, error) {
 	var payload, obs string
-	err := s.DB.QueryRow(`SELECT payload, observed_at FROM host_samples WHERE agent_id=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1`,
-		agentID, at.UTC().Format(time.RFC3339Nano)).Scan(&payload, &obs)
+	err := s.db().QueryRow(`SELECT payload, observed_at FROM host_samples WHERE agent_id=? AND observed_at<=? ORDER BY observed_at DESC LIMIT 1`,
+		agentID, at.UTC().Format(dbTimeFormat)).Scan(&payload, &obs)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, time.Time{}, ErrNotFound
 	}
@@ -446,9 +473,9 @@ func (s *Store) HostAt(agentID string, at time.Time) (*protocol.HostMetrics, tim
 }
 
 func (s *Store) HostSeries(agentID string, from, to time.Time) ([]map[string]any, error) {
-	rows, err := s.DB.Query(`SELECT observed_at,cpu_pct,ram_used,ram_avail,ram_total,ping_mean_ms,ping_loss,payload
-		FROM host_samples WHERE agent_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at`,
-		agentID, from.UTC().Format(time.RFC3339Nano), to.UTC().Format(time.RFC3339Nano))
+	rows, err := s.db().Query(`SELECT observed_at,cpu_pct,ram_used,ram_avail,ram_total,ping_mean_ms,ping_loss,payload
+		FROM host_samples WHERE agent_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at LIMIT 20001`,
+		agentID, from.UTC().Format(dbTimeFormat), to.UTC().Format(dbTimeFormat))
 	if err != nil {
 		return nil, err
 	}
@@ -481,14 +508,25 @@ func (s *Store) HostSeries(agentID string, from, to time.Time) ([]map[string]any
 		if pingL.Valid {
 			m["ping_loss"] = pingL.Float64
 		}
+		var host protocol.HostMetrics
+		if json.Unmarshal([]byte(payload), &host) == nil {
+			for _, d := range host.Disks {
+				m["disk:"+d.Mount] = d.UsedPct
+			}
+			for _, v := range host.Temperatures {
+				if v.Celsius != nil {
+					m["temperature:"+v.Source+": "+v.Label] = *v.Celsius
+				}
+			}
+		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
 }
 
 func (s *Store) UpsertService(sv protocol.DiscoveredEndpoint, agentID string) error {
-	now := s.now().Format(time.RFC3339Nano)
-	_, err := s.DB.Exec(`INSERT INTO services(id,agent_id,display_name,url,dial_target,host_header,tls_server_name,process_name,source,speaks_http,speaks_tls,first_seen_at,last_seen_at,last_discovered_at)
+	now := s.now().UTC().Format(dbTimeFormat)
+	_, err := s.db().Exec(`INSERT INTO services(id,agent_id,display_name,url,dial_target,host_header,tls_server_name,process_name,source,speaks_http,speaks_tls,first_seen_at,last_seen_at,last_discovered_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(agent_id, dial_target, host_header) DO UPDATE SET
 			url=excluded.url, process_name=excluded.process_name, speaks_http=excluded.speaks_http, speaks_tls=excluded.speaks_tls,
@@ -506,21 +544,21 @@ func boolInt(b bool) int {
 }
 
 type ServiceRow struct {
-	ID           string
-	AgentID      string
-	DisplayName  string
-	URL          string
-	DialTarget   string
-	HostHeader   string
-	ProcessName  string
-	Source       string
-	SpeaksHTTP   bool
-	Pinned       bool
-	Hidden       bool
-	Paused       bool
-	Ignored      bool
-	LastSeenAt   *time.Time
-	FirstSeenAt  time.Time
+	ID          string     `json:"id"`
+	AgentID     string     `json:"agent_id"`
+	DisplayName string     `json:"display_name"`
+	URL         string     `json:"url"`
+	DialTarget  string     `json:"dial_target"`
+	HostHeader  string     `json:"host_header"`
+	ProcessName string     `json:"process_name"`
+	Source      string     `json:"source"`
+	SpeaksHTTP  bool       `json:"speaks_http"`
+	Pinned      bool       `json:"pinned"`
+	Hidden      bool       `json:"hidden"`
+	Paused      bool       `json:"paused"`
+	Ignored     bool       `json:"ignored"`
+	LastSeenAt  *time.Time `json:"last_seen_at"`
+	FirstSeenAt time.Time  `json:"first_seen_at"`
 }
 
 func (s *Store) Services(agentID string) ([]*ServiceRow, error) {
@@ -531,7 +569,7 @@ func (s *Store) Services(agentID string) ([]*ServiceRow, error) {
 		args = append(args, agentID)
 	}
 	q += ` ORDER BY display_name`
-	rows, err := s.DB.Query(q, args...)
+	rows, err := s.db().Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +599,7 @@ func (s *Store) Service(id string) (*ServiceRow, error) {
 	sv := &ServiceRow{}
 	var http, pin, hid, pau, ign int
 	var last, first sql.NullString
-	err := s.DB.QueryRow(`SELECT id,agent_id,display_name,url,dial_target,host_header,process_name,source,speaks_http,pinned,hidden,paused,ignored,last_seen_at,first_seen_at FROM services WHERE id=?`, id).
+	err := s.db().QueryRow(`SELECT id,agent_id,display_name,url,dial_target,host_header,process_name,source,speaks_http,pinned,hidden,paused,ignored,last_seen_at,first_seen_at FROM services WHERE id=?`, id).
 		Scan(&sv.ID, &sv.AgentID, &sv.DisplayName, &sv.URL, &sv.DialTarget, &sv.HostHeader, &sv.ProcessName, &sv.Source, &http, &pin, &hid, &pau, &ign, &last, &first)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -581,14 +619,21 @@ func (s *Store) UpdateServiceFlags(id string, fields map[string]any) error {
 		args = append(args, v)
 	}
 	args = append(args, id)
-	_, err := s.DB.Exec(`UPDATE services SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
-	return err
+	res, err := s.db().Exec(`UPDATE services SET `+strings.Join(sets, ",")+` WHERE id=?`, args...)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) AppendEvent(typ, entity, entityID string, revision int64, payload any) error {
 	b, _ := json.Marshal(payload)
-	_, err := s.DB.Exec(`INSERT INTO event_log(ts,type,entity,entity_id,revision,payload) VALUES(?,?,?,?,?,?)`,
-		s.now().Format(time.RFC3339Nano), typ, entity, entityID, revision, string(b))
+	_, err := s.db().Exec(`INSERT INTO event_log(ts,type,entity,entity_id,revision,payload) VALUES(?,?,?,?,?,?)`,
+		s.now().UTC().Format(dbTimeFormat), typ, entity, entityID, revision, string(b))
 	return err
 }
 
@@ -596,7 +641,7 @@ func (s *Store) EventsAfter(id int64, limit int) ([]Event, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
-	rows, err := s.DB.Query(`SELECT id,ts,type,entity,entity_id,revision,payload FROM event_log WHERE id>? ORDER BY id LIMIT ?`, id, limit)
+	rows, err := s.db().Query(`SELECT id,ts,type,entity,entity_id,revision,payload FROM event_log WHERE id>? ORDER BY id LIMIT ?`, id, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -624,22 +669,26 @@ type Event struct {
 
 func (s *Store) MaxEventID() (int64, error) {
 	var id sql.NullInt64
-	err := s.DB.QueryRow(`SELECT MAX(id) FROM event_log`).Scan(&id)
+	err := s.db().QueryRow(`SELECT MAX(id) FROM event_log`).Scan(&id)
 	return id.Int64, err
 }
 
 func (s *Store) Audit(actor, action, entity, detail string) {
-	_, _ = s.DB.Exec(`INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,?,?,?,?)`,
-		s.now().Format(time.RFC3339Nano), actor, action, entity, detail)
+	_, _ = s.db().Exec(`INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,?,?,?,?)`,
+		s.now().UTC().Format(dbTimeFormat), actor, action, entity, detail)
 }
 
 func (s *Store) RetainRaw(maxAge time.Duration) error {
-	cut := s.now().Add(-maxAge).Format(time.RFC3339Nano)
-	_, err := s.DB.Exec(`DELETE FROM host_samples WHERE observed_at<?`, cut)
+	cut := s.now().Add(-maxAge).UTC().Format(dbTimeFormat)
+	_, err := s.db().Exec(`DELETE FROM host_samples WHERE observed_at<?`, cut)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec(`DELETE FROM service_observations WHERE observed_at<?`, cut)
+	_, err = s.db().Exec(`DELETE FROM service_observations WHERE observed_at<?`, cut)
+	if err != nil {
+		return err
+	}
+	_, err = s.db().Exec(`DELETE FROM ingest_receipts WHERE received_at<?`, s.now().Add(-2*maxAge).UTC().Format(dbTimeFormat))
 	return err
 }
 
@@ -647,18 +696,18 @@ func (s *Store) BackupTo(dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return err
 	}
-	_, err := s.DB.Exec(`VACUUM INTO ?`, dst)
+	_, err := s.db().Exec(`VACUUM INTO ?`, dst)
 	return err
 }
 
 func (s *Store) InsertBackup(id, path, sha string, size int64) error {
-	_, err := s.DB.Exec(`INSERT INTO backups(id,path,sha256,size,created_at,verified) VALUES(?,?,?,?,?,1)`,
-		id, path, sha, size, s.now().Format(time.RFC3339Nano))
+	_, err := s.db().Exec(`INSERT INTO backups(id,path,sha256,size,created_at,verified) VALUES(?,?,?,?,?,0)`,
+		id, path, sha, size, s.now().UTC().Format(dbTimeFormat))
 	return err
 }
 
 func (s *Store) Backups() ([]map[string]any, error) {
-	rows, err := s.DB.Query(`SELECT id,path,sha256,size,created_at,verified FROM backups ORDER BY created_at DESC`)
+	rows, err := s.db().Query(`SELECT id,path,sha256,size,created_at,verified FROM backups ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -678,7 +727,7 @@ func (s *Store) Backups() ([]map[string]any, error) {
 
 func (s *Store) LatestCheckObs(serviceID string) (*protocol.CheckObservation, error) {
 	var payload string
-	err := s.DB.QueryRow(`SELECT payload FROM service_observations WHERE service_id=? ORDER BY observed_at DESC LIMIT 1`, serviceID).Scan(&payload)
+	err := s.db().QueryRow(`SELECT payload FROM service_observations WHERE service_id=? ORDER BY observed_at DESC LIMIT 1`, serviceID).Scan(&payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -691,8 +740,8 @@ func (s *Store) LatestCheckObs(serviceID string) (*protocol.CheckObservation, er
 }
 
 func (s *Store) CheckSeries(serviceID string, from, to time.Time) ([]protocol.CheckObservation, error) {
-	rows, err := s.DB.Query(`SELECT payload FROM service_observations WHERE service_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at`,
-		serviceID, from.UTC().Format(time.RFC3339Nano), to.UTC().Format(time.RFC3339Nano))
+	rows, err := s.db().Query(`SELECT payload FROM service_observations WHERE service_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at LIMIT 20001`,
+		serviceID, from.UTC().Format(dbTimeFormat), to.UTC().Format(dbTimeFormat))
 	if err != nil {
 		return nil, err
 	}
@@ -711,10 +760,10 @@ func (s *Store) CheckSeries(serviceID string, from, to time.Time) ([]protocol.Ch
 }
 
 func (s *Store) SetState(entityType, entityID, state, reason string) error {
-	now := s.now().Format(time.RFC3339Nano)
+	now := s.now().UTC().Format(dbTimeFormat)
 	var prev sql.NullString
-	_ = s.DB.QueryRow(`SELECT state FROM current_states WHERE entity_type=? AND entity_id=?`, entityType, entityID).Scan(&prev)
-	_, err := s.DB.Exec(`INSERT INTO current_states(entity_type,entity_id,state,reason,since,updated_at) VALUES(?,?,?,?,?,?)
+	_ = s.db().QueryRow(`SELECT state FROM current_states WHERE entity_type=? AND entity_id=?`, entityType, entityID).Scan(&prev)
+	_, err := s.db().Exec(`INSERT INTO current_states(entity_type,entity_id,state,reason,since,updated_at) VALUES(?,?,?,?,?,?)
 		ON CONFLICT(entity_type,entity_id) DO UPDATE SET state=excluded.state, reason=excluded.reason, updated_at=excluded.updated_at,
 		since=CASE WHEN current_states.state=excluded.state THEN current_states.since ELSE excluded.since END`,
 		entityType, entityID, state, reason, now, now)
@@ -722,7 +771,7 @@ func (s *Store) SetState(entityType, entityID, state, reason string) error {
 		return err
 	}
 	if !prev.Valid || prev.String != state {
-		_, _ = s.DB.Exec(`INSERT INTO state_events(entity_type,entity_id,from_state,to_state,reason,at) VALUES(?,?,?,?,?,?)`,
+		_, _ = s.db().Exec(`INSERT INTO state_events(entity_type,entity_id,from_state,to_state,reason,at) VALUES(?,?,?,?,?,?)`,
 			entityType, entityID, prev.String, state, reason, now)
 	}
 	return nil
@@ -730,7 +779,7 @@ func (s *Store) SetState(entityType, entityID, state, reason string) error {
 
 func (s *Store) State(entityType, entityID string) (string, string, time.Time, error) {
 	var st, reason, since string
-	err := s.DB.QueryRow(`SELECT state,reason,since FROM current_states WHERE entity_type=? AND entity_id=?`, entityType, entityID).Scan(&st, &reason, &since)
+	err := s.db().QueryRow(`SELECT state,reason,since FROM current_states WHERE entity_type=? AND entity_id=?`, entityType, entityID).Scan(&st, &reason, &since)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", time.Time{}, ErrNotFound
 	}

@@ -11,14 +11,14 @@ const (
 )
 
 type Def struct {
-	ID                         string
-	Scope                      Scope
-	Risk                       string
-	RequiresCapability         string
-	DurableOperation           bool
-	IdempotencyRequired        bool
+	ID                           string
+	Scope                        Scope
+	Risk                         string
+	RequiresCapability           string
+	DurableOperation             bool
+	IdempotencyRequired          bool
 	RecentAuthenticationRequired bool
-	AuthoritativeCompletion    string
+	AuthoritativeCompletion      string
 }
 
 var Registry = map[string]Def{
