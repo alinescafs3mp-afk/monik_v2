@@ -1,0 +1,41 @@
+{
+  "example_only": true,
+  "not_tuf_metadata": true,
+  "warning": "Illustrates fields to bind in a real signed target. Contains no signatures or usable binaries.",
+  "schema_version": 3,
+  "release_id": "EXAMPLE_RELEASE",
+  "worker_version": "1.0.1-demo",
+  "service_host_version": "1.0.1-demo",
+  "targets": [
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "artifact": "monik-linux-amd64.tar.gz",
+      "length": 12345,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "os": "windows",
+      "arch": "amd64",
+      "artifact": "monik-windows-amd64.zip",
+      "length": 23456,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "compatibility": {
+    "minimum_service_host": "1.0.0-demo",
+    "protocol_min": 1,
+    "protocol_max": 1,
+    "state_schema": 1,
+    "rollback_read_compatible": true,
+    "security_floor": 1
+  },
+  "activation": {
+    "arbitrary_install_hooks": false,
+    "update_components": [
+      "worker",
+      "service_host"
+    ],
+    "independent_native_recovery_required": true
+  }
+}

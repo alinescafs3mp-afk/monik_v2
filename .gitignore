@@ -1,0 +1,35 @@
+# Build
+/bin/
+/dist/
+/web/dist/
+/web/node_modules/
+*.exe
+*.test
+*.out
+coverage.out
+
+# Data / secrets / keys — never commit live state
+/data/
+/var/
+*.db
+*.db-wal
+*.db-shm
+*.credential
+*.key
+*.pem
+admin-bootstrap.txt
+release-keys/
+tuf-keys/
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+tmp/
+*.log
+
+# Go
+vendor/

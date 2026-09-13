@@ -1,0 +1,57 @@
+{
+  "example_only": true,
+  "schema_version": 3,
+  "migration_id": "EXAMPLE_ID_ASSIGNED_BY_SERVER",
+  "controller_id": "ENROLLED_CONTROLLER_ID_PRESERVED",
+  "endpoint_generation": 2,
+  "expected_previous_generation": 1,
+  "target_selection": {
+    "type": "frozen_agent_ids",
+    "agent_ids": [
+      "EXAMPLE_AGENT_A",
+      "EXAMPLE_AGENT_B"
+    ]
+  },
+  "current_endpoint": "https://46.120.103.61:8777",
+  "candidate_endpoint": "https://new-controller.example:8777",
+  "created_at": "2026-09-13T12:00:00Z",
+  "expires_at": "2026-09-20T12:00:00Z",
+  "activation": {
+    "mode": "prepare_only",
+    "armed": false,
+    "not_before": null,
+    "activation_deadline": null,
+    "primary_loss_seconds": 30
+  },
+  "candidate_trust": {
+    "mode": "existing_scoped_controller_ca",
+    "verify_chain_and_name": true,
+    "trust_additions": []
+  },
+  "readiness": {
+    "max_age_seconds": 60,
+    "allow_explicitly_armed_unverified_candidate": true,
+    "verify_enrolled_agent_recognition": true
+  },
+  "confirmation": {
+    "minimum_committed_exchanges": 3,
+    "minimum_observation_seconds": 15,
+    "trial_timeout_seconds": 60,
+    "historical_replay_proves_liveness": false
+  },
+  "fallback": {
+    "retain_last_known_good": true,
+    "max_seconds_after_cutover": 604800,
+    "never_use_retired_or_untrusted_endpoint": true
+  },
+  "retirement": {
+    "require_owner_review": true,
+    "report_unprepared_targets": true
+  },
+  "scope": {
+    "address_change_only": true,
+    "copy_database_or_secrets": false,
+    "reset_agent_identity": false,
+    "widen_probe_destinations": false
+  }
+}

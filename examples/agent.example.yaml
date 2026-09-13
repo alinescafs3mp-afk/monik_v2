@@ -1,0 +1,119 @@
+# DESIGN CONTRACT EXAMPLE. No application/config parser is included in this package.
+schema_version: 3
+controller:
+  bootstrap_url: https://46.120.103.61:8777
+  endpoint_state_file: /var/lib/monik-agent/controller-state.json
+  identity_state_file: /var/lib/monik-agent/identity.json
+  credential_file: /etc/monik-agent/agent.credential
+  tls:
+    mode: private_ca
+    ca_file: /etc/monik-agent/controller-ca.pem
+    verify_chain_and_name: true
+    approved_spki_pins: []
+  follow_redirects: false
+  use_environment_proxy: false
+  explicit_proxy: null
+  control_poll_seconds: 5
+  retry_max_seconds: 60
+identity:
+  display_name: example-linux-host
+  state_directory: /var/lib/monik-agent
+remote_authorization:
+  monitoring_configuration: true
+  controller_migration_within_enrolled_identity: true
+  bounded_diagnostics: true
+  restart_installed_agent: true
+  arbitrary_commands: false
+  host_reboot: false
+  monitored_service_restart: false
+  remote_uninstall: false
+  binary_update: true
+  scoped_check_secret_provisioning: true
+intervals:
+  collect_seconds: 5
+  report_seconds: 5
+  check_seconds: 5
+  discovery_seconds: 60
+  disk_seconds: 30
+  static_inventory_seconds: 300
+collectors:
+  cpu: true
+  memory: true
+  temperatures: available_only
+  disks: local_real_filesystems
+  interface_traffic: false
+  ping:
+    enabled: true
+    target: 8.8.8.8
+    interval_seconds: 5
+    timeout_seconds: 1
+    window_seconds: 60
+local_policy:
+  http_targets:
+  - loopback
+  - local_interface_addresses
+  extra_http_cidrs: []
+  icmp_targets:
+  - 8.8.8.8
+  deny_metadata_destinations: true
+  allow_shell_checks: false
+  allow_cross_origin_redirects: false
+checks:
+  concurrency: 16
+  timeout_seconds: 2
+  max_response_bytes: 65536
+  follow_redirects: false
+  verify_tls: true
+  new_confirmed_endpoints:
+    monitoring: baseline_http
+    interval_seconds: 5
+    pinned: false
+discovery:
+  tcp_listeners: true
+  ipv6: true
+  probe_budget_per_minute: 128
+  docker:
+    enabled: false
+    read_only_api_endpoint: null
+spool:
+  max_age_seconds: 1800
+  max_bytes: 104857600
+  prioritize_live_and_control: true
+  on_overflow: drop_oldest_history_and_report_gap
+migration_defaults:
+  default_mode: prepare_only
+  plan_lifetime_seconds: 604800
+  readiness_max_age_seconds: 60
+  primary_loss_seconds: 30
+  trial_timeout_seconds: 60
+  minimum_confirmed_exchanges: 3
+  minimum_candidate_observation_seconds: 15
+  fallback_max_seconds: 604800
+  require_explicit_retirement: true
+  verify_expected_controller_identity: true
+logging:
+  level: info
+  redact_secrets: true
+  rotate: true
+managed_installation:
+  mode: native_service_host
+  least_privilege_worker: true
+  no_remote_shell: true
+  persist_operation_journal: true
+updates:
+  enabled: true
+  policy: owner_approved_staged
+  trusted_root_file: /etc/monik-agent/update-root.json
+  verify_with_tuf: true
+  require_length_hash_and_signature: true
+  allow_unsigned: false
+  allow_arbitrary_install_scripts: false
+  download_from_controller_only: true
+  local_probation_seconds: 120
+  remote_confirmation_timeout_seconds: 300
+  rollback_attempts: 1
+  activation_window_seconds: 86400
+  resume_downloads: true
+  max_cached_complete_packages: 2
+  max_cache_bytes: 536870912
+  service_host_update_required: true

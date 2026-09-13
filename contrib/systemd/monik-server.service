@@ -1,0 +1,14 @@
+[Unit]
+Description=Monik controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/monik-server run --data-dir /var/lib/monik-server
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

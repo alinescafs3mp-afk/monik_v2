@@ -1,0 +1,42 @@
+{
+  "example_only": true,
+  "schema_version": 3,
+  "operation_id": "EXAMPLE_UPDATE_001",
+  "action": "update.rollout",
+  "status": "attention_required",
+  "revision": 7,
+  "client_request_key": "EXAMPLE_SAME_KEY_ON_RETRY",
+  "created_at": "2026-09-13T12:00:00Z",
+  "targets": [
+    {
+      "agent_id": "EXAMPLE_LINUX",
+      "status": "succeeded",
+      "stage": "update.confirmed",
+      "message": "Current build and fresh committed exchanges confirmed.",
+      "evidence": {
+        "running_version": "1.0.1-demo",
+        "transaction_id": "EXAMPLE_TX_1",
+        "committed_exchanges": 3
+      }
+    },
+    {
+      "agent_id": "EXAMPLE_WINDOWS",
+      "status": "rolled_back",
+      "stage": "update.previous_good_restored",
+      "message": "Candidate startup failed. Previous trusted slot restored and control confirmed.",
+      "error_code": "CANDIDATE_START_FAILED",
+      "retryable": false,
+      "evidence": {
+        "running_version": "1.0.0-demo",
+        "restored": true
+      }
+    },
+    {
+      "agent_id": "EXAMPLE_OFFLINE",
+      "status": "waiting_offline",
+      "stage": "update.not_delivered",
+      "message": "Plan has not reached this agent. Activation window remains open.",
+      "retryable": false
+    }
+  ]
+}

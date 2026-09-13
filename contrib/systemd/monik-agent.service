@@ -1,0 +1,14 @@
+[Unit]
+Description=Monik agent service host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/monik-service-host run --worker /usr/local/bin/monik-agent --config /var/lib/monik-agent/agent.json --state /var/lib/monik-agent
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

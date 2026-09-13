@@ -1,0 +1,108 @@
+# DESIGN EXAMPLE ONLY. No server, certificates or runtime parser is included.
+schema_version: 3
+server:
+  listen: 0.0.0.0:8777
+  advertised_agent_url: https://46.120.103.61:8777
+  setup_required: true
+  allow_remote_setup: false
+  public_route_policy: authenticated_agent_api_only
+  admin_source_allowlist:
+  - 127.0.0.1/32
+  - ::1/128
+  trusted_proxies: []
+  tls:
+    mode: private_ca
+    certificate_file: /etc/monik-server/controller.crt
+    private_key_file: /etc/monik-server/controller.key
+    required_ip_sans:
+    - 46.120.103.61
+    - 127.0.0.1
+    required_dns_sans:
+    - localhost
+    automatic_leaf_renewal: true
+    atomic_verified_reload: true
+  data_directory: /var/lib/monik-server
+  one_active_authority: true
+storage:
+  backend: sqlite
+  database_file: /var/lib/monik-server/monik.db
+  journal_mode: WAL
+  local_filesystem_required: true
+  batched_single_writer: true
+  bounded_read_queries: true
+  acknowledge_only_committed_data: true
+retention:
+  host_raw_hours: 48
+  service_raw_hours: 48
+  one_minute_days: 30
+  fifteen_minute_days: 180
+  events_and_audit_days: 180
+  historical_config_days: 180
+  preserve_required_boundary_versions: true
+  silently_reduce_on_pressure: false
+ui:
+  default_locale: ru
+  selectable_locales:
+  - ru
+  - en
+  time_zone_default: browser
+  time_presets_hours:
+  - 1
+  - 2
+  - 3
+  - 6
+  - 12
+  - 24
+  default_window_hours: 1
+  default_mode: live
+  max_plot_buckets_per_series: 1500
+  max_plot_buckets_per_request: 30000
+  preserve_extrema: true
+  show_coverage_gaps: true
+  historical_precision_must_be_explicit: true
+  action_feedback_target_ms: 100
+  operations_survive_reload: true
+fleet_control:
+  frozen_job_target_sets: true
+  require_applied_revision_and_hash: true
+  desired_config_overdue_seconds: 86400
+  one_shot_job_expiry_seconds: 600
+  restart_job_expiry_seconds: 600
+  migration_default_mode: prepare_only
+  arbitrary_execution_enabled: false
+health:
+  stale_contact_seconds: 15
+  unreachable_contact_seconds: 30
+  configured_check_failure_count: 3
+  configured_check_recovery_count: 2
+  default_metric_freshness_intervals: 3
+  default_metric_freshness_min_seconds: 15
+  generic_temperature_alerts_enabled: false
+  generic_ping_latency_alerts_enabled: false
+  generic_http_latency_alerts_enabled: false
+  missing_data_counts_as_recovery: false
+operations:
+  structured_rotated_logs: true
+  redacted_diagnostics: true
+  sqlite_aware_backup: true
+  external_notifications_enabled: false
+  web_managed_agent_updates_enabled: true
+  durable_operations_center: true
+updates:
+  signature_verification: tuf
+  owner_approval_required: true
+  default_max_concurrent: 5
+  canary_per_platform_service_host_cohort: true
+  canary_observation_seconds: 300
+  pause_on_first_canary_failure: true
+  pause_batch_on_any_failed_or_unknown_activation: true
+  artifact_retention_keep_active_and_rollback: true
+  online_root_or_targets_private_keys: false
+  server_binary_web_update: false
+  auto_approve_new_releases: false
+secrets:
+  write_only_check_api: true
+  encrypted_at_rest: true
+  scope: agent_and_check
+  master_key_file: /etc/monik-server/secret-master.key
+  plaintext_readback: false

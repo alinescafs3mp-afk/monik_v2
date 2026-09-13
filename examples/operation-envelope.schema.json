@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Monik v3 illustrative durable operation response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "example_only",
+    "schema_version",
+    "operation_id",
+    "action",
+    "status",
+    "revision",
+    "client_request_key",
+    "created_at",
+    "targets"
+  ],
+  "properties": {
+    "example_only": {
+      "const": true
+    },
+    "schema_version": {
+      "const": 3
+    },
+    "operation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "enum": [
+        "preference.save",
+        "profile.apply",
+        "rule.save",
+        "maintenance.set",
+        "incident.acknowledge",
+        "agent.collect_now",
+        "agent.discover_now",
+        "agent.diagnostics",
+        "agent.restart",
+        "check.apply",
+        "check.trial",
+        "secret.replace",
+        "update.import",
+        "update.rollout",
+        "update.rollback",
+        "update.resume",
+        "operation.cancel_pending",
+        "operation.retry_selected",
+        "rebind.prepare",
+        "rebind.arm",
+        "rebind.activate",
+        "rebind.retire",
+        "credential.rotate",
+        "credential.revoke",
+        "trust.stage",
+        "trust.retire",
+        "backup.create",
+        "history.export",
+        "agent.archive"
+      ]
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "attention_required",
+        "completed",
+        "completed_with_errors",
+        "cancelled"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "client_request_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_id",
+          "status",
+          "stage",
+          "message"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "waiting_offline",
+              "accepted",
+              "running",
+              "awaiting_confirmation",
+              "succeeded",
+              "rejected",
+              "failed",
+              "rolled_back",
+              "unsupported",
+              "expired",
+              "cancelled_before_execution",
+              "unknown_result"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
