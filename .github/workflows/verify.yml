@@ -16,6 +16,12 @@ jobs:
           mkdir -p verification
           git rev-parse HEAD > verification/commit.txt
           git archive --format=tar.gz --output=verification/source.tar.gz HEAD
+      - name: Retain source even when toolchain setup fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ github.sha }}
+          path: verification/source.tar.gz
+          retention-days: 7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -32,7 +38,7 @@ jobs:
         run: |
           set -o pipefail
           go vet ./... 2>&1 | tee verification/vet.txt
-          go test -race -count=1 ./... 2>&1 | tee verification/go-tests.txt
+          go test -race -count=1 -timeout=3m ./... 2>&1 | tee verification/go-tests.txt
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
