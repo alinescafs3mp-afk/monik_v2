@@ -37,8 +37,8 @@ func ValidateAgentConfig(c AgentConfig) error {
 		if d.TimeoutSeconds != 2 || d.IntervalSeconds != 5 {
 			return fmt.Errorf("this worker supports a two-second check timeout and five-second check interval only")
 		}
-		if d.SecretID != "" || d.SecretHeader != "" {
-			return fmt.Errorf("secret delivery is not implemented")
+		if (d.SecretID == "") != (d.SecretHeader == "") {
+			return fmt.Errorf("secret_id and secret_header must be set together")
 		}
 		if d.Kind != "" && d.Kind != "baseline_http" && len(d.ExpectedStatus) == 0 {
 			return fmt.Errorf("application checks require expected HTTP status codes")

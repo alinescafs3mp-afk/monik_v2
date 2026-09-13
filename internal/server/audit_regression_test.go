@@ -67,16 +67,30 @@ func TestAuditPendingMigrationRespectsTargetScope(t *testing.T) {
 func TestAuditUnavailableActionsDoNotPersistSecretOrFakeOperation(t *testing.T) {
 	app, _ := testApp(t)
 	session := &storage.Session{Username: "owner", Role: "owner"}
-	for _, action := range []string{"secret.replace", "update.rollout", "rebind.activate", "agent.restart", "rule.save", "maintenance.set"} {
+	for _, action := range []string{"credential.rotate", "trust.stage", "trust.retire"} {
 		w := httptest.NewRecorder()
-		app.processSubmit(w, session, protocol.SubmitOperation{Action: action, ClientRequestKey: action, Params: map[string]any{"value": "DO_NOT_PERSIST_TEST_SECRET"}, TargetIDs: []string{"a"}})
-		if w.Code != 501 {
-			t.Fatalf("%s accepted: %d %s", action, w.Code, w.Body.String())
+		app.processSubmit(w, session, protocol.SubmitOperation{Action: action, ClientRequestKey: action, Params: map[string]any{"value": "DO_NOT_PERSIST_TEST_SECRET", "trust_pem": "not-a-cert", "fingerprint": "x"}, TargetIDs: []string{"a"}})
+		if w.Code != 401 {
+			t.Fatalf("%s without recent auth: %d %s", action, w.Code, w.Body.String())
 		}
+	}
+	w := httptest.NewRecorder()
+	app.processSubmit(w, session, protocol.SubmitOperation{Action: "check.trial", ClientRequestKey: "check.trial", Params: map[string]any{"value": "DO_NOT_PERSIST_TEST_SECRET", "url": "http://127.0.0.1/"}, TargetIDs: []string{"a"}})
+	if w.Code != 400 {
+		t.Fatalf("trial with secret plaintext: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	app.processSubmit(w, session, protocol.SubmitOperation{Action: "secret.replace", ClientRequestKey: "secret.replace", Params: map[string]any{"value": "DO_NOT_PERSIST_TEST_SECRET", "name": "n", "header": "X-Token"}, TargetIDs: []string{"a"}})
+	if w.Code != 401 {
+		t.Fatalf("secret.replace without recent auth: %d %s", w.Code, w.Body.String())
 	}
 	var n int
 	if err := app.Store.DB.QueryRow(`SELECT COUNT(*) FROM operations`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("unsafe action journalled: %d %v", n, err)
+		t.Fatalf("blocked action journalled: %d %v", n, err)
+	}
+	var secrets int
+	if err := app.Store.DB.QueryRow(`SELECT COUNT(*) FROM check_secrets`).Scan(&secrets); err != nil || secrets != 0 {
+		t.Fatalf("secret rows: %d %v", secrets, err)
 	}
 }
 func TestAuditOverviewContainsMetricsAndRealServiceOutcome(t *testing.T) {

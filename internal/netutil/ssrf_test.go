@@ -17,6 +17,18 @@ func TestParseURLRejects(t *testing.T) {
 	}
 }
 
+func TestValidateControllerURL(t *testing.T) {
+	if _, err := ValidateControllerURL("http://192.0.2.8:8777"); err == nil {
+		t.Fatal("http")
+	}
+	if _, err := ValidateControllerURL("https://169.254.169.254/"); err == nil {
+		t.Fatal("metadata");
+	}
+	if _, err := ValidateControllerURL("https://192.0.2.8:8777"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAllowedDial(t *testing.T) {
 	locals := []net.IP{net.ParseIP("192.168.12.128")}
 	p := DefaultPolicy()

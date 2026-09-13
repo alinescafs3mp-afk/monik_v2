@@ -12,6 +12,7 @@ import (
 
 	agruntime "github.com/alinescafs3mp-afk/monik_v2/internal/agent/runtime"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/setup"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/install"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/servicehost"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/version"
 )
@@ -130,10 +131,15 @@ func cmdService(args []string) int {
 			fmt.Fprintf(os.Stderr, "installation requires elevation. exact command:\nsudo %s service install --config %q\n", self, *cfg)
 			return 1
 		}
-		unit := "/etc/systemd/system/monik-agent.service"
-		hostBin := filepath.Join(filepath.Dir(self), "monik-service-host")
-		body := servicehost.PlanUnit(hostBin, *cfg, "monik")
-		if err := os.WriteFile(unit, []byte(body), 0o644); err != nil {
+		opts := install.LinuxDefaults()
+		opts.ConfigPath = *cfg
+		opts.HostSrc = filepath.Join(filepath.Dir(self), "monik-service-host")
+		opts.WorkerSrc = self
+		if _, err := os.Stat(opts.HostSrc); err != nil {
+			fmt.Fprintln(os.Stderr, "monik-service-host must sit next to monik-agent")
+			return 1
+		}
+		if err := install.InstallLinux(opts); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
@@ -142,7 +148,7 @@ func cmdService(args []string) int {
 			st.State.File.Managed = true
 			_ = st.State.Save()
 		}
-		fmt.Println("wrote", unit, "; run: systemctl daemon-reload && systemctl enable --now monik-agent.service")
+		fmt.Println("installed service host into", opts.Prefix, "unit", opts.UnitPath)
 		return 0
 	case "status":
 		fmt.Println("run: systemctl status monik-agent.service")
@@ -167,8 +173,17 @@ func cmdServiceWindows(verb, self, cfg string) int {
 		fmt.Print(servicehost.PlanWindowsService(hostBin, self, cfg))
 		return 0
 	case "install":
-		fmt.Println("run elevated:")
-		fmt.Print(servicehost.PlanWindowsService(hostBin, self, cfg))
+		opts := install.WindowsDefaults()
+		opts.HostSrc = hostBin
+		opts.WorkerSrc = self
+		opts.ConfigPath = cfg
+		if err := install.InstallWindows(opts); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Println("manual fallback:")
+			fmt.Print(servicehost.PlanWindowsService(hostBin, self, cfg))
+			return 1
+		}
+		fmt.Println("installed Windows service MonikAgent")
 		return 0
 	case "status":
 		fmt.Println(`sc.exe query MonikAgent`)

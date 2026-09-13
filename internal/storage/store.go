@@ -354,6 +354,11 @@ func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *proto
 	return err
 }
 
+func (s *Store) SetEndpointGeneration(id string, gen int64) error {
+	_, err := s.db().Exec(`UPDATE agents SET endpoint_generation=? WHERE id=? AND endpoint_generation<=?`, gen, id, gen)
+	return err
+}
+
 func (s *Store) SetApplied(id string, rev int64, hash string) error {
 	res, err := s.db().Exec(`UPDATE agents SET applied_revision=?, applied_hash=? WHERE id=? AND applied_revision<=?
  AND EXISTS(SELECT 1 FROM config_revisions WHERE agent_id=? AND revision=? AND hash=?)`, rev, hash, id, rev, id, rev, hash)

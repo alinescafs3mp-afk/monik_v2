@@ -81,3 +81,134 @@ func (s *Store) ArtifactJSON(releaseID string) json.RawMessage {
 	b, _ := json.Marshal(arts)
 	return b
 }
+
+func (s *Store) NextMigrationGeneration() int64 {
+	var n sql.NullInt64
+	_ = s.db().QueryRow(`SELECT MAX(generation) FROM controller_migrations`).Scan(&n)
+	if !n.Valid {
+		return 1
+	}
+	return n.Int64 + 1
+}
+
+func (s *Store) HasActiveLifecycle(agentID string) (string, bool) {
+	var action string
+	err := s.db().QueryRow(`SELECT action FROM agent_jobs WHERE agent_id=? AND action IN ('update.rollout','update.rollback','rebind.activate','agent.restart','credential.rotate','trust.retire') AND status IN ('queued','waiting_offline','delivered','accepted','running','awaiting_confirmation') LIMIT 1`, agentID).Scan(&action)
+	if err != nil {
+		return "", false
+	}
+	return action, true
+}
+
+func (s *Store) JobIDFor(opID, agentID string) (string, error) {
+	var id string
+	err := s.db().QueryRow(`SELECT job_id FROM operation_targets WHERE operation_id=? AND agent_id=?`, opID, agentID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return id, err
+}
+
+func (s *Store) PatchJobParams(jobID string, extra map[string]any) error {
+	var raw string
+	if err := s.db().QueryRow(`SELECT envelope FROM agent_jobs WHERE job_id=?`, jobID).Scan(&raw); err != nil {
+		return err
+	}
+	var env protocol.JobEnvelope
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		return err
+	}
+	if env.Params == nil {
+		env.Params = map[string]any{}
+	}
+	for k, v := range extra {
+		env.Params[k] = v
+	}
+	b, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	_, err = s.db().Exec(`UPDATE agent_jobs SET envelope=? WHERE job_id=?`, string(b), jobID)
+	return err
+}
+
+func (s *Store) Release(id string) (map[string]any, error) {
+	var ver, dig, notes, meta, plat, at string
+	var trust int
+	err := s.db().QueryRow(`SELECT version,digest,notes,metadata,imported_at,trust_ok,platforms FROM releases WHERE id=?`, id).
+		Scan(&ver, &dig, &notes, &meta, &at, &trust, &plat)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"id": id, "version": ver, "digest": dig, "notes": notes, "metadata": json.RawMessage(meta), "imported_at": at, "trust_ok": trust == 1, "platforms": json.RawMessage(plat)}, nil
+}
+
+func (s *Store) SaveRule(name, body string) error {
+	_, err := s.db().Exec(`INSERT INTO rule_versions(name,body,effective_from) VALUES(?,?,?)`, name, body, s.now().UTC().Format(dbTimeFormat))
+	return err
+}
+
+func (s *Store) SaveMaintenance(id, entityType, entityID, purpose, start, end, actor string) error {
+	_, err := s.db().Exec(`INSERT INTO maintenance_windows(id,entity_type,entity_id,purpose,start_at,end_at,created_by) VALUES(?,?,?,?,?,?,?)`,
+		id, entityType, entityID, purpose, start, end, actor)
+	return err
+}
+
+func (s *Store) SecretForAgent(id, agentID string) (name, header, checkID string, version int, nonce, ct []byte, err error) {
+	err = s.db().QueryRow(`SELECT name,header_name,IFNULL(check_id,''),version,nonce,ciphertext FROM check_secrets WHERE id=? AND agent_id=?`, id, agentID).
+		Scan(&name, &header, &checkID, &version, &nonce, &ct)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
+}
+
+func (s *Store) SetPendingCredential(agentID, hash, jobID string, until time.Time) error {
+	_, err := s.db().Exec(`INSERT INTO agent_credential_overlap(agent_id,pending_hash,job_id,expires_at,created_at)
+		VALUES(?,?,?,?,?)
+		ON CONFLICT(agent_id) DO UPDATE SET pending_hash=excluded.pending_hash, job_id=excluded.job_id, expires_at=excluded.expires_at`,
+		agentID, hash, jobID, until.UTC().Format(dbTimeFormat), s.now().UTC().Format(dbTimeFormat))
+	return err
+}
+
+func (s *Store) PendingCredential(agentID string) (hash, jobID string, err error) {
+	var exp string
+	err = s.db().QueryRow(`SELECT pending_hash,job_id,expires_at FROM agent_credential_overlap WHERE agent_id=?`, agentID).Scan(&hash, &jobID, &exp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrNotFound
+	}
+	if err != nil {
+		return "", "", err
+	}
+	until, _ := time.Parse(time.RFC3339Nano, exp)
+	if until.Before(s.now().UTC()) {
+		_, _ = s.db().Exec(`DELETE FROM agent_credential_overlap WHERE agent_id=?`, agentID)
+		return "", "", ErrNotFound
+	}
+	return hash, jobID, nil
+}
+
+func (s *Store) PromoteCredential(agentID, hash string) error {
+	return s.WithTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`UPDATE agents SET credential_hash=? WHERE id=?`, hash, agentID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM agent_credential_overlap WHERE agent_id=?`, agentID)
+		return err
+	})
+}
+
+func (s *Store) MarkTargetAndJob(opID, agentID string, st protocol.TargetStatus, stage, msg string, retry bool, evidence map[string]any) error {
+	if err := s.UpdateTarget(opID, agentID, st, stage, msg, "", retry, evidence); err != nil {
+		return err
+	}
+	jobID, err := s.JobIDFor(opID, agentID)
+	if err != nil {
+		return nil
+	}
+	_, err = s.db().Exec(`UPDATE agent_jobs SET status=? WHERE job_id=?`, string(st), jobID)
+	return err
+}

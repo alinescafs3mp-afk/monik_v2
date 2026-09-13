@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/rules"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/version"
 )
 
@@ -54,7 +57,10 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/agent/enroll", a.handleEnroll)
 	mux.HandleFunc("POST /api/v1/agent/report", a.handleReport)
 	mux.HandleFunc("GET /api/v1/agent/tuf/{name}", a.handleTUF)
-	mux.HandleFunc("GET /api/v1/agent/artifacts/{name}", a.handleArtifact)
+	mux.HandleFunc("GET /api/v1/agent/artifacts/{name...}", a.handleArtifact)
+	mux.HandleFunc("GET /api/v1/agent/secrets/{id}", a.handleAgentSecret)
+	mux.HandleFunc("GET /api/v1/agent/update-root", a.handleAgentUpdateRoot)
+	mux.HandleFunc("POST /api/v1/agent/credential/next", a.handleCredentialNext)
 	mux.HandleFunc("/", a.serveUI)
 }
 
@@ -312,7 +318,9 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 	st, reason := contact(ag, a.Clock.Now())
 	_, _, since, _ := a.Store.State("agent", id)
 	a.writeJSON(w, 200, map[string]any{
-		"agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs, "age_seconds": a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
+		"agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
+		"desired_config": json.RawMessage(orJSON(ag.DesiredConfig)),
+		"age_seconds":    a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
 	})
 }
 
@@ -621,6 +629,7 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request, s *storage.
 			exp = t
 		}
 	}
+	_, tufErr := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf"))
 	a.writeJSON(w, 200, map[string]any{
 		"advertised_url":      a.Cfg.AdvertisedURL,
 		"listen":              a.Cfg.Listen,
@@ -629,6 +638,8 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request, s *storage.
 		"retention_raw_hours": 48,
 		"restore_mode":        a.Cfg.RestoreMode,
 		"telegram_deferred":   true,
+		"tuf_root_enrolled":   tufErr == nil,
+		"ca_cert_pem":         string(a.CACertPEM()),
 	})
 }
 
@@ -715,16 +726,90 @@ func (a *App) handleTUF(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 400, "bad_name", "invalid metadata name")
 		return
 	}
-	http.ServeFile(w, r, a.Cfg.DataDir+"/tuf/repository/"+name)
+	root := filepath.Join(a.Cfg.DataDir, "tuf")
+	if name == "root.json" {
+		if p := tufutil.TrustedRootPath(root); fileExists(p) {
+			http.ServeFile(w, r, p)
+			return
+		}
+	}
+	http.ServeFile(w, r, filepath.Join(root, "repository", name))
 }
 
 func (a *App) handleArtifact(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := a.agentFrom(r); !ok {
+		a.writeErr(w, 401, "unauthenticated", "agent credential required")
+		return
+	}
 	name := r.PathValue("name")
-	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+	path, err := confinedJoin(filepath.Join(a.Cfg.DataDir, "tuf", "targets"), name)
+	if err != nil {
 		a.writeErr(w, 400, "bad_name", "invalid artifact name")
 		return
 	}
-	http.ServeFile(w, r, a.Cfg.DataDir+"/tuf/targets/"+name)
+	http.ServeFile(w, r, path)
+}
+
+func (a *App) handleAgentSecret(w http.ResponseWriter, r *http.Request) {
+	ag, cred, ok := a.agentFrom(r)
+	if !ok {
+		a.writeErr(w, 401, "unauthenticated", "agent credential required")
+		return
+	}
+	_ = cred
+	id := r.PathValue("id")
+	name, header, checkID, version, nonce, ct, err := a.Store.SecretForAgent(id, ag.ID)
+	if err != nil {
+		a.writeErr(w, 404, "not_found", "secret not found")
+		return
+	}
+	plain, err := secure.Open(a.Master, nonce, ct)
+	if err != nil {
+		a.writeErr(w, 500, "secret", "could not open secret")
+		return
+	}
+	a.writeJSON(w, 200, map[string]any{
+		"id": id, "name": name, "header": header, "check_id": checkID, "version": version, "value": string(plain),
+	})
+}
+
+func (a *App) handleAgentUpdateRoot(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := a.agentFrom(r); !ok {
+		a.writeErr(w, 401, "unauthenticated", "agent credential required")
+		return
+	}
+	b, err := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf"))
+	if err != nil {
+		a.writeErr(w, 404, "not_found", "no enrolled TUF root")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(b)
+}
+
+func (a *App) agentFrom(r *http.Request) (*storage.AgentRow, string, bool) {
+	return a.lookupAgent(r, true)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func confinedJoin(root, name string) (string, error) {
+	if name == "" || strings.Contains(name, "..") || strings.ContainsRune(name, 0) {
+		return "", os.ErrInvalid
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(absRoot, filepath.FromSlash(name))
+	rel, err := filepath.Rel(absRoot, full)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", os.ErrInvalid
+	}
+	return full, nil
 }
 
 func recentOK(s *storage.Session, now time.Time) bool {

@@ -56,6 +56,7 @@ type Agent struct {
 	discovering    atomic.Bool
 	checking       atomic.Bool
 	forceDiscovery bool
+	secrets        map[string]storedSecret
 }
 
 func Open(cfgPath string) (*Agent, error) {
@@ -92,14 +93,17 @@ func Open(cfgPath string) (*Agent, error) {
 			},
 		},
 		jobs: map[string]protocol.JobReceipt{}, started: time.Now(), selfBin: self, digest: fileDigest(self), discoveries: make(chan *protocol.DiscoveryDelta, 1), observations: make(chan protocol.CheckObservation, 128),
+		secrets: map[string]storedSecret{},
 	}
 	a.cfgHash = configfile.HashConfig(cfg)
 	a.cfgRev = st.File.AppliedRevision
+	_ = a.applyTrustPool()
 	if b, err := os.ReadFile(filepath.Join(st.File.StateDir, "job-receipts.json")); err == nil {
 		if err := json.Unmarshal(b, &a.jobs); err != nil {
 			return nil, fmt.Errorf("job receipt journal corrupt: %w", err)
 		}
 	}
+	a.reconcileIntents()
 	return a, nil
 }
 
@@ -176,7 +180,8 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 					defer func() { <-sem }()
 					cctx, cancel := context.WithTimeout(ctx, protocol.HTTPProbeTimeout)
 					defer cancel()
-					obs := checks.Run(cctx, d, locals, "", "")
+					hdr, val := a.secretFor(d)
+					obs := checks.Run(cctx, d, locals, hdr, val)
 					obs.ConfigRev = revision
 					select {
 					case a.observations <- obs:
@@ -220,7 +225,7 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 	}
 drained:
 	seq := a.Seq.Add(1)
-	rep := protocol.AgentReport{SchemaVersion: protocol.SchemaVersion, AgentID: a.State.File.AgentID, SessionID: a.Session, Sequence: seq, ObservedAt: now, ReportedAt: a.Clock.Now().UTC(), ConfigRevision: a.cfgRev, ConfigHash: a.cfgHash, EndpointGeneration: a.State.File.EndpointGeneration, WorkerVersion: version.Version, WorkerDigest: a.digest, Host: host, Capabilities: caps, Checks: obs, Discovery: disc, IsLive: true, Spool: ptrSpool(a.Spool.Status())}
+	rep := protocol.AgentReport{SchemaVersion: protocol.SchemaVersion, AgentID: a.State.File.AgentID, SessionID: a.Session, Sequence: seq, ObservedAt: now, ReportedAt: a.Clock.Now().UTC(), ConfigRevision: a.cfgRev, ConfigHash: a.cfgHash, EndpointGeneration: a.State.File.EndpointGeneration, WorkerVersion: version.Version, WorkerDigest: a.digest, ManagedReady: a.managed(), Host: host, Capabilities: caps, Checks: obs, Discovery: disc, IsLive: true, Spool: ptrSpool(a.Spool.Status())}
 	a.mu.Lock()
 	for id, job := range a.jobs {
 		if job.Status == protocol.TargetAccepted {
@@ -337,6 +342,10 @@ func (a *Agent) applyControl(cr protocol.ControlResponse) {
 		}
 		switch job.Status {
 		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported, protocol.TargetExpired, protocol.TargetRolledBack:
+			if in, err := loadIntent(a.State.File.StateDir); err == nil && in != nil && in.JobID == id && in.Kind == "rebind_switch" {
+				_ = a.applySwitch(in)
+				clearIntent(a.State.File.StateDir)
+			}
 			delete(a.jobs, id)
 		}
 		// An ACK for acceptance is not an ACK for completion. Keep pending
@@ -402,6 +411,10 @@ func (a *Agent) handleJob(job protocol.JobEnvelope) {
 				rec.Status = protocol.TargetRejected
 				rec.Message = "desired revision/hash was not applied or has been superseded"
 			}
+		case "secret.replace", "agent.restart", "update.rollout", "update.rollback",
+			"rebind.prepare", "rebind.arm", "rebind.activate", "rebind.retire",
+			"check.trial", "credential.rotate", "trust.stage", "trust.retire":
+			rec = a.executeJob(job)
 		}
 	}
 	if rec.Status == protocol.TargetSucceeded {
@@ -437,6 +450,23 @@ func ListenAddrHint() string {
 		}
 	}
 	return "127.0.0.1"
+}
+
+func (a *Agent) secretFor(d protocol.CheckDefinition) (header, value string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.secretForLocked(d)
+}
+
+func (a *Agent) secretForLocked(d protocol.CheckDefinition) (header, value string) {
+	if d.SecretID == "" {
+		return "", ""
+	}
+	s, ok := a.secrets[d.SecretID]
+	if !ok {
+		return "", ""
+	}
+	return s.Header, s.Value
 }
 
 func (a *Agent) saveJobsLocked() error {

@@ -395,6 +395,15 @@ CREATE TABLE IF NOT EXISTS ingest_receipts (
 );
 CREATE INDEX IF NOT EXISTS idx_ingest_received ON ingest_receipts(received_at);
 
+CREATE TABLE IF NOT EXISTS agent_credential_overlap (
+  agent_id TEXT PRIMARY KEY,
+  pending_hash TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(agent_id) REFERENCES agents(id)
+);
+
 CREATE TABLE IF NOT EXISTS incident_streaks (
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,

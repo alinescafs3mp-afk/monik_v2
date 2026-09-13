@@ -4,9 +4,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -314,4 +316,42 @@ func PoolFromPEM(pemBytes []byte) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("invalid CA PEM")
 	}
 	return p, nil
+}
+
+func CertFingerprint(pemBytes []byte) (string, error) {
+	certs, err := ParseCerts(pemBytes)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(certs[0].Raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func ParseCerts(pemBytes []byte) ([]*x509.Certificate, error) {
+	var out []*x509.Certificate
+	rest := pemBytes
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no certificate in PEM")
+	}
+	return out, nil
+}
+
+func FingerprintDER(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }

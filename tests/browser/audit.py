@@ -46,7 +46,7 @@ def run(binary: Path, output: Path) -> None:
                 access = json.loads(access_file.read_text())
                 assert access["url"] == base
                 with sync_playwright() as playwright:
-                    options = {"headless": True}
+                    options = {"headless": True, "args": ["--no-sandbox", "--disable-dev-shm-usage"]}
                     if os.environ.get("MONIK_TEST_CHROMIUM"):
                         options["executable_path"] = os.environ["MONIK_TEST_CHROMIUM"]
                     browser = playwright.chromium.launch(**options)
@@ -119,9 +119,9 @@ def run(binary: Path, output: Path) -> None:
                     results.append("accepted operation stays pending without synthetic worker completion")
 
                     page.goto(base + "/updates", wait_until="domcontentloaded")
-                    expect(page.locator("main")).to_contain_text("заблокированы")
+                    expect(page.locator("main")).to_contain_text("TUF root")
                     assert page.get_by_role("button", name="Обновить всех").count() == 0
-                    results.append("unimplemented update gate is visible and cannot claim release readiness")
+                    results.append("update import is visible and fleet-wide update remains absent")
 
                     page.set_viewport_size({"width": 390, "height": 844})
                     page.goto(base + "/", wait_until="domcontentloaded")

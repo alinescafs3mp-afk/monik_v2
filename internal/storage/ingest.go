@@ -133,6 +133,11 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 			if err := ts.TouchAgent(rep.AgentID, rep.SessionID, rep.Sequence, true, rep.Host, rep.Capabilities, versions); err != nil {
 				return err
 			}
+			if rep.EndpointGeneration > 0 {
+				if err := ts.SetEndpointGeneration(rep.AgentID, rep.EndpointGeneration); err != nil {
+					return err
+				}
+			}
 			// A mismatched config receipt is visible as desired/applied lag, not false convergence.
 			if rep.ConfigRevision > 0 && rep.ConfigHash != "" {
 				if err := ts.SetApplied(rep.AgentID, rep.ConfigRevision, rep.ConfigHash); err != nil && !errors.Is(err, ErrConflict) {

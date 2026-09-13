@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/rules"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 )
 
 func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
@@ -59,24 +61,30 @@ func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
 	_ = a.Store.SetDesired(req.AgentID, 1, hash, string(body))
 	a.Store.Audit("agent", "enroll", req.AgentID, req.Hostname)
 	_ = a.Store.AppendEvent("agent", "agent", req.AgentID, 1, map[string]any{"event": "enrolled"})
+	rootJSON := ""
+	if b, err := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf")); err == nil {
+		rootJSON = string(b)
+	}
 	a.writeJSON(w, 200, protocol.EnrollResponse{
 		AgentID: req.AgentID, Credential: cred, ControllerID: a.ControllerID(),
 		AdvertisedURL: a.Cfg.AdvertisedURL, CACertPEM: string(a.CACertPEM()),
-		ConfigRevision: 1, EndpointGeneration: 1,
+		ConfigRevision: 1, EndpointGeneration: 1, UpdateRootJSON: rootJSON,
 	})
 }
 
 func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
-	agentID, cred, ok := bearer(r)
+	agentID, _, ok := bearer(r)
 	if !ok {
 		a.writeErr(w, 401, "unauthenticated", "agent credential required")
 		return
 	}
-	ag, err := a.Store.Agent(agentID)
-	if err != nil || ag.Revoked || !secure.EqualHash(ag.CredentialHash, secure.HashToken(cred)) {
+	ag, cred, ok := a.lookupAgent(r, true)
+	if !ok {
 		a.writeErr(w, 401, "unauthenticated", "invalid agent credential")
 		return
 	}
+	_ = cred
+	agentID = ag.ID
 	var rep protocol.AgentReport
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&rep); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid report")
@@ -168,7 +176,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, DesiredConfig: desired, Jobs: jobs, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks /* controller migration is fail-closed until candidate verification exists */})
+	a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, DesiredConfig: desired, Jobs: jobs, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks})
 }
 
 func bearer(r *http.Request) (agentID, cred string, ok bool) {

@@ -56,6 +56,10 @@ func loadOp(id, action, status, key, actor, params, created, deadline, summary, 
 }
 
 func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
+	if op.Action == "secret.replace" && op.Params != nil {
+		delete(op.Params, "value")
+		op.Params["redacted"] = true
+	}
 	params, _ := json.Marshal(op.Params)
 	var dl any
 	if op.Deadline != nil {
@@ -328,6 +332,30 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 				}
 			case "agent.diagnostics":
 				proven = rec.Stage == "diagnostics" && rec.Evidence["os"] != nil
+			case "secret.replace":
+				proven = rec.Evidence["secret_id"] != nil && rec.Evidence["version"] != nil && rec.Evidence["value"] == nil
+			case "agent.restart":
+				session, _ := rec.Evidence["session_id"].(string)
+				var current string
+				_ = tx.QueryRow(`SELECT session_id FROM agents WHERE id=?`, agentID).Scan(&current)
+				proven = session != "" && session == current
+			case "update.rollout", "update.rollback":
+				digest, _ := rec.Evidence["worker_digest"].(string)
+				session, _ := rec.Evidence["session_id"].(string)
+				var gotDigest, gotSession string
+				_ = tx.QueryRow(`SELECT IFNULL(worker_digest,''), IFNULL(session_id,'') FROM agents WHERE id=?`, agentID).Scan(&gotDigest, &gotSession)
+				proven = digest != "" && digest == gotDigest && session != "" && session == gotSession
+			case "rebind.prepare":
+				proven = rec.Stage == "rebind.prepared" && rec.Evidence["plan_id"] != nil
+			case "rebind.arm":
+				proven = rec.Stage == "rebind.armed" && rec.Evidence["plan_id"] != nil
+			case "rebind.activate":
+				gen := fmt.Sprint(rec.Evidence["generation"])
+				var got int64
+				_ = tx.QueryRow(`SELECT endpoint_generation FROM agents WHERE id=?`, agentID).Scan(&got)
+				proven = rec.Evidence["plan_id"] != nil && gen != "" && fmt.Sprint(got) == gen
+			case "rebind.retire":
+				proven = rec.Stage == "rebind.retired"
 			}
 			if !proven {
 				rec.Status = protocol.TargetRejected

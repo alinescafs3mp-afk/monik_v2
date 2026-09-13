@@ -36,6 +36,9 @@ async function reauth() {
       <p>Срок TLS: {{ st?.tls_leaf_expiry }}</p>
       <p>Сырая история: {{ st?.retention_raw_hours }} ч</p>
       <p>Telegram: отложен</p>
+      <p>TUF root: {{ st?.tuf_root_enrolled ? 'зачислен' : 'ещё не зачислен — первый импорт с отметкой enroll_root' }}</p>
+      <p class="muted">Публичный CA контроллера (не ключ):</p>
+      <pre class="muted">{{ st?.ca_cert_pem }}</pre>
     </section>
     <section class="panel">
       <h2>Диагностика</h2>

@@ -34,7 +34,11 @@ func main() {
 	if *state == "" {
 		*state = filepath.Dir(*cfg)
 	}
-	h := &servicehost.Host{WorkerBin: *worker, WorkerCfg: *cfg, StateDir: *state}
+	self, _ := os.Executable()
+	h := &servicehost.Host{WorkerBin: *worker, WorkerCfg: *cfg, StateDir: *state, SelfBin: self}
+	if runWindowsService(h) {
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := h.Run(ctx); err != nil {

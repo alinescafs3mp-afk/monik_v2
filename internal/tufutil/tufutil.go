@@ -19,18 +19,18 @@ import (
 )
 
 type KeySet struct {
-	Dir string
+	Dir                                string
 	Root, Targets, Snapshot, Timestamp ed25519.PrivateKey
 }
 
 type BundleResult struct {
-	ID            string
-	Version       string
-	Digest        string
-	Notes         string
-	MetadataJSON  string
-	Platforms     []map[string]string
-	Artifacts     []Artifact
+	ID           string
+	Version      string
+	Digest       string
+	Notes        string
+	MetadataJSON string
+	Platforms    []map[string]string
+	Artifacts    []Artifact
 }
 
 type Artifact struct {
@@ -82,6 +82,9 @@ func SignRepository(keys *KeySet, repoDir string, artifacts map[string]string, t
 		return err
 	}
 	targets := metadata.Targets(time.Now().AddDate(0, 0, targetsDays).UTC())
+	if v := existingVersion(filepath.Join(repoDir, "targets.json"), "targets"); v > 0 {
+		targets.Signed.Version = v + 1
+	}
 	for targetPath, local := range artifacts {
 		info, err := metadata.TargetFile().FromFile(local, "sha256")
 		if err != nil {
@@ -100,18 +103,44 @@ func SignRepository(keys *KeySet, repoDir string, artifacts map[string]string, t
 			return err
 		}
 	}
+	rootPath := filepath.Join(repoDir, "root.json")
 	root := metadata.Root(time.Now().AddDate(1, 0, 0).UTC())
-	for name, k := range map[string]ed25519.PrivateKey{"root": keys.Root, "targets": keys.Targets, "snapshot": keys.Snapshot, "timestamp": keys.Timestamp} {
-		key, err := metadata.KeyFromPublicKey(k.Public())
+	if _, err := os.Stat(rootPath); err == nil {
+		if _, err := root.FromFile(rootPath); err != nil {
+			return err
+		}
+	} else {
+		for name, k := range map[string]ed25519.PrivateKey{"root": keys.Root, "targets": keys.Targets, "snapshot": keys.Snapshot, "timestamp": keys.Timestamp} {
+			key, err := metadata.KeyFromPublicKey(k.Public())
+			if err != nil {
+				return err
+			}
+			if err := root.Signed.AddKey(key, name); err != nil {
+				return err
+			}
+		}
+		rtSigner, err := signerOf(keys.Root)
 		if err != nil {
 			return err
 		}
-		if err := root.Signed.AddKey(key, name); err != nil {
+		if _, err := root.Sign(rtSigner); err != nil {
+			return err
+		}
+		if err := root.ToFile(rootPath, true); err != nil {
+			return err
+		}
+		if err := root.ToFile(filepath.Join(repoDir, fmt.Sprintf("%d.root.json", root.Signed.Version)), true); err != nil {
 			return err
 		}
 	}
 	snapshot := metadata.Snapshot(time.Now().AddDate(0, 0, targetsDays).UTC())
+	if v := existingVersion(filepath.Join(repoDir, "snapshot.json"), "snapshot"); v > 0 {
+		snapshot.Signed.Version = v + 1
+	}
 	timestamp := metadata.Timestamp(time.Now().AddDate(0, 0, tsDays).UTC())
+	if v := existingVersion(filepath.Join(repoDir, "timestamp.json"), "timestamp"); v > 0 {
+		timestamp.Signed.Version = v + 1
+	}
 
 	tsSigner, err := signerOf(keys.Targets)
 	if err != nil {
@@ -143,19 +172,6 @@ func SignRepository(keys *KeySet, repoDir string, artifacts map[string]string, t
 		return err
 	}
 	if err := timestamp.ToFile(filepath.Join(repoDir, "timestamp.json"), true); err != nil {
-		return err
-	}
-	rtSigner, err := signerOf(keys.Root)
-	if err != nil {
-		return err
-	}
-	if _, err := root.Sign(rtSigner); err != nil {
-		return err
-	}
-	if err := root.ToFile(filepath.Join(repoDir, "root.json"), true); err != nil {
-		return err
-	}
-	if err := root.ToFile(filepath.Join(repoDir, "1.root.json"), true); err != nil {
 		return err
 	}
 	if err := root.VerifyDelegate("root", root); err != nil {
@@ -431,4 +447,213 @@ func copyTree(src, dst string) error {
 
 func TrustedRootBytes(repoDir string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(repoDir, "root.json"))
+}
+
+func extractBundle(bundlePath string) (tmp string, err error) {
+	f, err := os.Open(bundlePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	tmp, err = os.MkdirTemp("", "monik-import-*")
+	if err != nil {
+		return "", err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			os.RemoveAll(tmp)
+		}
+	}()
+	var total int64
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			if hdr.Typeflag == tar.TypeDir {
+				continue
+			}
+			return "", fmt.Errorf("unsafe archive entry %s", hdr.Name)
+		}
+		name := filepath.Clean(hdr.Name)
+		if strings.HasPrefix(name, "..") || filepath.IsAbs(name) || strings.Contains(name, `\`) {
+			return "", fmt.Errorf("path traversal rejected")
+		}
+		if hdr.Size > 200<<20 {
+			return "", fmt.Errorf("entry too large")
+		}
+		total += hdr.Size
+		if total > 512<<20 {
+			return "", fmt.Errorf("bundle too large")
+		}
+		dst := filepath.Join(tmp, name)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return "", err
+		}
+		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+		if err != nil {
+			return "", err
+		}
+		if _, err := io.CopyN(out, tr, hdr.Size); err != nil {
+			out.Close()
+			return "", err
+		}
+		out.Close()
+	}
+	rootPath := filepath.Join(tmp, "root.json")
+	if _, err := os.Stat(rootPath); err != nil {
+		if _, err2 := os.Stat(filepath.Join(tmp, "repository", "root.json")); err2 == nil {
+			tmp = filepath.Join(tmp, "repository")
+		} else {
+			return "", fmt.Errorf("bundle missing TUF root.json")
+		}
+	}
+	cleanup = false
+	return tmp, nil
+}
+
+func collectArtifacts(repoDir string) ([]Artifact, []map[string]string, error) {
+	tg := metadata.Targets()
+	if _, err := tg.FromFile(filepath.Join(repoDir, "targets.json")); err != nil {
+		return nil, nil, err
+	}
+	var plats []map[string]string
+	var arts []Artifact
+	for name, info := range tg.Signed.Targets {
+		p := filepath.Join(repoDir, "targets", name)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := info.VerifyLengthHashes(b); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", name, err)
+		}
+		sum := secure.SHA256Bytes(b)
+		osn, arch := parsePlatform(name)
+		arts = append(arts, Artifact{OS: osn, Arch: arch, Name: name, SHA256: sum, Path: p, Length: int64(len(b))})
+		plats = append(plats, map[string]string{"os": osn, "arch": arch, "name": name})
+	}
+	return arts, plats, nil
+}
+
+func layoutResult(repoDir string, arts []Artifact, plats []map[string]string) *BundleResult {
+	res := &BundleResult{ID: secure.SHA256Bytes([]byte(time.Now().String()))[:16], Artifacts: arts, Platforms: plats}
+	tg := metadata.Targets()
+	if _, err := tg.FromFile(filepath.Join(repoDir, "targets.json")); err == nil {
+		res.Digest = secure.SHA256Bytes([]byte(fmt.Sprintf("%v", tg.Signed.Targets)))
+	}
+	man := filepath.Join(repoDir, "manifest.json")
+	if b, err := os.ReadFile(man); err == nil {
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		if v, ok := m["worker_version"].(string); ok {
+			res.Version = v
+		}
+		if v, ok := m["notes"].(string); ok {
+			res.Notes = v
+		}
+		res.MetadataJSON = string(b)
+	}
+	if res.Version == "" {
+		res.Version = "unknown"
+	}
+	return res
+}
+
+// ImportTrusted extracts a bundle and verifies it against an independently enrolled
+// TUF root. The first successful import may enroll that root when opts.Enroll is set.
+func ImportTrusted(bundlePath, destDir string, opts ImportOpts) (*BundleResult, error) {
+	tmp, err := extractBundle(bundlePath)
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+
+	now := opts.Now
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	trusted := opts.TrustedRoot
+	if len(trusted) == 0 {
+		if existing, err := LoadTrustedRoot(destDir); err == nil {
+			trusted = existing
+		}
+	}
+	if len(trusted) == 0 {
+		if !opts.Enroll {
+			return nil, fmt.Errorf("no enrolled TUF root: import a first bundle with enroll_root=true from the owner's signed repository")
+		}
+		bundleRoot, err := os.ReadFile(filepath.Join(tmp, "root.json"))
+		if err != nil {
+			return nil, fmt.Errorf("bundle missing root.json")
+		}
+		if _, err := VerifyRepo(bundleRoot, tmp, HighWater{}, now); err != nil {
+			return nil, fmt.Errorf("cannot enroll untrusted root: %w", err)
+		}
+		if err := SaveTrustedRoot(destDir, bundleRoot); err != nil {
+			return nil, err
+		}
+		trusted = bundleRoot
+	} else {
+		enrolled, err := parseRoot(trusted)
+		if err != nil {
+			return nil, err
+		}
+		if bundleRoot, err := os.ReadFile(filepath.Join(tmp, "root.json")); err == nil {
+			incoming, err := parseRoot(bundleRoot)
+			if err == nil && rootKeyFingerprint(incoming) != rootKeyFingerprint(enrolled) {
+				return nil, fmt.Errorf("bundle TUF root keys do not match the enrolled root")
+			}
+		}
+	}
+	hw, err := VerifyRepo(trusted, tmp, LoadHighWater(destDir), now)
+	if err != nil {
+		return nil, err
+	}
+	repoDir := filepath.Join(destDir, "repository")
+	targetDir := filepath.Join(destDir, "targets")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return nil, err
+	}
+	for _, name := range []string{"root.json", "timestamp.json", "snapshot.json", "targets.json", "manifest.json"} {
+		src := filepath.Join(tmp, name)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+		b, err := os.ReadFile(src)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(filepath.Join(repoDir, name), b, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	if err := copyTree(filepath.Join(tmp, "targets"), targetDir); err != nil {
+		return nil, err
+	}
+	if err := saveHighWater(destDir, hw); err != nil {
+		return nil, err
+	}
+	arts, plats, err := collectArtifacts(tmp)
+	if err != nil {
+		return nil, err
+	}
+	for i := range arts {
+		arts[i].Path = filepath.Join(targetDir, arts[i].Name)
+	}
+	return layoutResult(tmp, arts, plats), nil
 }

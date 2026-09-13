@@ -13,6 +13,7 @@ import (
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/tlsutil"
 )
 
 func auditWorker(t *testing.T, handler http.HandlerFunc) (*Agent, *httptest.Server) {
@@ -56,7 +57,7 @@ func TestAuditWorkerDoesNotClaimScheduledCollectionSucceeded(t *testing.T) {
 	}
 }
 func TestAuditWorkerRejectsUnsupportedAndExpiredActions(t *testing.T) {
-	for _, action := range []string{"agent.restart", "update.rollout", "rebind.activate", "arbitrary_shell"} {
+	for _, action := range []string{"agent.restart", "update.rollout", "arbitrary_shell"} {
 		t.Run(action, func(t *testing.T) {
 			a, _ := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
 			a.handleJob(auditEnvelope(action))
@@ -65,6 +66,13 @@ func TestAuditWorkerRejectsUnsupportedAndExpiredActions(t *testing.T) {
 			}
 		})
 	}
+	t.Run("rebind.activate", func(t *testing.T) {
+		a, _ := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
+		a.handleJob(auditEnvelope("rebind.activate"))
+		if a.jobs["job"].Status != protocol.TargetRejected {
+			t.Fatalf("unprepared activate must reject, got %+v", a.jobs["job"])
+		}
+	})
 	a, _ := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
 	job := auditEnvelope("agent.collect_now")
 	job.Deadline = time.Now().Add(-time.Second)
@@ -125,6 +133,60 @@ func TestAuditReportRequiresCommittedMatchingAcknowledgement(t *testing.T) {
 		})
 	}
 }
+func TestCheckTrialRunsOnceAndDoesNotChangeConfig(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(204)
+	}))
+	t.Cleanup(ts.Close)
+	a, _ := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
+	before := a.cfgHash
+	job := auditEnvelope("check.trial")
+	job.Params = map[string]any{"url": ts.URL, "method": "GET"}
+	a.handleJob(job)
+	got := a.jobs["job"]
+	if got.Status != protocol.TargetSucceeded || got.Stage != "redacted_trial_result" {
+		t.Fatalf("%+v", got)
+	}
+	if a.cfgHash != before {
+		t.Fatal("trial mutated applied config")
+	}
+	status, _ := got.Evidence["http_status"].(*int)
+	if status == nil || *status != 204 {
+		t.Fatalf("missing status: %+v", got.Evidence)
+	}
+}
+
+func TestTrustRetireRefusesLastRoot(t *testing.T) {
+	a, _ := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
+	certs, err := tlsutil.ParseCerts([]byte(a.State.File.CACertPEM))
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := auditEnvelope("trust.retire")
+	job.Params = map[string]any{"fingerprint": tlsutil.FingerprintDER(certs[0].Raw)}
+	a.handleJob(job)
+	if a.jobs["job"].Status != protocol.TargetRejected {
+		t.Fatalf("retired last root: %+v", a.jobs["job"])
+	}
+}
+
+func TestPreparedRebindIsStoredWithoutSwitchingController(t *testing.T) {
+	a, ts := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
+	job := auditEnvelope("rebind.prepare")
+	job.Params = map[string]any{"plan_id": "plan-1", "candidate_url": "https://192.0.2.9:8777", "generation": float64(2), "controller_id": "controller"}
+	a.handleJob(job)
+	if a.jobs["job"].Status != protocol.TargetSucceeded {
+		t.Fatalf("%+v", a.jobs["job"])
+	}
+	if a.State.File.ControllerURL != ts.URL {
+		t.Fatal("prepare switched controller")
+	}
+	plan, err := configfile.LoadMigration(a.State.File.StateDir)
+	if err != nil || plan.PlanID != "plan-1" {
+		t.Fatalf("plan not stored: %+v %v", plan, err)
+	}
+}
+
 func TestAuditHistoricalAcknowledgementCannotReapplyOldControl(t *testing.T) {
 	cfg := protocol.DefaultAgentConfig()
 	cfg.Paused = true

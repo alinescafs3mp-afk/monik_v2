@@ -123,6 +123,12 @@ func Enroll(p *Profile) (*configfile.State, error) {
 		CredentialPath: credPath, StateDir: p.StateDir, EndpointGeneration: er.EndpointGeneration,
 		AppliedRevision: er.ConfigRevision, BootstrapURL: protocol.DefaultBootstrapURL,
 	}
+	if er.UpdateRootJSON != "" {
+		rootPath := filepath.Join(p.StateDir, "tuf-root.json")
+		if err := os.WriteFile(rootPath, []byte(er.UpdateRootJSON), 0o600); err == nil {
+			st.File.UpdateRootPath = rootPath
+		}
+	}
 	if st.File.ControllerURL == "" {
 		st.File.ControllerURL = p.ControllerURL
 	}

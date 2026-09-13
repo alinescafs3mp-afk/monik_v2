@@ -395,6 +395,7 @@ type EnrollResponse struct {
 	CACertPEM          string `json:"ca_cert_pem"`
 	ConfigRevision     int64  `json:"config_revision"`
 	EndpointGeneration int64  `json:"endpoint_generation"`
+	UpdateRootJSON     string `json:"update_root_json,omitempty"`
 }
 
 type Operation struct {

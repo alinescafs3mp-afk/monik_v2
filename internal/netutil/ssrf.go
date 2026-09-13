@@ -19,6 +19,26 @@ func DefaultPolicy() ProbePolicy {
 	return ProbePolicy{AllowLoopback: true, AllowLocal: true, ICMPTargets: []string{"8.8.8.8"}}
 }
 
+func ValidateControllerURL(raw string) (*url.URL, error) {
+	u, err := ParseURL(raw)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("candidate_url must be https")
+	}
+	if u.Fragment != "" {
+		return nil, fmt.Errorf("url fragment is not allowed")
+	}
+	host := u.Hostname()
+	if ip := net.ParseIP(host); ip != nil {
+		if IsMetadata(ip) && !ip.IsLoopback() {
+			return nil, fmt.Errorf("metadata or link-local destination denied")
+		}
+	}
+	return u, nil
+}
+
 func ParseURL(raw string) (*url.URL, error) {
 	if strings.ContainsAny(raw, "\r\n") {
 		return nil, fmt.Errorf("invalid url")

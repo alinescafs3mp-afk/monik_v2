@@ -7,18 +7,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 type Stage string
 
 const (
-	StageIdle       Stage = "idle"
-	StageStaged     Stage = "staged"
-	StageSwitching  Stage = "switching"
-	StageProbation  Stage = "local_probation"
-	StageConfirmed  Stage = "confirmed"
-	StageRollback   Stage = "rolled_back"
+	StageIdle      Stage = "idle"
+	StageStaged    Stage = "staged"
+	StageSwitching Stage = "switching"
+	StageProbation Stage = "local_probation"
+	StageConfirmed Stage = "confirmed"
+	StageRollback  Stage = "rolled_back"
 )
 
 type Journal struct {
@@ -77,12 +78,34 @@ func SHA256File(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func confined(stateDir, path string) error {
+	absState, err := filepath.Abs(stateDir)
+	if err != nil {
+		return err
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(absState, absPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("artifact path is outside the protected state directory")
+	}
+	return nil
+}
+
 func StageBinary(stateDir, src, expectSHA string) (staged string, err error) {
+	if expectSHA == "" {
+		return "", fmt.Errorf("sha256 is required")
+	}
+	if err := confined(stateDir, src); err != nil {
+		return "", err
+	}
 	sum, err := SHA256File(src)
 	if err != nil {
 		return "", err
 	}
-	if expectSHA != "" && sum != expectSHA {
+	if sum != expectSHA {
 		return "", fmt.Errorf("artifact sha256 mismatch")
 	}
 	dir := filepath.Join(stateDir, "updates")

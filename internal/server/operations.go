@@ -35,6 +35,22 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		a.writeErr(w, 501, "not_implemented", reason)
 		return
 	}
+	var secretPlain string
+	if req.Action == "secret.replace" {
+		if req.Params == nil {
+			req.Params = map[string]any{}
+		}
+		if v, ok := req.Params["value"].(string); ok {
+			secretPlain = v
+			req.Params["value_sha256"] = secure.SHA256Bytes([]byte(v))
+			delete(req.Params, "value")
+			req.Params["redacted"] = true
+		}
+		if secretPlain == "" {
+			a.writeErr(w, 400, "missing_secret", "secret value is required and is not stored in the operation journal")
+			return
+		}
+	}
 	if req.ClientRequestKey == "" {
 		a.writeErr(w, 400, "missing_key", "client_request_key required")
 		return
@@ -45,6 +61,10 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		return
 	}
 	if def.RecentAuthenticationRequired && !a.requireRecent(w, s) {
+		return
+	}
+	if err := a.validateLifecycleParams(&req); err != nil {
+		a.writeErr(w, 400, "bad_params", err.Error())
 		return
 	}
 	if a.Cfg.RestoreMode && disruptive(def.Risk) {
@@ -111,12 +131,25 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 			op.Targets = []protocol.TargetResult{{AgentID: "server", Status: protocol.TargetSucceeded, Stage: "commit", Message: "server-only"}}
 		}
 	}
+	if actions.LifecycleConflict(req.Action) {
+		for i, t := range op.Targets {
+			if t.AgentID == "server" || t.Status == protocol.TargetRejected {
+				continue
+			}
+			if other, ok := a.Store.HasActiveLifecycle(t.AgentID); ok {
+				op.Targets[i].Status = protocol.TargetRejected
+				op.Targets[i].Stage = "conflict"
+				op.Targets[i].Message = "another lifecycle transaction is active: " + other
+				op.Targets[i].Retryable = true
+			}
+		}
+	}
 	if err := a.Store.InsertOperation(op, h); err != nil {
 		a.writeErr(w, 500, "persist", err.Error())
 		return
 	}
 	a.Store.Audit(s.Username, req.Action, op.ID, "operation created")
-	if err := a.executeServerSide(op, def, s, req); err != nil {
+	if err := a.executeServerSide(op, def, s, req, secretPlain); err != nil {
 		for _, target := range op.Targets {
 			_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
 		}
@@ -161,7 +194,7 @@ func (a *App) expandTargets(req protocol.SubmitOperation) ([]string, error) {
 	return out, nil
 }
 
-func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *storage.Session, req protocol.SubmitOperation) error {
+func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *storage.Session, req protocol.SubmitOperation, secretPlain string) error {
 	switch req.Action {
 	case "enrollment.create":
 		code, exp, err := a.Store.CreateEnrollmentCode(s.Username, protocol.EnrollmentTTL)
@@ -196,9 +229,26 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 	case "update.import":
 		return a.importRelease(op, req)
 	case "rule.save":
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_effective_rule", "rule saved", "", false, nil)
+		name, _ := req.Params["name"].(string)
+		if name == "" {
+			name = "default"
+		}
+		body, _ := json.Marshal(req.Params)
+		if err := a.Store.SaveRule(name, string(body)); err != nil {
+			return err
+		}
+		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_effective_rule", "rule version stored", "", false, map[string]any{"name": name})
 	case "maintenance.set":
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_interval", "maintenance recorded", "", false, nil)
+		purpose, _ := req.Params["purpose"].(string)
+		start, _ := req.Params["start_at"].(string)
+		end, _ := req.Params["end_at"].(string)
+		if start == "" || end == "" {
+			return fmt.Errorf("start_at and end_at required")
+		}
+		if err := a.Store.SaveMaintenance(idgen.New(), "fleet", "", purpose, start, end, s.Username); err != nil {
+			return err
+		}
+		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_interval", "maintenance window stored", "", false, nil)
 	case "operation.cancel_pending":
 		id, _ := req.Params["operation_id"].(string)
 		if id == "" {
@@ -209,15 +259,39 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		}
 		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit", "cancelled only targets not yet dispatched; delivered targets remain unresolved", "", false, nil)
 	case "history.export":
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "bounded_artifact_ready", "use history series API", "", false, nil)
+		dir := filepath.Join(a.Cfg.DataDir, "exports")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		path := filepath.Join(dir, op.ID+".json")
+		ops, err := a.Store.OpenIncidents()
+		if err != nil {
+			return err
+		}
+		b, err := json.MarshalIndent(map[string]any{"exported_at": a.Clock.Now().UTC(), "open_incidents": ops, "note": "raw 48h series remains on the history API"}, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, b, 0o600); err != nil {
+			return err
+		}
+		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "bounded_artifact_ready", "export written", "", false, map[string]any{"path": path})
 	case "profile.apply", "check.apply", "service.pause", "service.ignore":
 		return a.bumpDesired(op, req)
 	case "secret.replace":
-		return a.replaceSecret(op, req)
+		return a.replaceSecret(op, req, secretPlain)
 	case "rebind.prepare", "rebind.arm", "rebind.activate", "rebind.retire":
 		return a.handleRebind(op, req, s)
 	case "update.rollout", "update.rollback", "update.resume":
 		return a.handleRollout(op, req)
+	case "agent.restart":
+		return a.handleRestart(op)
+	case "check.trial":
+		return a.handleCheckTrial(op, req)
+	case "credential.rotate":
+		return a.handleCredentialRotate(op)
+	case "trust.stage", "trust.retire":
+		return a.handleTrust(op, req)
 	case "operation.retry_selected":
 		return a.retrySelected(op, req, s)
 	}
@@ -352,31 +426,45 @@ func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) {
 	}
 }
 
-func (a *App) replaceSecret(op *protocol.Operation, req protocol.SubmitOperation) error {
+func (a *App) replaceSecret(op *protocol.Operation, req protocol.SubmitOperation, secretPlain string) error {
 	name, _ := req.Params["name"].(string)
 	header, _ := req.Params["header"].(string)
-	value, _ := req.Params["value"].(string)
 	agentID, _ := req.Params["agent_id"].(string)
 	checkID, _ := req.Params["check_id"].(string)
-	if name == "" || header == "" || value == "" || agentID == "" {
+	if agentID == "" {
+		for _, t := range op.Targets {
+			if t.AgentID != "" && t.AgentID != "server" && t.Status != protocol.TargetRejected {
+				agentID = t.AgentID
+				break
+			}
+		}
+	}
+	if name == "" || header == "" || secretPlain == "" || agentID == "" {
 		return fmt.Errorf("name, header, value, agent_id required")
 	}
-	if strings.ContainsAny(header, "\r\n:") || strings.ContainsAny(value, "\r\n") {
+	if strings.ContainsAny(header, "\r\n:") || strings.ContainsAny(secretPlain, "\r\n") {
 		return fmt.Errorf("invalid header")
 	}
 	hl := strings.ToLower(header)
 	if hl == "host" || hl == "content-length" {
 		return fmt.Errorf("header not allowed")
 	}
-	nonce, ct, err := secure.Seal(a.Master, []byte(value))
+	nonce, ct, err := secure.Seal(a.Master, []byte(secretPlain))
 	if err != nil {
 		return err
+	}
+	if _, err := a.Store.Agent(agentID); err != nil {
+		return fmt.Errorf("unknown agent")
 	}
 	id := idgen.New()
 	if err := a.Store.SaveSecret(id, name, header, agentID, checkID, 1, nonce, ct); err != nil {
 		return err
 	}
-	_ = a.Store.UpdateTarget(op.ID, agentID, protocol.TargetQueued, "secret_version_committed", "secret stored; waiting for agent apply", "", true, map[string]any{"secret_id": id, "version": 1})
+	extra := map[string]any{"secret_id": id, "version": 1, "header": header, "name": name, "check_id": checkID}
+	if jobID, err := a.Store.JobIDFor(op.ID, agentID); err == nil {
+		_ = a.Store.PatchJobParams(jobID, extra)
+	}
+	_ = a.Store.UpdateTarget(op.ID, agentID, protocol.TargetQueued, "secret_version_committed", "secret stored; waiting for agent apply", "", true, extra)
 	return nil
 }
 
@@ -406,13 +494,14 @@ func (a *App) importRelease(op *protocol.Operation, req protocol.SubmitOperation
 	if path == "" {
 		return fmt.Errorf("bundle_path required")
 	}
+	enroll, _ := req.Params["enroll_root"].(bool)
 	dir := filepath.Join(a.Cfg.DataDir, "tuf")
-	res, err := tufutil.ImportBundle(path, dir)
+	res, err := tufutil.ImportTrusted(path, dir, tufutil.ImportOpts{Enroll: enroll, Now: a.Clock.Now().UTC()})
 	if err != nil {
 		return err
 	}
 	if _, err := a.Store.ReleaseByDigest(res.Digest); err == nil {
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_catalog_commit", "already imported", "", false, map[string]any{"digest": res.Digest, "already_imported": true})
+		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_catalog_commit", "already imported", "", false, map[string]any{"digest": res.Digest, "already_imported": true, "enrolled_root": true})
 		return nil
 	}
 	plats, _ := json.Marshal(res.Platforms)
@@ -422,6 +511,6 @@ func (a *App) importRelease(op *protocol.Operation, req protocol.SubmitOperation
 	for _, art := range res.Artifacts {
 		_ = a.Store.InsertArtifact(res.ID, art.OS, art.Arch, art.Name, art.SHA256, art.Length, art.Path)
 	}
-	_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_catalog_commit", "release imported", "", false, map[string]any{"digest": res.Digest, "version": res.Version})
+	_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_catalog_commit", "release imported against enrolled TUF root", "", false, map[string]any{"digest": res.Digest, "version": res.Version, "enrolled_root": true})
 	return nil
 }

@@ -23,10 +23,13 @@ type Host struct {
 	WorkerCfg string
 	StateDir  string
 	SockPath  string
+	SelfBin   string
+	Probation time.Duration
 	cmd       *exec.Cmd
 	alive     bool
 	done      chan struct{}
 	mu        sync.Mutex
+	updateMu  sync.Mutex
 }
 
 type Request struct {
@@ -67,6 +70,7 @@ func (h *Host) Run(ctx context.Context) error {
 		return err
 	}
 	go h.reap(ctx)
+	go h.watchControlFile(ctx)
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
@@ -109,7 +113,14 @@ func (h *Host) handle(c net.Conn) {
 	if err := json.NewDecoder(c).Decode(&req); err != nil {
 		return
 	}
-	var resp Response
+	_ = json.NewEncoder(c).Encode(h.dispatch(req, true))
+}
+
+func (h *Host) dispatch(req Request, fromNetwork bool) Response {
+	mutating := req.Action == "restart_worker" || req.Action == "activate_update" || req.Action == "rollback_update"
+	if fromNetwork && runtime.GOOS == "windows" && mutating {
+		return Response{OK: false, Message: "unauthenticated TCP control cannot authorize this action; use the state-dir control file", Stage: "blocked"}
+	}
 	switch req.Action {
 	case "status":
 		h.mu.Lock()
@@ -123,42 +134,84 @@ func (h *Host) handle(c net.Conn) {
 		if alive {
 			msg = "running"
 		}
-		resp = Response{OK: true, Message: msg, PID: pid}
+		return Response{OK: true, Message: msg, PID: pid}
 	case "restart_worker":
-		if runtime.GOOS == "windows" {
-			resp = Response{OK: false, Message: "unauthenticated TCP control cannot authorize restart"}
-			break
-		}
 		if err := h.restartWorker(); err != nil {
-			resp = Response{OK: false, Message: err.Error()}
-		} else {
-			resp = Response{OK: true, Message: "restarted"}
+			return Response{OK: false, Message: err.Error()}
 		}
+		return Response{OK: true, Message: "restarted"}
 	case "activate_update":
-		resp = Response{OK: false, Message: "update activation disabled: trusted TUF verification and probation are not implemented", Stage: "blocked"}
+		h.updateMu.Lock()
+		defer h.updateMu.Unlock()
+		return h.activateUpdate(req.Params)
 	case "rollback_update":
-		resp = Response{OK: false, Message: "remote rollback disabled: eligible signed rollback verification is not implemented", Stage: "blocked"}
+		h.updateMu.Lock()
+		defer h.updateMu.Unlock()
+		return h.rollbackUpdate(req.Params)
 	default:
-		resp = Response{OK: false, Message: "unknown or forbidden action"}
+		return Response{OK: false, Message: "unknown or forbidden action"}
 	}
-	_ = json.NewEncoder(c).Encode(resp)
+}
+
+func (h *Host) watchControlFile(ctx context.Context) {
+	reqPath := filepath.Join(h.StateDir, "control-request.json")
+	respPath := filepath.Join(h.StateDir, "control-response.json")
+	t := time.NewTicker(200 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			b, err := os.ReadFile(reqPath)
+			if err != nil || len(b) == 0 {
+				continue
+			}
+			_ = os.Remove(reqPath)
+			var req Request
+			if json.Unmarshal(b, &req) != nil {
+				continue
+			}
+			resp := h.dispatch(req, false)
+			raw, _ := json.Marshal(resp)
+			tmp := respPath + ".tmp"
+			if os.WriteFile(tmp, raw, 0o600) == nil {
+				_ = os.Rename(tmp, respPath)
+			}
+		}
+	}
+}
+
+func (h *Host) targetBin(component string) string {
+	if component == "service_host" && h.SelfBin != "" {
+		return h.SelfBin
+	}
+	return h.WorkerBin
 }
 
 func (h *Host) activateUpdate(params map[string]string) Response {
 	src := params["path"]
 	expect := params["sha256"]
-	if src == "" {
-		return Response{OK: false, Message: "path required"}
+	component := params["component"]
+	if component == "" {
+		component = "worker"
+	}
+	if src == "" || expect == "" {
+		return Response{OK: false, Message: "path and sha256 are required", Stage: "blocked"}
+	}
+	target := h.targetBin(component)
+	if target == "" {
+		return Response{OK: false, Message: "target binary path is not configured", Stage: "blocked"}
 	}
 	staged, err := update.StageBinary(h.StateDir, src, expect)
 	if err != nil {
 		return Response{OK: false, Message: err.Error(), Stage: string(update.StageIdle)}
 	}
-	oldSHA, _ := update.SHA256File(h.WorkerBin)
+	oldSHA, _ := update.SHA256File(target)
 	newSHA, _ := update.SHA256File(staged)
 	j := &update.Journal{
-		TxID: idgen.New(), Stage: update.StageStaged, OldPath: h.WorkerBin, NewPath: staged,
-		Current: h.WorkerBin, PrevPath: filepath.Join(h.StateDir, "updates", "prev.bin"),
+		TxID: idgen.New(), Stage: update.StageStaged, OldPath: target, NewPath: staged,
+		Current: target, PrevPath: filepath.Join(h.StateDir, "updates", "prev.bin"),
 		OldSHA: oldSHA, NewSHA: newSHA, StartedAt: time.Now().UTC(),
 	}
 	if err := j.Save(h.StateDir); err != nil {
@@ -166,37 +219,77 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 	}
 	j.Stage = update.StageSwitching
 	_ = j.Save(h.StateDir)
-	h.stopWorker()
-	if err := update.Activate(h.WorkerBin, staged, j.PrevPath); err != nil {
+	if component == "worker" {
+		h.stopWorker()
+	}
+	if err := update.Activate(target, staged, j.PrevPath); err != nil {
 		j.Stage = update.StageRollback
 		j.Reason = err.Error()
 		_ = j.Save(h.StateDir)
-		_ = update.Rollback(h.WorkerBin, j.PrevPath)
-		_ = h.startWorker()
+		_ = update.Rollback(target, j.PrevPath)
+		if component == "worker" {
+			_ = h.startWorker()
+		}
 		return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
 	}
 	j.Stage = update.StageProbation
 	_ = j.Save(h.StateDir)
-	if err := h.startWorker(); err != nil {
-		_ = update.Rollback(h.WorkerBin, j.PrevPath)
-		j.Stage = update.StageRollback
-		j.Reason = err.Error()
-		_ = j.Save(h.StateDir)
-		_ = h.startWorker()
-		return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
+	if component == "worker" {
+		if err := h.startWorker(); err != nil {
+			_ = update.Rollback(target, j.PrevPath)
+			j.Stage = update.StageRollback
+			j.Reason = err.Error()
+			_ = j.Save(h.StateDir)
+			_ = h.startWorker()
+			return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
+		}
+		wait := h.Probation
+		if wait <= 0 {
+			wait = 2 * time.Second
+		}
+		time.Sleep(wait)
+		h.mu.Lock()
+		alive := h.alive
+		h.mu.Unlock()
+		if !alive {
+			_ = update.Rollback(target, j.PrevPath)
+			j.Stage = update.StageRollback
+			j.Reason = "new worker failed local probation"
+			_ = j.Save(h.StateDir)
+			_ = h.startWorker()
+			return Response{OK: false, Message: j.Reason, Stage: string(update.StageRollback)}
+		}
 	}
 	j.Stage = update.StageConfirmed
 	_ = j.Save(h.StateDir)
 	return Response{OK: true, Message: "activated", Stage: string(j.Stage)}
 }
 
-func (h *Host) rollbackUpdate() Response {
+func (h *Host) rollbackUpdate(params map[string]string) Response {
 	j, err := update.Load(h.StateDir)
 	if err != nil {
 		return Response{OK: false, Message: err.Error()}
 	}
+	if j.PrevPath == "" || j.Stage == update.StageIdle {
+		return Response{OK: false, Message: "no previous-good slot in the recovery journal"}
+	}
+	if expect := params["sha256"]; expect != "" && j.OldSHA != "" && expect != j.OldSHA {
+		return Response{OK: false, Message: "rollback digest is not the journaled previous-good build"}
+	}
+	sum, err := update.SHA256File(j.PrevPath)
+	if err != nil {
+		return Response{OK: false, Message: err.Error()}
+	}
+	if j.OldSHA != "" && sum != j.OldSHA {
+		return Response{OK: false, Message: "previous-good slot digest mismatch"}
+	}
+	component := params["component"]
+	target := h.targetBin(component)
+	if j.Current != "" {
+		target = j.Current
+	}
 	h.stopWorker()
-	if err := update.Rollback(h.WorkerBin, j.PrevPath); err != nil {
+	if err := update.Rollback(target, j.PrevPath); err != nil {
 		_ = h.startWorker()
 		return Response{OK: false, Message: err.Error()}
 	}
@@ -316,9 +409,16 @@ func (h *Host) reap(ctx context.Context) {
 }
 
 func PlanUnit(bin, cfg, user string) string {
+	return PlanUnitState(bin, cfg, "/var/lib/monik-agent", user)
+}
+
+func PlanUnitState(bin, cfg, state, user string) string {
 	agent := filepath.Join(filepath.Dir(bin), "monik-agent")
 	if runtime.GOOS == "windows" {
 		agent += ".exe"
+	}
+	if state == "" {
+		state = "/var/lib/monik-agent"
 	}
 	return fmt.Sprintf(`[Unit]
 Description=Monik agent service host
@@ -327,7 +427,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=%s run --worker %s --config %s --state /var/lib/monik-agent
+ExecStart=%s run --worker %s --config %s --state %s
 Restart=on-failure
 RestartSec=5
 User=%s
@@ -335,7 +435,7 @@ NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
-`, bin, agent, cfg, user)
+`, bin, agent, cfg, state, user)
 }
 
 func PlanWindowsService(hostBin, workerBin, cfg string) string {

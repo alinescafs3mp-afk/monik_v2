@@ -121,3 +121,23 @@ func SaveMigration(dir string, plan *protocol.MigrationPlan) error {
 	}
 	return os.Rename(tmp, filepath.Join(dir, "migration.json"))
 }
+
+func LoadMigration(dir string) (*protocol.MigrationPlan, error) {
+	b, err := os.ReadFile(filepath.Join(dir, "migration.json"))
+	if err != nil {
+		return nil, err
+	}
+	p := &protocol.MigrationPlan{}
+	if err := json.Unmarshal(b, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func ClearMigration(dir string) error {
+	err := os.Remove(filepath.Join(dir, "migration.json"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
