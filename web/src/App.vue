@@ -5,9 +5,17 @@ import { get, post, setCsrf, setStream, streamState } from "./api";
 import { isAuthenticationFailure } from "./refreshQueue";
 import RecentAuth from "./components/RecentAuth.vue";
 import AppShell from "./components/AppShell.vue";
+import { navigationFailureMessage } from "./navigationFailure";
 
+const routeError = ref("");
+function reloadAfterNavigationError() {
+  if (window.confirm("Обновление страницы удалит несохранённые черновики. Продолжить?")) window.location.reload();
+}
 const route = useRoute();
 const router = useRouter();
+const removeRouteError = router.onError(error => { routeError.value = navigationFailureMessage(error); });
+const removeRouteSuccess = router.afterEach((_to, _from, failure) => { if (!failure) routeError.value = ""; });
+onUnmounted(() => { removeRouteError(); removeRouteSuccess(); });
 const ready = ref(false);
 const me = ref<Record<string, unknown> | null>(null);
 const setupRequired = ref(false);
@@ -79,6 +87,11 @@ defineExpose({ onToast });
 </script>
 
 <template>
+  <div v-if="routeError" class="panel err navigation-failure" role="alert">
+    {{ routeError }}
+    <button type="button" @click="reloadAfterNavigationError">Обновить страницу</button>
+    <button type="button" @click="routeError=''">Закрыть сообщение</button>
+  </div>
   <RecentAuth v-if="ready && !publicPage"/>
   <div v-if="!ready" class="main"><div class="skeleton" /></div>
   <router-view v-else-if="publicPage" @toast="onToast" />

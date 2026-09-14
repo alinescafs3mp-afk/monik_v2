@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 )
 
@@ -26,7 +27,19 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 		p = "index.html"
 	}
 	if _, err := fs.Stat(sub, p); err != nil {
+		// A stale dynamic-import URL is not an SPA route. Returning HTML with 200
+		// hides deployment/cache failures behind a misleading module parse error.
+		if strings.HasPrefix(p, "assets/") || path.Ext(p) != "" {
+			w.Header().Set("Cache-Control", "no-store")
+			http.NotFound(w, r)
+			return
+		}
 		p = "index.html"
+	}
+	if p == "index.html" {
+		w.Header().Set("Cache-Control", "no-cache")
+	} else if strings.HasPrefix(p, "assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
 	http.ServeFileFS(w, r, sub, p)
 }

@@ -1,0 +1,319 @@
+{
+  "package": "Monik Audit 12",
+  "document_date": "2026-09-15",
+  "baseline_commit": "c2229685f76551bcbdb0bb89e1fe1adc16e28878",
+  "baseline_tree": "5b091979aa6ed5253397dfdfcd2dc0c8c0758fc5",
+  "product_source_fingerprint_sha256": "cc46dbfd488422db8c1145307cdf7ba9cd6753b8bed092eb1d2eb9682457ef3b",
+  "date_note": "Runtime logs use their actual September 14 timestamps; document date follows the session date. No timestamps rewritten.",
+  "toolchain": {
+    "go": "go1.27.0 linux/amd64",
+    "node": "v22.16.0",
+    "dependencies": "existing locked dependencies, no version changes, modules verified"
+  },
+  "upstream_ci": {
+    "run": 34897729355,
+    "job": 104155920662,
+    "status": "FAIL",
+    "test": "TestAudit4TrialDoesNotBlockControlAndIsNotRepeated",
+    "reason": "wall-clock dispatch assertion <100ms despite durable fsync",
+    "race_detector_warning": false,
+    "later_steps": "vet, binaries, native and browser skipped"
+  },
+  "baseline_local": {
+    "status": "PASS",
+    "top_level_passes": 280,
+    "test_pass_events": 352,
+    "tested_packages": 19,
+    "native_opt_in_skipped": 2
+  },
+  "final_go": {
+    "status": "PASS",
+    "top_level_passes_including_fuzz_target": 305,
+    "test_pass_events_including_fuzz_seeds": 401,
+    "tested_packages": 21,
+    "failed_events": 0,
+    "skipped_native_tests": [
+      "TestAudit8NativeWorkerRestartAndRejectedUpload",
+      "TestAudit8NativeSupervisorRestartsWorker",
+      "TestV12NativeSignedUpdateAndFailedCandidateRecovery"
+    ],
+    "log": "go-final.jsonl"
+  },
+  "frontend": {
+    "status": "PASS",
+    "node_tests": 106,
+    "types": "tsc --noEmit, not vue-tsc",
+    "build": "production Vue/Vite",
+    "visual_acceptance": "NOT RUN: browser blocked before login"
+  },
+  "native_linux": {
+    "status": "PASS",
+    "tests": 3,
+    "uid": 65534,
+    "evidence": "native-final.log",
+    "coverage": [
+      "real CPU/RAM, restart, durable spool after 503",
+      "supervisor respawn and clean worker shutdown",
+      "real signed different-digest worker activation, new-session evidence, 15-second rollout observation, failed signed candidate and verified previous-worker recovery"
+    ],
+    "not_proven": [
+      "native systemd/boot",
+      "cross-version schema migration",
+      "supervisor self-update",
+      "multiple remote machines",
+      "power loss"
+    ]
+  },
+  "native_initial_failure": {
+    "evidence": "native-process-before.log",
+    "reason": "repeated self-update while supervisor still in probation",
+    "fixed": "restore pending lifecycle receipt before first poll; successful final test"
+  },
+  "repetition": {
+    "serial_gomaxprocs": 1,
+    "serial_count": 10,
+    "serial_shuffle": 12345,
+    "parallel_gomaxprocs": 4,
+    "parallel_count": 5,
+    "parallel_shuffle": 67890,
+    "lock_count": 20,
+    "logs": [
+      "repeated-serial.log",
+      "repeated-parallel.log",
+      "lock-repeated.log"
+    ],
+    "note": "processlock had no matches in the V12-name filter; its full existing test was separately repeated 20 times"
+  },
+  "fuzz": {
+    "status": "PASS",
+    "target": "FuzzV12TrialDefinition",
+    "duration_seconds": 15,
+    "executions": 279067,
+    "workers": 2,
+    "log": "fuzz-mutation-complete.log",
+    "scope": "bounded parser/accepted-schedule invariants, no network",
+    "prior_attempt": "fuzz-mutation.log interrupted by tool timeout, NOT counted complete"
+  },
+  "negative_scenarios": {
+    "distinct_top_level_names": 23,
+    "cases": [
+      {
+        "test": "TestV12ExistingControllerCannotRegenerateMissingIdentity",
+        "evidence": "identity-before.log"
+      },
+      {
+        "test": "TestV12EstablishedControllerCannotRegenerateLostCA",
+        "evidence": "identity-before.log"
+      },
+      {
+        "test": "TestV12DatabaseLossIsNotFreshControllerSetup",
+        "evidence": "identity-before.log"
+      },
+      {
+        "test": "TestV12TLSIdentityRejectsSwappedKeyAndUnrelatedLeaf",
+        "evidence": "identity-before.log"
+      },
+      {
+        "test": "TestV12CancelledServerRunReturnsNormally",
+        "evidence": "lifecycle-before.log"
+      },
+      {
+        "test": "TestV12ConsoleShutdownRevokesOutstandingTickets",
+        "evidence": "lifecycle-before.log"
+      },
+      {
+        "test": "TestV12RollbackRequiresJournaledPreviousDigest",
+        "evidence": "lifecycle-before.log"
+      },
+      {
+        "test": "TestV12StoppedSupervisorCannotRestartWorkerFromLateRequest",
+        "evidence": "lifecycle-before.log"
+      },
+      {
+        "test": "TestV12RebindDoesNotMutateInFlightHTTPClient",
+        "evidence": "native-lifecycle-before.log"
+      },
+      {
+        "test": "TestV12RestartedWorkerDoesNotRepeatUnconfirmedLifecycle",
+        "evidence": "native-lifecycle-before.log"
+      },
+      {
+        "test": "TestV12NativeSignedUpdateAndFailedCandidateRecovery",
+        "evidence": "native-process-before.log"
+      },
+      {
+        "test": "TestV12AcceptanceAckCannotEraseUnsentCompletion",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12ConfigRevisionCannotBeReusedForDifferentContents",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12TrustRotationDoesNotMutateInFlightHTTPClient",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12InvalidReceiptJournalStopsStartupWithoutOverwrite",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12InvalidJSONReportCannotBlockValidSpoolDrain",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12UnknownOrNullUpdateJournalRefusesRecovery",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12DatabaseFilenameIsNotAURIQuery",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12MissingFrozenMemberJobIsNotAnEmptySuccessfulRollout",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12MissingAssetIsNotSuccessfulHTML",
+        "evidence": "regressions-before.log"
+      },
+      {
+        "test": "TestV12FailedRollbackJournalIsNotReportedAsVerifiedRecovery",
+        "evidence": "rollback-before.log"
+      },
+      {
+        "test": "TestV12OnlyOneRunningWorkerOwnsAnIdentity",
+        "evidence": "singleton-before.log"
+      },
+      {
+        "test": "TestV12StoppingWorkerCancelsAndJoinsOutstandingTrial",
+        "evidence": "trial-stop-before.log"
+      }
+    ],
+    "note": "includes overlapping manifestations and intermediate audit-state tests, not independent-vulnerability count"
+  },
+  "checks": {
+    "go-final": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "go-vet": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "go-mod-verify": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "frontend-final": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "frontend-build": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "typescript-final": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "build-all": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "native-final": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "repeated-serial": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "repeated-parallel": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "lock-repeated": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "fuzz-mutation-complete": {
+      "status": "PASS",
+      "exit_code": 0
+    }
+  },
+  "browser": {
+    "status": "BLOCKED_BEFORE_LOGIN",
+    "error": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "evidence": "browser-attempt.log",
+    "new_navigation_case": "DELIVERED, syntax checked only",
+    "production_access": false
+  },
+  "windows": {
+    "status": "CROSS_BUILD_PASS",
+    "commands": 4,
+    "native_execution": "NOT RUN"
+  },
+  "linux_build": {
+    "status": "PASS",
+    "commands": 4,
+    "evidence": "build-all.log"
+  },
+  "not_implemented_or_not_accepted": [
+    "independent service-host replacement/recovery",
+    "complete protected-controller backup/restore reconciliation",
+    "Windows restricted service identity/ACL/SCM boot",
+    "long retention aggregates and measured fleet capacity",
+    "24-hour soak",
+    "physical TV/Yandex and mobile",
+    "generic selected-operation retry"
+  ],
+  "host": {
+    "note": "Host extras versus auditor tree 0624e862; no product-code change after the patch. Auditor evidence fields above are unchanged.",
+    "toolchain": {
+      "go": "go1.27.1 linux/amd64",
+      "node": "v22.23.2",
+      "playwright": "1.57.0"
+    },
+    "final_go": {
+      "status": "PASS",
+      "top_level_passes_including_fuzz_target": 305,
+      "test_pass_events_including_fuzz_seeds": 401,
+      "tested_packages": 21,
+      "failed_events": 0
+    },
+    "frontend": {
+      "status": "PASS",
+      "node_tests": 106,
+      "types": "tsc --noEmit, not vue-tsc",
+      "build": "production Vue/Vite"
+    },
+    "browser": {
+      "status": "PASS",
+      "checks": 30,
+      "playwright": "1.57.0",
+      "includes_navigation_failure": true,
+      "auditor": "BLOCKED_BEFORE_LOGIN ERR_BLOCKED_BY_ADMINISTRATOR"
+    },
+    "native_linux": {
+      "status": "PASS",
+      "tests": 3,
+      "uid": 1000,
+      "signed_update_and_failed_candidate_recovery": true
+    },
+    "repetition": {
+      "isolated_serial_pass": true,
+      "isolated_parallel_pass": true,
+      "lock_20_pass": true,
+      "overlapping_native_first_serial_attempt": "FAIL TestV12OnlyOneRunningWorkerOwnsAnIdentity request-body EOF; assertion unchanged; isolated re-run PASS"
+    },
+    "fuzz": {
+      "status": "PASS",
+      "duration_seconds": 15,
+      "executions": 6237845,
+      "workers": 24
+    }
+  },
+  "github_writes": false,
+  "production_changed": false
+}

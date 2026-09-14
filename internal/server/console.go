@@ -36,9 +36,11 @@ type consoleTicket struct {
 	Expires                time.Time
 }
 type consoleState struct {
-	mu      sync.Mutex
-	tickets map[string]consoleTicket
-	active  map[string]func()
+	mu          sync.Mutex
+	tickets     map[string]consoleTicket
+	active      map[string]func()
+	connections map[string]func()
+	closing     bool
 	// sessions tracks in-flight consoleSession goroutines so Close can
 	// finish their final audit writes before the store is closed.
 	sessions sync.WaitGroup
@@ -46,7 +48,12 @@ type consoleState struct {
 
 func (c *consoleState) closeAll() {
 	c.mu.Lock()
-	fns := make([]func(), 0, len(c.active))
+	c.closing = true
+	c.tickets = nil
+	fns := make([]func(), 0, len(c.active)+len(c.connections))
+	for _, f := range c.connections {
+		fns = append(fns, f)
+	}
 	for _, f := range c.active {
 		fns = append(fns, f)
 	}
@@ -165,6 +172,10 @@ func (a *App) handleConsoleTicket(w http.ResponseWriter, r *http.Request, s *sto
 	now := a.Clock.Now()
 	a.console.mu.Lock()
 	defer a.console.mu.Unlock()
+	if a.console.closing {
+		a.writeErr(w, 503, "shutting_down", "controller is stopping")
+		return
+	}
 	if a.console.tickets == nil {
 		a.console.tickets = map[string]consoleTicket{}
 	}
@@ -183,6 +194,9 @@ func (a *App) handleConsoleTicket(w http.ResponseWriter, r *http.Request, s *sto
 func (a *App) takeConsoleTicket(token string, s *storage.Session, id string, target consoleTarget) bool {
 	a.console.mu.Lock()
 	defer a.console.mu.Unlock()
+	if a.console.closing {
+		return false
+	}
 	t, ok := a.console.tickets[token]
 	delete(a.console.tickets, token)
 	return ok && t.Session == s.ID && t.Agent == id && t.Target == targetIdentity(target) && a.Clock.Now().Before(t.Expires)
@@ -227,6 +241,29 @@ func (a *App) handleConsoleSocket(w http.ResponseWriter, r *http.Request, s *sto
 }
 func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Session, id string, target consoleTarget) {
 	defer ws.Close()
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	closeConnection := func() { cancel(); _ = ws.Close() }
+	// Include pre-authentication sockets in shutdown; hijacked HTTP connections
+	// are not drained by http.Server.Shutdown itself.
+	connectionID := idgen.New()
+	a.console.mu.Lock()
+	if a.console.closing || len(a.console.connections) >= 8 {
+		a.console.mu.Unlock()
+		return
+	}
+	if a.console.connections == nil {
+		a.console.connections = map[string]func(){}
+	}
+	a.console.connections[connectionID] = closeConnection
+	a.console.sessions.Add(1)
+	a.console.mu.Unlock()
+	defer func() {
+		a.console.mu.Lock()
+		delete(a.console.connections, connectionID)
+		a.console.mu.Unlock()
+		a.console.sessions.Done()
+	}()
 	ws.MaxPayloadBytes = 64 << 10
 	_ = ws.SetReadDeadline(time.Now().Add(10 * time.Second))
 	var hello consoleMessage
@@ -242,26 +279,21 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 	if a.Store.SessionStillValid(s.ID) != nil {
 		return
 	}
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	closeConnection := func() { cancel(); _ = ws.Close() }
 	a.console.mu.Lock()
 	if a.console.active == nil {
 		a.console.active = map[string]func(){}
 	}
-	if _, exists := a.console.active[id]; exists || len(a.console.active) >= 4 {
+	if _, exists := a.console.active[id]; a.console.closing || exists || len(a.console.active) >= 4 {
 		a.console.mu.Unlock()
 		_ = websocket.JSON.Send(ws, map[string]string{"type": "error", "message": "Для машины уже открыта консоль либо достигнут лимит."})
 		return
 	}
 	a.console.active[id] = closeConnection
-	a.console.sessions.Add(1)
 	a.console.mu.Unlock()
 	defer func() {
 		a.console.mu.Lock()
 		delete(a.console.active, id)
 		a.console.mu.Unlock()
-		a.console.sessions.Done()
 	}()
 	var writeMu sync.Mutex
 	send := func(v any) error {

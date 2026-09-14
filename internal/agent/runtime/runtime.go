@@ -26,6 +26,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/clock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/processlock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/tlsutil"
@@ -57,6 +58,9 @@ type Agent struct {
 	scheduler          checkScheduler
 	advisor            discovery.Advisor
 	trialRunning       atomic.Int32
+	workerTasks        sync.WaitGroup
+	runCtx             context.Context
+	stopping           bool
 	forceDiscovery     bool
 	secrets            map[string]storedSecret
 	lastContact        time.Time
@@ -68,6 +72,20 @@ func Open(cfgPath string) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	if st.File.AgentID == "" || st.File.ControllerID == "" || st.File.StateDir == "" || st.File.SchemaVersion != protocol.SchemaVersion {
+		return nil, fmt.Errorf("incomplete enrolled agent configuration")
+	}
+	if _, err := netutil.ValidateControllerURL(st.File.ControllerURL); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(st.File.StateDir, 0700); err != nil {
+		return nil, err
+	}
+	unlock, err := processlock.Acquire(filepath.Join(st.File.StateDir, "worker.lock"))
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	// Import the previous trust-bundle format exactly once. New changes live in
 	// the atomically replaced agent configuration, including after a rebind.
 	if raw, readErr := os.ReadFile(trustBundlePath(st.File.StateDir)); readErr == nil {
@@ -142,25 +160,38 @@ func Open(cfgPath string) (*Agent, error) {
 	if err := a.applyTrustPool(); err != nil {
 		return nil, fmt.Errorf("controller trust: %w", err)
 	}
-	if b, err := os.ReadFile(filepath.Join(st.File.StateDir, "job-receipts.json")); err == nil {
-		if err := json.Unmarshal(b, &a.jobs); err != nil {
-			return nil, fmt.Errorf("job receipt journal corrupt: %w", err)
-		}
-		for id, rec := range a.jobs {
-			if rec.Stage == "trial_pending" {
-				rec.Status = protocol.TargetFailed
-				rec.Stage = "trial_interrupted"
-				rec.Message = "worker restarted during trial; actual outcome unknown; no automatic repeat"
-				rec.ErrorCode = "outcome_unknown"
-				a.jobs[id] = rec
-			}
-		}
+	if err := a.loadJobs(); err != nil {
+		return nil, err
+	}
+	if err := a.restoreIntentReceipt(); err != nil {
+		return nil, err
 	}
 	a.reconcileIntents()
 	return a, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
+	unlock, err := processlock.Acquire(filepath.Join(a.State.File.StateDir, "worker.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	runCtx, cancel := context.WithCancel(ctx)
+	a.mu.Lock()
+	a.runCtx = runCtx
+	a.stopping = false
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.stopping = true
+		a.mu.Unlock()
+		cancel()
+		a.workerTasks.Wait()
+		a.mu.Lock()
+		a.client.CloseIdleConnections()
+		a.mu.Unlock()
+	}()
+	ctx = runCtx
 	t := a.Clock.NewTicker(protocol.ReportInterval)
 	defer t.Stop()
 	discEvery := time.Duration(a.cfg.Intervals.DiscoverySeconds) * time.Second
@@ -188,6 +219,9 @@ func (a *Agent) Run(ctx context.Context) error {
 }
 
 func (a *Agent) tick(ctx context.Context, discover bool) {
+	if ctx.Err() != nil {
+		return
+	}
 	now := a.Clock.Now().UTC()
 	a.mu.Lock()
 	a.reconcileIntents()
@@ -229,7 +263,9 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 			disabled[t] = protocol.CheckDefinition{}
 		}
 		advise := a.cfg.AutoMonitorNew
+		a.workerTasks.Add(1)
 		go func() {
+			defer a.workerTasks.Done()
 			defer a.discovering.Store(false)
 			ls, err := discovery.Listeners()
 			var d *protocol.DiscoveryDelta
@@ -323,15 +359,17 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 	if err != nil {
 		return err
 	}
-	sentURL := a.State.File.ControllerURL
+	a.mu.Lock()
+	sentURL, controllerID, agentID, cred, client := a.State.File.ControllerURL, a.State.File.ControllerID, a.State.File.AgentID, a.Cred, a.client
+	a.mu.Unlock()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, sentURL+"/api/v1/agent/report", bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+a.Cred)
-	req.Header.Set("X-Monik-Agent-Id", a.State.File.AgentID)
-	resp, err := a.client.Do(req)
+	req.Header.Set("Authorization", "Bearer "+cred)
+	req.Header.Set("X-Monik-Agent-Id", agentID)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -344,7 +382,7 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&cr); err != nil {
 		return err
 	}
-	if cr.ControllerID != a.State.File.ControllerID || cr.Ack == nil || !cr.Ack.Committed || cr.Ack.UpToSequence != rep.Sequence {
+	if cr.ControllerID != controllerID || cr.Ack == nil || !cr.Ack.Committed || cr.Ack.UpToSequence != rep.Sequence {
 		return fmt.Errorf("invalid controller identity or uncommitted acknowledgement")
 	}
 	if rep.IsLive {
@@ -352,13 +390,16 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 		a.lastContact = a.Clock.Now()
 		a.recordMigrationContact(sentURL)
 		a.mu.Unlock()
-		a.applyControl(cr)
+		a.applyControl(cr, rep.JobReceipts)
 	}
 	return nil
 }
 
-func (a *Agent) applyControl(cr protocol.ControlResponse) {
-	if cr.DesiredConfig != nil && cr.DesiredConfig.Revision >= a.cfgRev {
+func (a *Agent) applyControl(cr protocol.ControlResponse, sentReceipts ...[]protocol.JobReceipt) {
+	a.mu.Lock()
+	// A revision identifies immutable content. Replaying it cannot replace the
+	// accepted configuration even when another body has a valid self-hash.
+	if cr.DesiredConfig != nil && cr.DesiredConfig.Revision > a.cfgRev {
 		d := cr.DesiredConfig
 		hash := configfile.HashConfig(d.Body)
 		if hash == d.Hash && protocol.ValidateAgentConfig(d.Body) == nil {
@@ -375,14 +416,23 @@ func (a *Agent) applyControl(cr protocol.ControlResponse) {
 	}
 	// Receipt delivery never authorizes a URL switch. Candidate trials are managed
 	// separately and confirmed only by committed live exchanges on that URL.
-	a.mu.Lock()
+	sent := map[string]protocol.JobReceipt{}
+	if len(sentReceipts) == 1 {
+		for _, rec := range sentReceipts[0] {
+			sent[rec.JobID] = rec
+		}
+	}
 	for _, id := range cr.ReceiptAcks {
 		job, ok := a.jobs[id]
 		if !ok {
 			continue
 		}
-		switch job.Status {
-		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported, protocol.TargetExpired, protocol.TargetRolledBack:
+		transmitted, wasSent := sent[id]
+		if !wasSent || !sameReceipt(job, transmitted) {
+			continue
+		}
+		switch transmitted.Status {
+		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported, protocol.TargetExpired, protocol.TargetRolledBack, protocol.TargetUnknownResult:
 			delete(a.jobs, id)
 		}
 		// An ACK for acceptance is not an ACK for completion. Keep pending
@@ -398,6 +448,9 @@ func (a *Agent) applyControl(cr protocol.ControlResponse) {
 func (a *Agent) handleJob(job protocol.JobEnvelope) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.stopping {
+		return
+	}
 	if _, exists := a.jobs[job.JobID]; exists {
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -17,7 +18,7 @@ import (
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/clock"
-	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/processlock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
@@ -73,7 +74,19 @@ func Open(cfg Config) (*App, error) {
 			}
 		}
 	}
-	st, err := storage.Open(filepath.Join(cfg.DataDir, "monik.db"), cfg.Clock)
+	// Do not turn loss of the database into an unrelated empty controller while
+	// enrolled keys/certificates still exist next to it.
+	dbPath := filepath.Join(cfg.DataDir, "monik.db")
+	if info, e := os.Stat(dbPath); os.IsNotExist(e) || (e == nil && info.Size() == 0) {
+		for _, name := range []string{"secret-master.key", "tls/ca.crt", "tls/ca.key", "tls/leaf.bundle.pem"} {
+			if _, e := os.Lstat(filepath.Join(cfg.DataDir, name)); e == nil || !os.IsNotExist(e) {
+				return nil, fmt.Errorf("controller database is missing/empty but protected state exists; restore the complete controller, not a new identity")
+			}
+		}
+	} else if e != nil {
+		return nil, e
+	}
+	st, err := storage.Open(dbPath, cfg.Clock)
 	if err != nil {
 		return nil, err
 	}
@@ -95,19 +108,40 @@ func Open(cfg Config) (*App, error) {
 		return nil, err
 	}
 	a := &App{Cfg: cfg, Store: st, Log: cfg.Logger, Clock: cfg.Clock, Master: master}
-	if v, err := st.Setting("advertised_url"); err == nil {
-		a.Cfg.AdvertisedURL = v
+	if err := st.EnsureControllerIdentity(); err != nil {
+		st.Close()
+		return nil, err
 	}
-	if v, err := st.Setting("listen"); err == nil && v != "" {
-		a.Cfg.Listen = v
+	established, err := st.UserCount()
+	if err != nil {
+		st.Close()
+		return nil, err
 	}
-	if v, err := st.Setting("controller_id"); err != nil {
-		_ = st.SetSetting("controller_id", idgen.New())
-	} else {
-		_ = v
+	for _, key := range []string{"advertised_url", "listen"} {
+		v, err := st.Setting(key)
+		if err != nil && (!errors.Is(err, storage.ErrNotFound) || established > 0) {
+			st.Close()
+			return nil, fmt.Errorf("controller setting %s: %w", key, err)
+		}
+		if err == nil {
+			if v == "" && established > 0 {
+				st.Close()
+				return nil, fmt.Errorf("controller setting %s is empty", key)
+			}
+			if key == "listen" {
+				a.Cfg.Listen = v
+			} else {
+				a.Cfg.AdvertisedURL = v
+			}
+		}
 	}
-	if _, err := st.Setting("restore_mode"); err == nil && st.MustSetting("restore_mode", "") == "1" {
-		a.Cfg.RestoreMode = true
+	if v, err := st.Setting("restore_mode"); err == nil {
+		if v == "1" {
+			a.Cfg.RestoreMode = true
+		}
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		st.Close()
+		return nil, err
 	}
 	return a, nil
 }
@@ -170,6 +204,17 @@ func (a *App) CompleteSetup(req SetupRequest) error {
 
 func (a *App) ensureTLS(extra []string) error {
 	dir := filepath.Join(a.Cfg.DataDir, "tls")
+	established, err := a.Store.UserCount()
+	if err != nil {
+		return err
+	}
+	if established > 0 {
+		for _, name := range []string{"ca.crt", "ca.key"} {
+			if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+				return fmt.Errorf("enrolled TLS identity is unavailable; restore the original CA: %w", err)
+			}
+		}
+	}
 	dns := []string{"localhost"}
 	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
 	if a.Cfg.AdvertisedURL != "" {
@@ -215,6 +260,11 @@ func hostOf(raw string) string {
 }
 
 func (a *App) Run(ctx context.Context) error {
+	unlock, err := processlock.Acquire(filepath.Join(a.Cfg.DataDir, "controller.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if !a.SetupComplete() {
 		a.Log.Info("setup required; UI will run local setup wizard")
 	}
@@ -233,21 +283,39 @@ func (a *App) Run(ctx context.Context) error {
 		TLSConfig:         a.TLS.TLSConfig(),
 		ErrorLog:          slog.NewLogLogger(a.Log.Handler(), slog.LevelWarn),
 	}
-	go a.background(ctx)
-	go a.rolloutBackground(ctx)
+	// Bind before starting workers; a failed listen must leave no scheduler.
 	ln, err := net.Listen("tcp", a.Cfg.Listen)
 	if err != nil {
 		return err
 	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() { defer workers.Done(); a.background(runCtx) }()
+	go func() { defer workers.Done(); a.rolloutBackground(runCtx) }()
 	a.Log.Info("monik-server listening", "addr", a.Cfg.Listen, "version", version.Version, "advertised", a.Cfg.AdvertisedURL)
+	shutdownDone := make(chan struct{})
 	go func() {
-		<-ctx.Done()
+		defer close(shutdownDone)
+		<-runCtx.Done()
 		a.console.closeAll()
-		shctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
-		_ = a.HTTP.Shutdown(shctx)
+		shctx, stop := context.WithTimeout(context.Background(), 8*time.Second)
+		defer stop()
+		if err := a.HTTP.Shutdown(shctx); err != nil {
+			_ = a.HTTP.Close()
+		}
 	}()
-	return a.HTTP.ServeTLS(ln, "", "")
+	err = a.HTTP.ServeTLS(ln, "", "")
+	// Serve returns before Shutdown has drained its handlers. Do not let main's
+	// deferred Store.Close race final receipts, sessions or scheduler writes.
+	cancel()
+	<-shutdownDone
+	workers.Wait()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 func (a *App) background(ctx context.Context) {

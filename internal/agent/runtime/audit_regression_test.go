@@ -206,14 +206,14 @@ func TestAuditHistoricalAcknowledgementCannotReapplyOldControl(t *testing.T) {
 func TestAuditAcceptanceAckDoesNotDeletePendingWork(t *testing.T) {
 	a, _ := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
 	a.handleJob(auditEnvelope("agent.collect_now"))
-	a.applyControl(protocol.ControlResponse{ReceiptAcks: []string{"job"}})
+	a.applyControl(protocol.ControlResponse{ReceiptAcks: []string{"job"}}, []protocol.JobReceipt{a.jobs["job"]})
 	if a.jobs["job"].Status != protocol.TargetAccepted {
 		t.Fatal("acceptance receipt ACK discarded unfinished collection")
 	}
 	rec := a.jobs["job"]
 	rec.Status = protocol.TargetSucceeded
 	a.jobs["job"] = rec
-	a.applyControl(protocol.ControlResponse{ReceiptAcks: []string{"job"}})
+	a.applyControl(protocol.ControlResponse{ReceiptAcks: []string{"job"}}, []protocol.JobReceipt{a.jobs["job"]})
 	if len(a.jobs) != 0 {
 		t.Fatal("final receipt acknowledgement not cleared")
 	}

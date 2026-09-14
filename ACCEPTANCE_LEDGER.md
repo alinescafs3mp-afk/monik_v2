@@ -1,3 +1,42 @@
+# Current acceptance: V12 stabilization (2026-09-15)
+
+Exact base `c2229685f76551bcbdb0bb89e1fe1adc16e28878`. No remote commit/deployment by the auditor. Historical claims below do not replace the new evidence. The base's actual GitHub CI run 34897729355 FAILED a brittle dispatch timing assertion and skipped later phases; its local baseline suite passed. V12 replaces that timing assertion with causal tests and fixes independent product defects.
+
+| Check | V12 evidence |
+|---|---|
+| Go race suite | PASS: 305 top-level pass events (includes one fuzz target), 401 test/subtest/seed pass events, 21 tested packages; 3 opt-in native cases skipped here and executed separately. |
+| Native Linux binaries | PASS: all 3 opt-in cases, UID 65534, local HTTPS/real SQLite; includes signed worker activation and verified failed-candidate recovery. |
+| Negative cases | 23 distinct top-level names in retained failing logs; overlapping manifestations, not 23 independent vulnerabilities. Their corrected regressions pass. |
+| Runtime/supervisor repeats | PASS: 10 shuffled runs GOMAXPROCS=1 and 5 GOMAXPROCS=4; local lock test separately 20 runs. |
+| Parser fuzz | PASS: completed 15s / 279,067 executions / 2 workers; no network. Earlier interrupted attempt not counted. |
+| Frontend / TypeScript / bundle | PASS: 106 Node helper/request/source-structure tests, tsc --noEmit, production Vue/Vite. Not vue-tsc or visual acceptance. |
+| Go vet / modules | PASS. Dependency versions unchanged. |
+| Binaries | Linux amd64 and Windows amd64: four commands each; Windows cross-build only. |
+| Browser | BLOCKED_BEFORE_LOGIN ERR_BLOCKED_BY_ADMINISTRATOR; new missing-asset/navigation case delivered, syntax checked, NOT visually accepted. |
+| Native service boot / power loss / physical TV / fleet soak | NOT RUN. |
+| Supervisor self-update / full protected restore / long aggregates | NOT IMPLEMENTED or NOT ACCEPTED; guard remains. |
+
+Host extras versus auditor tree `0624e862` (do not weaken product contracts):
+
+| Check | Host evidence |
+|---|---|
+| Full Go race suite | HOST PASS 305 top-level including fuzz target / 401 pass events / 21 packages; 3 opt-in native skipped here, passed separately. Go 1.27.1. |
+| Native Linux worker + supervisor + signed update | HOST PASS 3/3 uid=1000 (setuid 65534 only when euid=0); real signed digest/session/15s observation and failed-candidate rollback. |
+| Runtime/supervisor repeats | HOST PASS isolated: 10× GOMAXPROCS=1 shuffle 12345; 5× GOMAXPROCS=4 shuffle 67890; lock 20×. A first serial attempt overlapping native processes failed `TestV12OnlyOneRunningWorkerOwnsAnIdentity` with request-body EOF; isolated re-run passed. Assertion unchanged. |
+| Parser fuzz | HOST PASS 15s / 6,237,845 executions / 24 workers; no network; no panic. |
+| Frontend / TypeScript / bundle | HOST PASS 106 Node tests, tsc --noEmit, production Vue/Vite. |
+| Vet / modules | HOST PASS. |
+| SSH fixture suite | HOST PASS: existing 8 encrypted SSH/PTY fixtures plus V12 outstanding-ticket revoke; not native shell/browser proof. |
+| Browser | HOST PASS 30/30 Playwright 1.57.0 Chromium, including missing-asset 404/no-store and visible navigation failure without mutation/reload. Auditor BLOCKED_BEFORE_LOGIN ERR_BLOCKED_BY_ADMINISTRATOR. |
+| Native systemd/SCM boot, remote fleet rollout, power-loss recovery, physical TV | NOT RUN. |
+| Supervisor self-update / full protected restore / long aggregates / `operation.retry_selected` | NOT IMPLEMENTED / fail-closed. |
+
+Machine-readable details: `docs/audit/validation-review12-2026-09-15.json`. Full logs in the delivered package. Read `docs/V12_DEPLOYMENT_GATE_RU.md` before moving a controller or installing agents. One local non-root process is not a native systemd/SCM, cross-version migration or remote fleet certificate.
+
+---
+
+## Historical acceptance records (do not apply as current evidence)
+
 # Current acceptance: Audit 11
 
 Baseline `b110c2de7688d8d2d28f6c5498bb276c8825a1f8`. Auditor source tree `7326a43f273ecf3b6bca73971fb3aacaa0aa58a4`. Host extras versus that tree are listed below; they do not weaken product contracts. Source validation digest and scopes: `docs/audit/validation-review11-2026-09-14.json`.

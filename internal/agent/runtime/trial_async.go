@@ -35,12 +35,18 @@ func (a *Agent) startTrialLocked(job protocol.JobEnvelope, rec protocol.JobRecei
 		return false
 	}
 	a.trialRunning.Add(1)
-	go a.finishTrial(job, d, rec)
+	parent := a.runCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	a.workerTasks.Add(1)
+	go a.finishTrial(parent, job, d, rec)
 	return true
 }
-func (a *Agent) finishTrial(job protocol.JobEnvelope, d protocol.CheckDefinition, rec protocol.JobReceipt) {
+func (a *Agent) finishTrial(parent context.Context, job protocol.JobEnvelope, d protocol.CheckDefinition, rec protocol.JobReceipt) {
+	defer a.workerTasks.Done()
 	defer a.trialRunning.Add(-1)
-	c, cancel := context.WithTimeout(context.Background(), time.Duration(d.TimeoutSeconds)*time.Second)
+	c, cancel := context.WithTimeout(parent, time.Duration(d.TimeoutSeconds)*time.Second)
 	defer cancel()
 	var locals []net.IP
 	locals, _ = netutil.LocalInterfaceIPs()
@@ -56,6 +62,12 @@ func (a *Agent) finishTrial(job protocol.JobEnvelope, d protocol.CheckDefinition
 	rec.Message = "trial completed; definition not saved"
 	rec.AppliedAt = &obs.ObservedAt
 	rec.Evidence = map[string]any{"trial": true, "vantage": "agent/local", "transport": obs.Transport, "http_status": obs.HTTPStatus, "latency_ms": obs.LatencyMS, "method": d.Method, "failure_layer": obs.FailureLayer, "purpose": obs.Purpose, "app_result": obs.AppResult, "app_reason": obs.AppReason, "quality": obs.Quality, "feedback": obs.Feedback}
+	if parent.Err() != nil {
+		rec.Status = protocol.TargetFailed
+		rec.Stage = "trial_interrupted"
+		rec.ErrorCode = "outcome_unknown"
+		rec.Message = "worker stopped during trial; actual outcome unknown; not replayed"
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.jobs[job.JobID] = rec

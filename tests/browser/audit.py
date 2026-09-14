@@ -19,6 +19,7 @@ import urllib.request
 from playwright.sync_api import sync_playwright, expect
 from operation_read_scenarios import exercise_operation_reads
 from rollout_scenarios import exercise_rollouts
+from navigation_scenarios import exercise_navigation_failure
 
 
 def run(binary: Path, output: Path) -> None:
@@ -471,6 +472,7 @@ def run(binary: Path, output: Path) -> None:
                     page.get_by_role("button", name="Войти", exact=True).click()
                     expect(page.get_by_role("heading", name="Состояние машин", exact=True)).to_be_visible()
                     results.append("password change ends browser sessions and new password signs in; agent keys untouched")
+                    exercise_navigation_failure(context, base, output, results)
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")
                     context.close()

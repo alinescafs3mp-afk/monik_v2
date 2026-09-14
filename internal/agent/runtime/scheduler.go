@@ -81,7 +81,9 @@ func (a *Agent) scheduleChecks(ctx context.Context, now time.Time, locals []net.
 	defs := a.scheduler.reserve(now, a.cfg.Checks)
 	revision := a.cfgRev
 	for _, d := range defs {
+		a.workerTasks.Add(1)
 		go func(d protocol.CheckDefinition) {
+			defer a.workerTasks.Done()
 			defer a.scheduler.complete(d.ID)
 			timeout := d.TimeoutSeconds
 			if timeout < 1 {

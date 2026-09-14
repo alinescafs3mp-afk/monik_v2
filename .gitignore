@@ -43,3 +43,5 @@ vendor/
 # Python test cache
 __pycache__/
 *.pyc
+
+/audit-output/

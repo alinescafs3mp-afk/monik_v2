@@ -65,7 +65,7 @@ func readRollout(q sqlExecutor, id string) (*Rollout, error) {
 		return nil, fmt.Errorf("invalid persisted rollout policy")
 	}
 	rows, e := q.Query(`SELECT m.agent_id,m.platform,m.wave,COALESCE(m.released_at,''),t.status,t.stage,t.message,j.job_id,j.status,j.envelope,COALESCE(j.result,''),COALESCE(a.last_live_at,''),COALESCE(a.worker_digest,''),COALESCE(a.session_id,''),COALESCE(a.revoked,1),COALESCE(a.archived,1),COALESCE(a.managed_ready,0),COALESCE(a.capabilities,'{}'),COALESCE(a.os,'')||'/'||COALESCE(a.arch,'')
- FROM update_rollout_members m JOIN operation_targets t ON t.operation_id=m.operation_id AND t.agent_id=m.agent_id JOIN agent_jobs j ON j.job_id=t.job_id LEFT JOIN agents a ON a.id=m.agent_id WHERE m.operation_id=? ORDER BY m.wave,m.platform,m.agent_id`, id)
+ FROM update_rollout_members m JOIN operation_targets t ON t.operation_id=m.operation_id AND t.agent_id=m.agent_id JOIN agent_jobs j ON j.job_id=t.job_id AND j.operation_id=m.operation_id AND j.agent_id=m.agent_id LEFT JOIN agents a ON a.id=m.agent_id WHERE m.operation_id=? ORDER BY m.wave,m.platform,m.agent_id`, id)
 	if e != nil {
 		return nil, e
 	}
@@ -77,7 +77,23 @@ func readRollout(q sqlExecutor, id string) (*Rollout, error) {
 		}
 		r.Members = append(r.Members, m)
 	}
-	return r, rows.Err()
+	if e := rows.Err(); e != nil {
+		return nil, e
+	}
+	if e := rows.Close(); e != nil {
+		return nil, e
+	}
+	var members, targets int
+	if e := q.QueryRow(`SELECT COUNT(*) FROM update_rollout_members WHERE operation_id=?`, id).Scan(&members); e != nil {
+		return nil, e
+	}
+	if e := q.QueryRow(`SELECT COUNT(*) FROM operation_targets WHERE operation_id=?`, id).Scan(&targets); e != nil {
+		return nil, e
+	}
+	if members == 0 || len(r.Members) != members || members != targets {
+		return nil, fmt.Errorf("corrupt rollout membership: frozen targets/jobs are missing or mismatched")
+	}
+	return r, nil
 }
 func (s *Store) Rollout(id string) (result *Rollout, err error) {
 	// Revision, state and target rows must describe one committed snapshot.

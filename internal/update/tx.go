@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,25 @@ type Journal struct {
 func Path(stateDir string) string { return filepath.Join(stateDir, "update-journal.json") }
 
 func Load(stateDir string) (*Journal, error) {
-	b, err := os.ReadFile(Path(stateDir))
+	info, err := os.Lstat(Path(stateDir))
+	if err == nil && (!info.Mode().IsRegular() || info.Size() > 64<<10) {
+		return nil, fmt.Errorf("invalid update journal size/type")
+	}
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &Journal{Stage: StageIdle}, nil
+		}
+		return nil, err
+	}
+	f, err := os.Open(Path(stateDir))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, (64<<10)+1))
+	if len(b) > 64<<10 {
+		return nil, fmt.Errorf("update journal exceeds limit")
+	}
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &Journal{Stage: StageIdle}, nil
@@ -50,6 +69,11 @@ func Load(stateDir string) (*Journal, error) {
 	j := &Journal{}
 	if err := json.Unmarshal(b, j); err != nil {
 		return nil, err
+	}
+	switch j.Stage {
+	case StageIdle, StageStaged, StageSwitching, StageProbation, StageConfirmed, StageRollback:
+	default:
+		return nil, fmt.Errorf("unknown or missing update journal stage; restore verified state before starting")
 	}
 	return j, nil
 }
@@ -160,6 +184,24 @@ func Rollback(current, prev string) error {
 	b, err := os.ReadFile(prev)
 	if err != nil {
 		return err
+	}
+	return atomicBinary(current, b)
+}
+
+// RestoreVerified binds validation to the exact bytes published, not to a
+// separate pre-read hash followed by an unchecked second read of the slot.
+func RestoreVerified(current, previous, digest string) error {
+	expected, err := hex.DecodeString(digest)
+	if err != nil || len(expected) != sha256.Size {
+		return fmt.Errorf("previous-good digest is required")
+	}
+	b, err := os.ReadFile(previous)
+	if err != nil {
+		return err
+	}
+	hash := sha256.Sum256(b)
+	if hex.EncodeToString(hash[:]) != digest {
+		return fmt.Errorf("previous-good slot digest mismatch")
 	}
 	return atomicBinary(current, b)
 }

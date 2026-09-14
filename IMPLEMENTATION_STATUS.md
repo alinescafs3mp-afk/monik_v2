@@ -1,3 +1,17 @@
+# Current implementation: V12 stabilization, PRE-RELEASE
+
+Base `c2229685f76551bcbdb0bb89e1fe1adc16e28878`. This pass fixes exact receipt acknowledgement, accepted revision reuse, lifecycle-intent reservation before successor polling, TLS-client mutation, corrupt journals/spool records, local singleton ownership, draining shutdown, verified rollback persistence, lost controller/CA identity, escaped SQLite paths, missing frozen rollout members and lazy asset/navigation failures.
+
+The real Linux signed worker update test initially exposed repeated self-upgrade before probation; its corrected version verifies new digest/session, observation and failed-candidate rollback under UID 65534. No product version/schema migration breadth is claimed from the inert-trailer candidate. All earlier overview, service selection/naming, custom checks, auth, SSH, operations, immutable releases and canary/batch control are retained.
+
+Do not declare full release: native systemd/SCM boot, Windows accounts/ACLs, independent supervisor self-update, complete protected backup/restore, long-term aggregates, physical devices and fleet soak remain open. Read `docs/AUDIT_REVIEW_12_2026-09-15.md`, `docs/V12_DEPLOYMENT_GATE_RU.md` and current acceptance, not historical entries. Auditor GitHub/production were not modified; host integration commits and deploys after gates. Existing identity/credentials/endpoint must be preserved; a corruption stop is not permission to initialize fresh keys.
+
+See `docs/audit/validation-review12-2026-09-15.json`. Auditor browser execution was blocked before login; host Playwright 1.57.0 ran the full fixture including missing-asset 404 and visible navigation failure (30/30). Native process tests including real signed worker upgrade/rollback ran as uid=1000. These are not systemd/SCM/boot, multi-machine rollout, or physical-TV acceptance. Generic `operation.retry_selected` remains guarded. Independent service-host self-update remains guarded.
+
+---
+
+## Historical implementation records
+
 # Current implementation: Audit 11, PRE-RELEASE
 
 Baseline `b110c2de7688d8d2d28f6c5498bb276c8825a1f8`. Implements durable worker rollout canaries by OS/architecture, bounded later waves, fresh-identity observation, persisted pause/resume, automatic failure blocking, held-job cancellation and atomic delivery claims. Existing v10 immutable publication/download remains unchanged. No owner installation was contacted or changed.

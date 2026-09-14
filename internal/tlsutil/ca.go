@@ -37,8 +37,10 @@ func LoadOrCreate(dir string, dns []string, ips []net.IP, leafTTL time.Duration)
 	caCrt, caKey := filepath.Join(dir, "ca.crt"), filepath.Join(dir, "ca.key")
 	if _, err := os.Stat(caCrt); os.IsNotExist(err) {
 		// Never overwrite an existing half of a controller identity.
-		if _, keyErr := os.Stat(caKey); keyErr == nil {
-			return nil, fmt.Errorf("CA certificate missing while private key exists; restore the matching CA")
+		for _, existing := range []string{caKey, filepath.Join(dir, "leaf.bundle.pem"), filepath.Join(dir, "leaf.crt"), filepath.Join(dir, "leaf.key")} {
+			if _, e := os.Lstat(existing); e == nil || !os.IsNotExist(e) {
+				return nil, fmt.Errorf("CA certificate missing while TLS state exists; restore the matching CA")
+			}
 		}
 		if err := generateCA(caCrt, caKey); err != nil {
 			return nil, err
@@ -50,6 +52,19 @@ func LoadOrCreate(dir string, dns []string, ips []net.IP, leafTTL time.Duration)
 	}
 	if b.CAKeyPEM, err = os.ReadFile(caKey); err != nil {
 		return nil, err
+	}
+	// Validate the root and its private key even when the leaf is not due for
+	// renewal. Otherwise a mismatched replacement is only detected months later.
+	rootPair, err := tls.X509KeyPair(b.CACertPEM, b.CAKeyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("controller CA key/certificate mismatch: %w", err)
+	}
+	root, err := x509.ParseCertificate(rootPair.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+	if !root.IsCA || !root.BasicConstraintsValid || time.Now().Before(root.NotBefore) || !time.Now().Before(root.NotAfter) {
+		return nil, fmt.Errorf("controller CA is not currently valid; restore identity or rotate trust")
 	}
 	leaf, key, err := readLeafPair(dir)
 	if err != nil && !os.IsNotExist(err) {
@@ -67,6 +82,13 @@ func LoadOrCreate(dir string, dns []string, ips []net.IP, leafTTL time.Duration)
 	cert, err := tls.X509KeyPair(leaf, key)
 	if err != nil {
 		return nil, err
+	}
+	leafCert, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+	if err := leafCert.CheckSignatureFrom(root); err != nil {
+		return nil, fmt.Errorf("stored leaf is not signed by the enrolled CA: %w", err)
 	}
 	b.LeafCert, b.LeafKey = leaf, key
 	b.leaf.Store(&cert)

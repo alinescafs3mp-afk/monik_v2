@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/processlock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/update"
 )
 
@@ -30,6 +31,7 @@ type Host struct {
 	Probation time.Duration
 	cmd       *exec.Cmd
 	alive     bool
+	stopping  bool
 	done      chan struct{}
 	mu        sync.Mutex
 	updateMu  sync.Mutex
@@ -58,6 +60,11 @@ func (h *Host) Run(ctx context.Context) error {
 	if err := os.MkdirAll(h.StateDir, 0o700); err != nil {
 		return err
 	}
+	unlock, err := processlock.Acquire(filepath.Join(h.StateDir, "service-host.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if h.SockPath == "" {
 		h.SockPath = DefaultSock(h.StateDir)
 	}
@@ -68,28 +75,48 @@ func (h *Host) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer ln.Close()
-	// Run may be the service process's last call. Finish worker teardown before
-	// returning, rather than racing a cleanup goroutine against main's exit.
-	defer func() { h.updateMu.Lock(); h.stopWorker(); h.updateMu.Unlock() }()
+	runCtx, cancel := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	defer func() {
+		h.mu.Lock()
+		h.stopping = true
+		h.mu.Unlock()
+		cancel()
+		_ = ln.Close()
+		workers.Wait()
+		h.updateMu.Lock()
+		h.stopWorker()
+		h.updateMu.Unlock()
+	}()
 	if err := h.startWorker(); err != nil {
 		return err
 	}
-	go h.reap(ctx)
-	go h.watchControlFile(ctx)
+	workers.Add(3)
+	go func() { defer workers.Done(); h.reap(runCtx) }()
+	go func() { defer workers.Done(); h.watchControlFile(runCtx) }()
 	go func() {
-		<-ctx.Done()
+		defer workers.Done()
+		<-runCtx.Done()
+		h.mu.Lock()
+		h.stopping = true
+		h.mu.Unlock()
 		_ = ln.Close()
 	}()
 	for {
 		c, err := ln.Accept()
 		if err != nil {
-			if ctx.Err() != nil {
+			if runCtx.Err() != nil {
 				return nil
 			}
-			continue
+			return err
 		}
-		go h.handle(c)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			stop := context.AfterFunc(runCtx, func() { _ = c.Close() })
+			defer stop()
+			h.handle(c)
+		}()
 	}
 }
 
@@ -143,6 +170,12 @@ func (h *Host) dispatch(req Request, fromNetwork bool) Response {
 	case "restart_worker":
 		h.updateMu.Lock()
 		defer h.updateMu.Unlock()
+		h.mu.Lock()
+		stopping := h.stopping
+		h.mu.Unlock()
+		if stopping {
+			return Response{OK: false, Message: "service host is stopping", Stage: "stopped"}
+		}
 		if err := h.restartWorker(); err != nil {
 			return Response{OK: false, Message: err.Error()}
 		}
@@ -150,10 +183,22 @@ func (h *Host) dispatch(req Request, fromNetwork bool) Response {
 	case "activate_update":
 		h.updateMu.Lock()
 		defer h.updateMu.Unlock()
+		h.mu.Lock()
+		stopping := h.stopping
+		h.mu.Unlock()
+		if stopping {
+			return Response{OK: false, Message: "service host is stopping", Stage: "stopped"}
+		}
 		return h.activateUpdate(req.Params)
 	case "rollback_update":
 		h.updateMu.Lock()
 		defer h.updateMu.Unlock()
+		h.mu.Lock()
+		stopping := h.stopping
+		h.mu.Unlock()
+		if stopping {
+			return Response{OK: false, Message: "service host is stopping", Stage: "stopped"}
+		}
 		return h.rollbackUpdate(req.Params)
 	default:
 		return Response{OK: false, Message: "unknown or forbidden action"}
@@ -241,29 +286,15 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		h.stopWorker()
 	}
 	if err := update.Activate(target, staged, j.PrevPath); err != nil {
-		j.Stage = update.StageRollback
-		j.Reason = err.Error()
-		_ = j.Save(h.StateDir)
-		_ = update.Rollback(target, j.PrevPath)
-		if component == "worker" {
-			_ = h.startWorker()
-		}
-		return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
+		return h.failedActivation(j, "activation failed: "+err.Error())
 	}
 	j.Stage = update.StageProbation
 	if err := j.Save(h.StateDir); err != nil {
-		_ = update.Rollback(target, j.PrevPath)
-		_ = h.startWorker()
-		return Response{OK: false, Message: "probation journal could not be persisted", Stage: string(update.StageRollback)}
+		return h.failedActivation(j, "probation journal could not be persisted")
 	}
 	if component == "worker" {
 		if err := h.startWorker(); err != nil {
-			_ = update.Rollback(target, j.PrevPath)
-			j.Stage = update.StageRollback
-			j.Reason = err.Error()
-			_ = j.Save(h.StateDir)
-			_ = h.startWorker()
-			return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
+			return h.failedActivation(j, "candidate start failed: "+err.Error())
 		}
 		wait := h.Probation
 		if wait <= 0 {
@@ -287,12 +318,7 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		}
 		h.mu.Unlock()
 		if !alive {
-			_ = update.Rollback(target, j.PrevPath)
-			j.Stage = update.StageRollback
-			j.Reason = "new worker failed local probation"
-			_ = j.Save(h.StateDir)
-			_ = h.startWorker()
-			return Response{OK: false, Message: j.Reason, Stage: string(update.StageRollback)}
+			return h.failedActivation(j, "new worker failed local probation")
 		}
 	}
 	j.Stage = update.StageConfirmed
@@ -300,6 +326,39 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		return Response{OK: false, Message: err.Error(), Stage: string(update.StageProbation)}
 	}
 	return Response{OK: true, Message: "activated", Stage: string(j.Stage)}
+}
+
+func (h *Host) failedActivation(j *update.Journal, reason string) Response {
+	h.stopWorker()
+	if err := h.restoreJournaledWorker(j); err != nil {
+		return Response{OK: false, Message: reason + "; recovery could not be verified: " + err.Error(), Stage: "recovery_failed"}
+	}
+	j.Stage = update.StageRollback
+	j.Reason = reason
+	if err := j.Save(h.StateDir); err != nil {
+		_ = h.startWorker() // Best effort availability; never claim durable recovery.
+		return Response{OK: false, Message: reason + "; recovery journal could not be persisted", Stage: "recovery_failed"}
+	}
+	h.mu.Lock()
+	stopping := h.stopping
+	h.mu.Unlock()
+	if !stopping {
+		if err := h.startWorker(); err != nil {
+			return Response{OK: false, Message: reason + "; previous worker did not start: " + err.Error(), Stage: "recovery_failed"}
+		}
+	}
+	return Response{OK: false, Message: reason, Stage: string(update.StageRollback)}
+}
+
+func (h *Host) restoreJournaledWorker(j *update.Journal) error {
+	if j.Current != h.WorkerBin || j.PrevPath != filepath.Join(h.StateDir, "updates", "prev.bin") || len(j.OldSHA) != 64 {
+		return fmt.Errorf("incomplete previous-good identity")
+	}
+	current, err := update.SHA256File(j.Current)
+	if err == nil && current == j.OldSHA {
+		return nil
+	}
+	return update.RestoreVerified(j.Current, j.PrevPath, j.OldSHA)
 }
 
 func (h *Host) rollbackUpdate(params map[string]string) Response {
@@ -313,7 +372,7 @@ func (h *Host) rollbackUpdate(params map[string]string) Response {
 	if j.Current != h.WorkerBin || j.PrevPath != filepath.Join(h.StateDir, "updates", "prev.bin") {
 		return Response{OK: false, Message: "recovery journal does not identify this managed worker"}
 	}
-	if j.PrevPath == "" || j.Stage == update.StageIdle {
+	if j.PrevPath == "" || j.Stage == update.StageIdle || len(j.OldSHA) != 64 {
 		return Response{OK: false, Message: "no previous-good slot in the recovery journal"}
 	}
 	if expect := params["sha256"]; expect != "" && j.OldSHA != "" && expect != j.OldSHA {
@@ -332,12 +391,15 @@ func (h *Host) rollbackUpdate(params map[string]string) Response {
 		target = j.Current
 	}
 	h.stopWorker()
-	if err := update.Rollback(target, j.PrevPath); err != nil {
+	if err := update.RestoreVerified(target, j.PrevPath, j.OldSHA); err != nil {
 		_ = h.startWorker()
 		return Response{OK: false, Message: err.Error()}
 	}
 	j.Stage = update.StageRollback
-	_ = j.Save(h.StateDir)
+	if err := j.Save(h.StateDir); err != nil {
+		_ = h.startWorker()
+		return Response{OK: false, Message: "previous bytes restored but recovery journal was not persisted", Stage: "recovery_failed"}
+	}
 	if err := h.startWorker(); err != nil {
 		return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
 	}
@@ -360,7 +422,7 @@ func (h *Host) recoverJournal() error {
 			if err != nil || previous != j.OldSHA {
 				return fmt.Errorf("previous-good binary cannot be verified")
 			}
-			if err := update.Rollback(h.WorkerBin, j.PrevPath); err != nil {
+			if err := update.RestoreVerified(h.WorkerBin, j.PrevPath, j.OldSHA); err != nil {
 				return err
 			}
 		}
@@ -374,6 +436,9 @@ func (h *Host) recoverJournal() error {
 func (h *Host) startWorker() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.stopping {
+		return fmt.Errorf("service host is stopping")
+	}
 	if h.alive {
 		return nil
 	}

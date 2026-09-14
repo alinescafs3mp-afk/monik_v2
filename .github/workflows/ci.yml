@@ -44,7 +44,15 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Test with race detector
-        run: go test -race -count=1 ./...
+        run: |
+          set -o pipefail
+          go test -race -count=1 -json ./... | tee "$RUNNER_TEMP/go-tests.jsonl"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-tests-${{ github.sha }}
+          path: ${{ runner.temp }}/go-tests.jsonl
+          retention-days: 7
       - name: Vet
         run: go vet ./...
       - name: Build Linux and Windows binaries
@@ -54,7 +62,7 @@ jobs:
           set -o pipefail
           export MONIK_NATIVE_AGENT_BIN="$GITHUB_WORKSPACE/dist/linux-amd64/monik-agent"
           export MONIK_NATIVE_SUPERVISOR_BIN="$GITHUB_WORKSPACE/dist/linux-amd64/monik-service-host"
-          go test -race -count=1 -v -run '^TestAudit8Native' ./internal/server | tee "$RUNNER_TEMP/native-process.log"
+          go test -race -count=1 -v -run '^TestAudit8Native|^TestV12Native' ./internal/server | tee "$RUNNER_TEMP/native-process.log"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

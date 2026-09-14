@@ -1,5 +1,10 @@
 > **Audit 11:** persisted per-platform worker canaries, bounded batches, pause/resume and failure gates are implemented. This is not full native release acceptance. See [the current audit](docs/AUDIT_REVIEW_11_2026-09-14.md) and [rollout guide](docs/V11_ROLLOUTS_RU.md). Older completion statements below are historical where superseded.
 
+## Current stabilization audit: V12
+
+Read [the V12 audit](docs/AUDIT_REVIEW_12_2026-09-15.md), [deployment gates](docs/V12_DEPLOYMENT_GATE_RU.md) and the current [acceptance ledger](ACCEPTANCE_LEDGER.md) before deployment. A real non-root signed Linux worker-upgrade/failed-candidate recovery test now passes. Native OS-service boot, Windows provisioning, full protected restore and independent supervisor recovery are still separate open gates. Run `scripts/verify-audit12.sh --with-browser` in a permitted test environment; it does not install services or deploy production.
+
+
 # Monik
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.

@@ -100,8 +100,14 @@ func readRecord(path string) (protocol.AgentReport, error) {
 	if len(b) > maxReportBytes {
 		return r, fmt.Errorf("spool record exceeds limit")
 	}
-	err = json.Unmarshal(b, &r)
-	return r, err
+	if err = json.Unmarshal(b, &r); err != nil {
+		return r, err
+	}
+	// Syntactically valid null/empty objects must not poison the drain queue.
+	if r.AgentID == "" || r.SessionID == "" || r.Sequence < 1 || r.ObservedAt.IsZero() {
+		return r, fmt.Errorf("invalid spool report identity/time")
+	}
+	return r, nil
 }
 func (s *Store) recordsLocked() ([]record, error) {
 	var out []record

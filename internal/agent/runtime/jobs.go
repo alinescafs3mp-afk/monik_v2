@@ -70,13 +70,38 @@ func saveIntent(dir string, in *lifecycleIntent) error {
 }
 
 func loadIntent(dir string) (*lifecycleIntent, error) {
-	b, err := os.ReadFile(intentPath(dir))
+	path := intentPath(dir)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
-	in := &lifecycleIntent{}
-	if err := json.Unmarshal(b, in); err != nil {
+	const limit = 1 << 20
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, fmt.Errorf("invalid lifecycle intent size/type")
+	}
+	f, err := os.Open(path)
+	if err != nil {
 		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > limit {
+		return nil, fmt.Errorf("lifecycle intent exceeds limit")
+	}
+	var in *lifecycleIntent
+	if err := json.Unmarshal(b, &in); err != nil {
+		return nil, err
+	}
+	if in == nil {
+		return nil, fmt.Errorf("empty lifecycle intent")
+	}
+	switch in.Kind {
+	case "restart", "update", "rollback", "rebind_switch":
+	default:
+		return nil, fmt.Errorf("unknown lifecycle intent kind")
 	}
 	return in, nil
 }
@@ -240,10 +265,15 @@ func (a *Agent) applyTrustPool() error {
 	if err != nil {
 		return err
 	}
-	a.client.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
-		Proxy:           nil,
+	// Callers serialize publication with a.mu (Open has no concurrent readers).
+	// An in-flight secret request keeps its original immutable client/transport.
+	old := a.client
+	next := *old
+	next.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, Proxy: nil,
 	}
+	a.client = &next
+	old.CloseIdleConnections()
 	return nil
 }
 
@@ -856,8 +886,11 @@ func (a *Agent) applySwitch(in *lifecycleIntent) error {
 		a.State.File = previous
 		return err
 	}
-	a.client.CloseIdleConnections()
-	a.client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, Proxy: nil}
+	old := a.client
+	next := *old
+	next.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, Proxy: nil}
+	a.client = &next
+	old.CloseIdleConnections()
 	return nil
 }
 

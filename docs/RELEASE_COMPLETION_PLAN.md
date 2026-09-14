@@ -1,3 +1,15 @@
+# V12 stabilization status (2026-09-15)
+
+Read `AUDIT_REVIEW_12_2026-09-15.md` and `V12_DEPLOYMENT_GATE_RU.md` first. V12 verifies existing functions and fixes lifecycle/corruption defects. Worker signed delivery + supervised upgrade + failed-candidate rollback have a real local non-root process test. The test first exposed repeated self-upgrade, then passed after durable pending-intent reservation.
+
+Native systemd/Windows SCM installation and boot, independent service-host self-update recovery, complete protected restore/reconciliation, large-fleet/long-history capacity and 24h soak remain OPEN. Do not use the prior historical text to claim these are done. V10 immutable publication and V11 persisted canaries/parties/pause/resume remain implemented; they were not removed by this audit. Generic selected retry remains unavailable.
+
+First deploy matched server/UI and worker/service-host to one Linux pilot, with complete protected backup and independent access; run the local gates before the rest of the fleet. Local crash-released process locks do not fence two cloned VM controllers. No production system was changed by the auditor.
+
+---
+
+## Prior completion plan (historical context below)
+
 # Completion plan after Audit 11
 
 Baseline `b110c2de7688d8d2d28f6c5498bb276c8825a1f8`. The bounded WORKER canary/batch/pause/resume slice is now implemented and tested as specified in `AUDIT_REVIEW_11_2026-09-14.md`. Do not treat older text below saying all cohort behavior or `update.resume` is unimplemented as the current state. Generic `operation.retry_selected` remains guarded. Independent service-host replacement remains guarded.
