@@ -1,3 +1,17 @@
+# Completion plan after Audit 10
+
+Baseline ce602d0. The immutable release publication slice is implemented: verified separate object directories, transactional catalogue/trust/outcome, authenticated release-specific reads, pinned worker download and complete-job publication. Prior gate 2 language calling this wholly unimplemented is superseded by `AUDIT_REVIEW_10_2026-09-14.md`; the rest of that gate remains mandatory.
+
+Next practical priorities: (1) independently recoverable native service-host replacement and actual systemd/SCM tests, (2) full protected backup/restore with reconciliation of newer agents, (3) persisted canary/batch/pause/resume/retry orchestration. None is replaced by successful publication. Keep existing functioning monitoring/UI stable.
+
+Before first fleet use of this slice, perform the one-time immutable_release_v1 agent upgrade, re-import valid bundles and test actual installation/rollback of one remote test host. Retain old published files and old agent identities. Audit 10 only tests signed download of fixture bytes, not execution of those fixture bytes as a real release.
+
+Remaining release-specific work: trusted root/key rotation; missing-key recovery without silent regeneration; full sustained download/control fairness and byte progress; bounded catalogue/orphan retention with active-job/reference accounting; recovery from expiry after long offline periods; crash/power loss between directory publication and database commit; deliberate rollback between older controller schemas. Never delete referenced objects or reset high-water to make a rollout green.
+
+---
+
+## Prior requirements (historical context, new status above takes precedence)
+
 # Monik completion plan after Audit 9
 
 Audit 9 baseline: `efae8069f27f3ba2f951273796dbd99668db364d`. The owner-requested operation read workflow is now implemented across storage/API/UI: single and selected batch acknowledgement, server persistence, audit, new-attention generations, untruncated counts and searchable pages. All current tests and limitations are in the Audit 9 report. Earlier requirements below remain authoritative where not superseded by an implemented, tested change.

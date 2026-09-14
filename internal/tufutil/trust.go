@@ -54,16 +54,6 @@ func SaveTrustedRoot(tufDir string, root []byte) error {
 	return secure.AtomicWrite(TrustedRootPath(tufDir), root, 0600)
 }
 
-func LoadHighWater(tufDir string) HighWater {
-	b, err := os.ReadFile(HighWaterPath(tufDir))
-	if err != nil {
-		return HighWater{}
-	}
-	var h HighWater
-	_ = json.Unmarshal(b, &h)
-	return h
-}
-
 func SaveHighWater(tufDir string, h HighWater) error {
 	if err := os.MkdirAll(filepath.Join(tufDir, "trusted"), 0o700); err != nil {
 		return err
@@ -77,19 +67,30 @@ func SaveHighWater(tufDir string, h HighWater) error {
 
 // ReadHighWater refuses corrupt state instead of silently resetting anti-rollback protection.
 func ReadHighWater(tufDir string) (HighWater, error) {
+	b, e := os.ReadFile(HighWaterPath(tufDir))
+	if os.IsNotExist(e) {
+		return HighWater{}, nil
+	}
+	if e != nil {
+		return HighWater{}, e
+	}
+	return DecodeHighWater(b)
+}
+func DecodeHighWater(b []byte) (HighWater, error) {
 	var h HighWater
-	b, err := os.ReadFile(HighWaterPath(tufDir))
-	if os.IsNotExist(err) {
-		return h, nil
+	var fields map[string]json.RawMessage
+	if len(b) > 4096 || json.Unmarshal(b, &fields) != nil || len(fields) != 4 {
+		return h, fmt.Errorf("invalid TUF version journal object")
 	}
-	if err != nil {
-		return h, err
+	for _, k := range []string{"root", "timestamp", "snapshot", "targets"} {
+		v, ok := fields[k]
+		var n *int64
+		if !ok || json.Unmarshal(v, &n) != nil || n == nil || *n < 0 {
+			return h, fmt.Errorf("invalid TUF version field: %s", k)
+		}
 	}
-	if err := json.Unmarshal(b, &h); err != nil {
-		return h, fmt.Errorf("invalid TUF version journal: %w", err)
-	}
-	if h.Root < 0 || h.Targets < 0 || h.Timestamp < 0 || h.Snapshot < 0 {
-		return h, fmt.Errorf("invalid negative TUF version")
+	if e := json.Unmarshal(b, &h); e != nil {
+		return h, e
 	}
 	return h, nil
 }
@@ -260,4 +261,31 @@ func VerifyTarget(repoDir, name string, raw []byte) error {
 		return fmt.Errorf("artifact is not in authenticated targets metadata")
 	}
 	return info.VerifyLengthHashes(raw)
+}
+
+// RepositoryExpiry is advisory until VerifyRepo has authenticated this set.
+func RepositoryExpiry(rootRaw []byte, dir string) (time.Time, error) {
+	r, e := parseRoot(rootRaw)
+	if e != nil {
+		return time.Time{}, e
+	}
+	expiry := r.Signed.Expires
+	ts, e := loadMeta(filepath.Join(dir, "timestamp.json"), metadata.Timestamp())
+	if e != nil {
+		return expiry, e
+	}
+	sn, e := loadMeta(filepath.Join(dir, "snapshot.json"), metadata.Snapshot())
+	if e != nil {
+		return expiry, e
+	}
+	tg, e := loadMeta(filepath.Join(dir, "targets.json"), metadata.Targets())
+	if e != nil {
+		return expiry, e
+	}
+	for _, d := range []time.Time{ts.Signed.Expires, sn.Signed.Expires, tg.Signed.Expires} {
+		if d.Before(expiry) {
+			expiry = d
+		}
+	}
+	return expiry, nil
 }

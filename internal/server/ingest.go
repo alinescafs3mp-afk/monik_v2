@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/rules"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
-	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 )
 
 func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +72,7 @@ func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		_ = a.Store.AppendEvent("agent", "agent", req.AgentID, 1, map[string]any{"event": "enrolled"})
 	}
 	rootJSON := ""
-	if b, err := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf")); err == nil {
+	if b, err := a.updateRoot(); err == nil {
 		rootJSON = string(b)
 	}
 	a.writeJSON(w, 200, protocol.EnrollResponse{

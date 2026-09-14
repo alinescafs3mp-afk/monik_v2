@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -155,62 +157,93 @@ func (a *App) planID(req protocol.SubmitOperation) (string, error) {
 
 func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation) error {
 	if req.Action == "update.resume" {
-		for _, t := range op.Targets {
-			if t.AgentID == "server" || t.Status == protocol.TargetRejected {
-				continue
-			}
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetQueued, "update.resumed", "rollout revalidated", "", true, nil)
+		return fmt.Errorf("persisted batch resume is not implemented")
+	}
+	eligible := false
+	for _, target := range op.Targets {
+		if target.AgentID != "server" && target.Status != protocol.TargetRejected {
+			eligible = true
+			break
 		}
-		return nil
+	}
+	if !eligible {
+		return a.Store.PublishUpdatePlan(op.ID, nil)
 	}
 	releaseID, _ := req.Params["release_id"].(string)
-	if releaseID == "" && req.Action != "update.rollback" {
-		return fmt.Errorf("release_id required")
-	}
 	var arts []map[string]any
-	if releaseID != "" {
-		var err error
-		arts, err = a.Store.ArtifactsByRelease(releaseID)
-		if err != nil {
-			return err
+	var digest string
+	if req.Action != "update.rollback" {
+		var e error
+		var files []tufutil.PublicationFile
+		digest, files, e = a.Store.Publication(releaseID)
+		if e != nil {
+			return fmt.Errorf("release is not immutable: re-import its signed bundle before creating new rollouts")
+		}
+		dir, e := tufutil.PublicationDir(filepath.Join(a.Cfg.DataDir, "tuf"), digest)
+		if e != nil {
+			return e
+		}
+		if e = tufutil.VerifyPublication(dir, digest, files); e != nil {
+			return e
+		}
+		root, e := a.updateRoot()
+		if e != nil {
+			return e
+		}
+		// Validity is checked again before queueing. An agent still applies its own
+		// high-water protection; selecting an older release cannot bypass that.
+		if _, e = tufutil.VerifyRepo(root, dir, tufutil.HighWater{}, a.Clock.Now()); e != nil {
+			return e
+		}
+		arts, e = a.Store.ArtifactsByRelease(releaseID)
+		if e != nil {
+			return e
 		}
 	}
+	plan := []storage.PreparedUpdateTarget{}
 	for _, t := range op.Targets {
 		if t.AgentID == "server" || t.Status == protocol.TargetRejected {
 			continue
 		}
-		ag, err := a.Store.Agent(t.AgentID)
-		if err != nil {
-			continue
+		ag, e := a.Store.Agent(t.AgentID)
+		if e != nil {
+			return e
 		}
+		p := storage.PreparedUpdateTarget{AgentID: t.AgentID, Status: t.Status, Stage: "update.queued", Message: "verified release pinned; waiting for agent execution"}
 		if !ag.ManagedReady {
-			_ = a.Store.MarkTargetAndJob(op.ID, t.AgentID, protocol.TargetUnsupported, "unmanaged", "unmanaged worker cannot replace or restart itself; install the service host first", false, map[string]any{"release_id": releaseID})
+			p.Status = protocol.TargetUnsupported
+			p.Stage = "unmanaged"
+			p.Message = "install a managed service before updating"
+			plan = append(plan, p)
 			continue
 		}
 		if req.Action == "update.rollback" {
-			extra := map[string]any{"release_id": releaseID, "os": ag.OS, "arch": ag.Arch, "component": "worker", "previous_session": ag.SessionID}
-			if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
-				_ = a.Store.PatchJobParams(jobID, extra)
-			}
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, t.Status, "update.rollback_queued", "eligible prior build requested", "", true, extra)
+			p.Stage = "update.rollback_queued"
+			p.Evidence = map[string]any{"component": "worker", "previous_session": ag.SessionID}
+			plan = append(plan, p)
+			continue
+		}
+		var caps map[string]protocol.Capability
+		_ = json.Unmarshal([]byte(ag.Capabilities), &caps)
+		if caps["immutable_release_v1"].Status != "supported" {
+			p.Status = protocol.TargetUnsupported
+			p.Stage = "upgrade_required"
+			p.Message = "agent must advertise immutable_release_v1; upgrade this older agent locally once"
+			plan = append(plan, p)
 			continue
 		}
 		art := matchArtifact(arts, ag.OS, ag.Arch)
 		if art == nil {
-			_ = a.Store.MarkTargetAndJob(op.ID, t.AgentID, protocol.TargetUnsupported, "no_artifact", "no signed artifact for this os/arch", false, map[string]any{"release_id": releaseID, "os": ag.OS, "arch": ag.Arch})
+			p.Status = protocol.TargetUnsupported
+			p.Stage = "no_artifact"
+			p.Message = "release has no signed worker for this platform"
+			plan = append(plan, p)
 			continue
 		}
-		extra := map[string]any{
-			"release_id": releaseID, "os": ag.OS, "arch": ag.Arch,
-			"name": art["name"], "sha256": art["sha256"], "length": art["length"],
-			"component": "worker", "previous_session": ag.SessionID,
-		}
-		if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
-			_ = a.Store.PatchJobParams(jobID, extra)
-		}
-		_ = a.Store.UpdateTarget(op.ID, t.AgentID, t.Status, "update.queued", "signed artifact authorized for this target", "", true, extra)
+		p.Evidence = map[string]any{"release_id": releaseID, "release_digest": digest, "os": ag.OS, "arch": ag.Arch, "name": art["name"], "sha256": art["sha256"], "length": art["length"], "component": "worker", "previous_session": ag.SessionID}
+		plan = append(plan, p)
 	}
-	return nil
+	return a.Store.PublishUpdatePlan(op.ID, plan)
 }
 
 func (a *App) handleRestart(op *protocol.Operation) error {

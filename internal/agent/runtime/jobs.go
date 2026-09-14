@@ -508,7 +508,13 @@ func (a *Agent) jobUpdate(job protocol.JobEnvelope, rec protocol.JobReceipt, now
 		rec.ErrorCode = "missing_artifact"
 		return rec
 	}
-	incoming, err := a.downloadVerifiedArtifact(name, sha)
+	releaseDigest, _ := job.Params["release_digest"].(string)
+	if _, present := job.Params["release_digest"]; present && !tufutil.ValidReleaseID(releaseDigest) {
+		rec.Status, rec.Stage, rec.ErrorCode = protocol.TargetRejected, "bad_release", "bad_release"
+		rec.Message = "a pinned release must contain a valid immutable digest"
+		return rec
+	}
+	incoming, err := a.downloadVerifiedRelease(name, sha, releaseDigest)
 	if err != nil {
 		rec.Status = protocol.TargetFailed
 		rec.Stage = "verify_failed"
@@ -541,6 +547,17 @@ func (a *Agent) jobUpdate(job protocol.JobEnvelope, rec protocol.JobReceipt, now
 }
 
 func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error) {
+	return a.downloadVerifiedRelease(name, expectSHA, "")
+}
+func (a *Agent) downloadVerifiedRelease(name, expectSHA, releaseDigest string) (string, error) {
+	base := "/api/v1/agent/"
+	if releaseDigest != "" {
+		if !tufutil.ValidReleaseID(releaseDigest) {
+			return "", fmt.Errorf("invalid pinned release digest")
+		}
+		base += "releases/" + releaseDigest + "/"
+	}
+
 	expectedName := goruntime.GOOS + "-" + goruntime.GOARCH + "/monik-agent"
 	if goruntime.GOOS == "windows" {
 		expectedName += ".exe"
@@ -558,7 +575,7 @@ func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error)
 	}
 	defer os.RemoveAll(tmp)
 	for _, meta := range []string{"timestamp.json", "snapshot.json", "targets.json"} {
-		b, err := a.getBytes("/api/v1/agent/tuf/"+meta, false)
+		b, err := a.getBytes(base+"tuf/"+meta, releaseDigest != "")
 		if err != nil {
 			return "", fmt.Errorf("tuf %s: %w", meta, err)
 		}
@@ -578,7 +595,7 @@ func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error)
 	if err := tufutil.SaveHighWater(trustDir, hw); err != nil {
 		return "", fmt.Errorf("persist authenticated metadata versions: %w", err)
 	}
-	raw, err := a.getBytes("/api/v1/agent/artifacts/"+name, true)
+	raw, err := a.getBytes(base+"artifacts/"+name, true)
 	if err != nil {
 		return "", err
 	}
@@ -595,7 +612,7 @@ func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error)
 		return "", err
 	}
 	dst := filepath.Join(dir, "incoming.bin")
-	if err := os.WriteFile(dst, raw, 0o700); err != nil {
+	if err := secure.AtomicWrite(dst, raw, 0o700); err != nil {
 		return "", err
 	}
 	return dst, nil
@@ -631,7 +648,7 @@ func (a *Agent) getBytes(path string, auth bool) ([]byte, error) {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 	limit := int64(2 << 20)
-	if strings.HasPrefix(path, "/api/v1/agent/artifacts/") {
+	if strings.HasPrefix(path, "/api/v1/agent/artifacts/") || strings.HasPrefix(path, "/api/v1/agent/releases/") && strings.Contains(path, "/artifacts/") {
 		limit = 200 << 20
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))

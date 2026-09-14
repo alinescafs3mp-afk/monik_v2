@@ -16,7 +16,6 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
-	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 )
 
 func (a *App) handleSubmitOp(w http.ResponseWriter, r *http.Request, s *storage.Session) {
@@ -184,8 +183,13 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	if err := a.executeServerSide(op, def, s, req, secretPlain); err != nil {
 		var committed *policyResultUnconfirmed
 		for _, target := range op.Targets {
+			if target.Status == protocol.TargetRejected {
+				continue // Preserve preflight conflicts; no effect was attempted for this target.
+			}
 			if errors.As(err, &committed) {
 				_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetUnknownResult, "result_unconfirmed", err.Error(), "result_write", false, nil)
+			} else if req.Action == "update.rollout" || req.Action == "update.rollback" {
+				_ = a.Store.MarkTargetAndJob(op.ID, target.AgentID, protocol.TargetFailed, "preparation_failed", err.Error(), true, nil)
 			} else {
 				_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
 			}
@@ -633,27 +637,5 @@ func (a *App) runBackup(op *protocol.Operation) error {
 }
 
 func (a *App) importRelease(op *protocol.Operation, req protocol.SubmitOperation) error {
-	path, _ := req.Params["bundle_path"].(string)
-	if path == "" {
-		return fmt.Errorf("bundle_path required")
-	}
-	enroll, _ := req.Params["enroll_root"].(bool)
-	dir := filepath.Join(a.Cfg.DataDir, "tuf")
-	res, err := tufutil.ImportTrusted(path, dir, tufutil.ImportOpts{Enroll: enroll, Now: a.Clock.Now().UTC()})
-	if err != nil {
-		return err
-	}
-	if _, err := a.Store.ReleaseByDigest(res.Digest); err == nil {
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_catalog_commit", "already imported", "", false, map[string]any{"digest": res.Digest, "already_imported": true, "enrolled_root": true})
-		return nil
-	}
-	plats, _ := json.Marshal(res.Platforms)
-	if err := a.Store.InsertRelease(res.ID, res.Version, res.Digest, res.Notes, res.MetadataJSON, string(plats), true); err != nil {
-		return err
-	}
-	for _, art := range res.Artifacts {
-		_ = a.Store.InsertArtifact(res.ID, art.OS, art.Arch, art.Name, art.SHA256, art.Length, art.Path)
-	}
-	_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "verified_catalog_commit", "release imported against enrolled TUF root", "", false, map[string]any{"digest": res.Digest, "version": res.Version, "enrolled_root": true})
-	return nil
+	return a.importImmutableRelease(op, req)
 }

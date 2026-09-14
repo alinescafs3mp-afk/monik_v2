@@ -1,3 +1,15 @@
+# Current implementation: Audit 10, PRE-RELEASE
+
+Baseline ce602d0. Implements immutable signed release storage/URLs, transactionally committed catalogue/trust/result, capability-gated complete update envelopes, corruption rejection and Updates preflight feedback. The importer no longer calls the legacy mutable ImportTrusted path. No production installation was changed by this source audit.
+
+Existing agents continue monitoring, but new-style rollouts require a one-time protected local upgrade to advertise immutable_release_v1. Existing legacy catalogue entries require valid signed re-import. Root/key rotation, native independent service-host recovery, full protected restore, cohort orchestration, long aggregates and actual fleet acceptance remain incomplete. See docs/AUDIT_REVIEW_10_2026-09-14.md and docs/RELEASE_COMPLETION_PLAN.md.
+
+Evidence: docs/audit/validation-review10-2026-09-14.json. Auditor browser execution was blocked before login; host Playwright 1.57.0 ran the full fixture including the new Updates immutable-release assertions. Native process tests ran as uid=1000. These are not systemd/SCM/boot or physical-TV acceptance.
+
+---
+
+## Historical implementation status
+
 # Implementation status after Audit 9
 
 **PRE-RELEASE.** Baseline `efae806`; this corrective source adds durable operation read/unread, versioned bulk acknowledgement, full-journal counters, filtered pagination and atomic target/job/result/notice publication. Read never means success or recovery. New failures re-open attention; ordinary progress and removal of known waiting reasons do not.

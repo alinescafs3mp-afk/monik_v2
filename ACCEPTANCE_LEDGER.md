@@ -1,3 +1,33 @@
+# Current acceptance: Audit 10
+
+Base `ce602d01b3bc335a94b194bf1c3c04e7e46a25ad`. Auditor source tree `13ac3da94fb53427edd338a9e7a897c4e937f420`. Host extras versus that tree are listed below; they do not weaken product contracts.
+
+| Check | Current evidence |
+|---|---|
+| Full Go race suite | HOST PASS 254 top-level tests / 322 pass events / 19 tested packages; 2 opt-in process tests skipped here, passed separately. |
+| Frontend | PASS: 96 Node helper/request tests. |
+| TypeScript / Vite | PASS: tsc --noEmit and production bundle; not vue-tsc or visual acceptance. |
+| Vet / module verification | PASS. |
+| Linux / Windows amd64 | HOST PASS: four commands each; Windows is cross-compilation only. |
+| Compiled Linux worker + supervisor | HOST PASS uid=1000 (setuid 65534 only when euid=0); real CPU/RAM, stop/restart/respawn and outage/spool recovery. |
+| SSH fixture suite | HOST PASS: existing 8 encrypted SSH/PTY protocol fixtures, not native shell/browser proof. |
+| Publication regressions | CONFIRMED: 4; all pass after correction. |
+| Immutable download | PASS: signed TUF + actual HTTPS, A after B, tamper/replay reject; fixture bytes not executed. |
+| Transaction faults | PASS: artifact/outcome/second-target rollback. |
+| New browser scenario | HOST PASS 28/28 Playwright 1.57.0 Chromium, including Updates immutable-release preflight. Auditor BLOCKED_BEFORE_LOGIN ERR_BLOCKED_BY_ADMINISTRATOR. |
+| Native systemd/SCM boot, power-loss recovery, physical TV | NOT RUN. |
+| Full fleet, long retention and 24h soak | NOT RUN. |
+
+Host extras versus auditor tree `13ac3da9` (do not weaken product contracts):
+
+- Ledger/status/validation record the host Playwright and native uid=1000 runs. No product-code change was required after the patch.
+
+Machine-readable: `docs/audit/validation-review10-2026-09-14.json`.
+
+---
+
+## Previous acceptance history
+
 # Acceptance ledger: Audit 9
 
 Baseline `efae8069f27f3ba2f951273796dbd99668db364d`, 2026-09-14. Auditor source tree `c2b2b5275ebbd9b1e1108edd2c99e789ca3c6554`. Host extras versus that tree are listed below; they do not weaken product contracts.

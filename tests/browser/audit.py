@@ -266,7 +266,14 @@ def run(binary: Path, output: Path) -> None:
                     page.goto(base + "/updates", wait_until="domcontentloaded")
                     expect(page.locator("main")).to_contain_text("TUF root")
                     assert page.get_by_role("button", name="Обновить всех").count() == 0
-                    results.append("update import is visible and fleet-wide update remains absent")
+                    expect(page.get_by_role("heading", name="Обновления агентов", exact=True)).to_be_visible()
+                    expect(page.locator("main")).to_contain_text("Каждый релиз хранит собственные")
+                    expect(page.get_by_role("button", name="Импортировать комплект", exact=True)).to_be_disabled()
+                    # Existing synthetic agents do not advertise immutable_release_v1.
+                    for checkbox in page.locator(".update-target input[type=checkbox]").all():
+                        expect(checkbox).to_be_disabled()
+                    page.screenshot(path=str(output / "immutable-updates.png"), full_page=True)
+                    results.append("immutable-release explanation, disabled incompatible agents and no implicit fleet-wide update")
 
                     # V6 operates through the real API and compiled UI. Only
                     # the telemetry/clock-condition fixture is synthetic.

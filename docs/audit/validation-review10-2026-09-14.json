@@ -1,0 +1,103 @@
+{
+  "audit": 10,
+  "date": "2026-09-14",
+  "repository": "alinescafs3mp-afk/monik_v2",
+  "base_commit": "ce602d01b3bc335a94b194bf1c3c04e7e46a25ad",
+  "base_tree": "9a5c10dc7e9640ae3d442a65f444d3fb4b917b1e",
+  "publication": "not committed; intermediate Git trees only, branch not updated",
+  "production": "NOT ACCESSED OR MODIFIED",
+  "go": {
+    "command": "go test -race -count=1 -json ./...",
+    "exit": 0,
+    "top_level_pass": 254,
+    "test_and_subtest_pass": 322,
+    "tested_packages": 19,
+    "failed": [],
+    "opt_in_process_tests": "2 skipped in suite, both run and passed separately"
+  },
+  "frontend": {
+    "tests": 96,
+    "exit": 0,
+    "kind": "Node helper/request/source tests, NOT browser evidence"
+  },
+  "native_process": {
+    "tests": 2,
+    "exit": 0,
+    "uid": 65534,
+    "scope": "compiled Linux agent and service-host; actual CPU/RAM, restart, respawn, 503 outage and spool recovery; not systemd/SCM"
+  },
+  "builds": {
+    "exit": 0,
+    "linux_amd64": [
+      "server",
+      "agent",
+      "service-host",
+      "release"
+    ],
+    "windows_amd64": "same 4 commands cross-built, not native execution",
+    "version_label": "ce602d0-audit10-UNRELEASED",
+    "signed_release": false
+  },
+  "exits": {
+    "final-ui-build": 0,
+    "final-native-process": 0,
+    "final-typescript": 0,
+    "final-frontend": 0,
+    "final-go": 0,
+    "final-builds": 0,
+    "final-vet": 0,
+    "final-mod-verify": 0
+  },
+  "browser": {
+    "syntax_exit": 0,
+    "attempt_exit": 1,
+    "status": "BLOCKED_BEFORE_LOGIN",
+    "reason": "ERR_BLOCKED_BY_ADMINISTRATOR on loopback HTTPS",
+    "source": "browser-run.log",
+    "new_scenarios_executed": false
+  },
+  "host_execution": {
+    "go_top_level_pass": 254,
+    "go_test_and_subtest_pass": 322,
+    "tested_packages": 19,
+    "frontend_tests": 96,
+    "browser": {
+      "status": "HOST_PASS",
+      "playwright": "1.57.0",
+      "checks": 28,
+      "new_scenarios_executed": true
+    },
+    "native_process": {
+      "tests": 2,
+      "exit": 0,
+      "uid": 1000,
+      "note": "setuid 65534 only when euid=0"
+    },
+    "ssh_fixtures": 8
+  },
+  "baseline_regressions_reproduced": [
+    "existing signing key overwritten",
+    "null version journal accepted",
+    "B replaces A artifact",
+    "artifact insert failure leaves catalogue and successful result"
+  ],
+  "intermediate_failure": "existing lifecycle-conflict test caught outcome regression; code fixed without weakening assertion; final pass",
+  "not_run": [
+    "native systemd/Windows SCM boot",
+    "power-loss recovery",
+    "service-host independent self-update",
+    "fleet capacity",
+    "24h soak",
+    "physical TV/Yandex",
+    "full v3 acceptance"
+  ],
+  "remaining_implementation": [
+    "full controller backup/restore and reconciliation",
+    "independent service-host recovery",
+    "persisted canary/batches/resume",
+    "complete root/key rotation",
+    "release GC/quota/orphan accounting",
+    "long aggregates",
+    "download/control fairness"
+  ]
+}

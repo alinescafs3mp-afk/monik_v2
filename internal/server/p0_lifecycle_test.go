@@ -151,7 +151,7 @@ func TestImportTrustedAndUnmanagedRollout(t *testing.T) {
 	if w.Code >= 400 {
 		t.Fatalf("import: %d %s", w.Code, w.Body.String())
 	}
-	if _, err := tufutil.LoadTrustedRoot(filepath.Join(app.Cfg.DataDir, "tuf")); err != nil {
+	if _, err := app.updateRoot(); err != nil {
 		t.Fatal(err)
 	}
 	rels, err := app.Store.Releases()

@@ -63,8 +63,12 @@ func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 				if err != nil {
 					return err
 				}
+				jobStatus := string(t.Status)
+				if op.Action == "update.rollout" || op.Action == "update.rollback" {
+					jobStatus = "preparing"
+				}
 				_, err = tx.Exec(`INSERT INTO agent_jobs(job_id,operation_id,agent_id,action,envelope,status,created_at,deadline)
-					VALUES(?,?,?,?,?,?,?,?)`, jobID, op.ID, t.AgentID, op.Action, string(b), string(t.Status),
+					VALUES(?,?,?,?,?,?,?,?)`, jobID, op.ID, t.AgentID, op.Action, string(b), jobStatus,
 					op.CreatedAt.UTC().Format(dbTimeFormat), env.Deadline.UTC().Format(dbTimeFormat))
 				if err != nil {
 					return err
@@ -451,19 +455,19 @@ func (s *Store) ReleaseByDigest(digest string) (string, error) {
 }
 
 func (s *Store) Releases() ([]map[string]any, error) {
-	rows, err := s.db().Query(`SELECT id,version,digest,notes,imported_at,trust_ok,platforms FROM releases ORDER BY imported_at DESC`)
+	rows, err := s.db().Query(`SELECT r.id,r.version,r.digest,r.notes,r.imported_at,r.trust_ok,r.platforms,COALESCE(p.expires_at,''),COALESCE(p.format_version,0) FROM releases r LEFT JOIN release_publications p ON p.release_id=r.id ORDER BY r.imported_at DESC,r.id DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []map[string]any
 	for rows.Next() {
-		var id, ver, dig, notes, at, plat string
-		var trust int
-		if err := rows.Scan(&id, &ver, &dig, &notes, &at, &trust, &plat); err != nil {
+		var id, ver, dig, notes, at, plat, expires string
+		var trust, format int
+		if err := rows.Scan(&id, &ver, &dig, &notes, &at, &trust, &plat, &expires, &format); err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]any{"id": id, "version": ver, "digest": dig, "notes": notes, "imported_at": at, "trust_ok": trust == 1, "platforms": json.RawMessage(plat)})
+		out = append(out, map[string]any{"id": id, "version": ver, "digest": dig, "notes": notes, "imported_at": at, "trust_ok": trust == 1, "platforms": json.RawMessage(plat), "immutable": format == 1, "metadata_expires_at": expires})
 	}
 	return out, rows.Err()
 }

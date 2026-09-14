@@ -16,7 +16,6 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/rules"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
-	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/version"
 )
 
@@ -80,6 +79,8 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/agent/report", a.handleReport)
 	mux.HandleFunc("GET /api/v1/agent/tuf/{name}", a.handleTUF)
 	mux.HandleFunc("GET /api/v1/agent/artifacts/{name...}", a.handleArtifact)
+	mux.HandleFunc("GET /api/v1/agent/releases/{release}/tuf/{name}", a.handlePublishedMetadata)
+	mux.HandleFunc("GET /api/v1/agent/releases/{release}/artifacts/{name...}", a.handlePublishedArtifact)
 	mux.HandleFunc("GET /api/v1/agent/secrets/{id}", a.handleAgentSecret)
 	mux.HandleFunc("GET /api/v1/agent/update-root", a.handleAgentUpdateRoot)
 	mux.HandleFunc("POST /api/v1/agent/credential/next", a.handleCredentialNext)
@@ -760,7 +761,7 @@ func (a *App) handleSettings(w http.ResponseWriter, r *http.Request, s *storage.
 			exp = t
 		}
 	}
-	_, tufErr := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf"))
+	_, tufErr := a.updateRoot()
 	a.writeJSON(w, 200, map[string]any{
 		"advertised_url":      a.Cfg.AdvertisedURL,
 		"listen":              a.Cfg.Listen,
@@ -831,8 +832,12 @@ func (a *App) handleDiagnostics(w http.ResponseWriter, r *http.Request, s *stora
 }
 
 func (a *App) handleReleases(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	rels, _ := a.Store.Releases()
-	a.writeJSON(w, 200, map[string]any{"releases": rels})
+	rels, err := a.Store.Releases()
+	if err != nil {
+		a.writeErr(w, 500, "catalogue", "could not read release catalogue")
+		return
+	}
+	a.writeJSON(w, 200, map[string]any{"releases": rels, "server_time": a.Clock.Now().UTC()})
 }
 
 func (a *App) handleEnrollmentGet(w http.ResponseWriter, r *http.Request, s *storage.Session) {
@@ -875,10 +880,20 @@ func (a *App) handleTUF(w http.ResponseWriter, r *http.Request) {
 	}
 	root := filepath.Join(a.Cfg.DataDir, "tuf")
 	if name == "root.json" {
-		if p := tufutil.TrustedRootPath(root); fileExists(p) {
-			http.ServeFile(w, r, p)
+		b, e := a.updateRoot()
+		if e != nil {
+			a.writeErr(w, 404, "not_found", "no enrolled root")
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(b)
+		return
+	}
+	switch name {
+	case "timestamp.json", "snapshot.json", "targets.json":
+	default:
+		a.writeErr(w, 404, "not_found", "metadata not found")
+		return
 	}
 	http.ServeFile(w, r, filepath.Join(root, "repository", name))
 }
@@ -925,7 +940,7 @@ func (a *App) handleAgentUpdateRoot(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 401, "unauthenticated", "agent credential required")
 		return
 	}
-	b, err := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf"))
+	b, err := a.updateRoot()
 	if err != nil {
 		a.writeErr(w, 404, "not_found", "no enrolled TUF root")
 		return

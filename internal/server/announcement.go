@@ -4,9 +4,7 @@ import (
 	"encoding/hex"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
-	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -53,7 +51,7 @@ func (a *App) handleAnnounce(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		root := ""
-		if b, e := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf")); e == nil {
+		if b, e := a.updateRoot(); e == nil {
 			root = string(b)
 		}
 		out.Enrollment = &protocol.EnrollResponse{AgentID: req.AgentID, Credential: req.Credential, ControllerID: a.ControllerID(), AdvertisedURL: a.Cfg.AdvertisedURL, CACertPEM: string(a.CACertPEM()), EndpointGeneration: ag.EndpointGeneration, ConfigRevision: ag.DesiredRevision, UpdateRootJSON: root}

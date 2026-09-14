@@ -15,6 +15,31 @@ import (
 
 func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 	switch req.Action {
+	case "update.import":
+		path, ok := req.Params["bundle_path"].(string)
+		if !ok || path == "" || len(path) > 4096 {
+			return fmt.Errorf("bundle_path required")
+		}
+		for k, v := range req.Params {
+			if k == "enroll_root" {
+				if _, ok := v.(bool); !ok {
+					return fmt.Errorf("enroll_root must be boolean")
+				}
+			} else if k != "bundle_path" {
+				return fmt.Errorf("unknown release import parameter")
+			}
+		}
+		return nil
+	case "update.rollout":
+		id, ok := req.Params["release_id"].(string)
+		if !ok || id == "" || len(id) > 128 {
+			return fmt.Errorf("release_id required")
+		}
+		if len(req.Params) != 1 {
+			return fmt.Errorf("only release_id accepted; artifact locations are server-controlled")
+		}
+		return nil
+
 	case "session.revoke_others":
 		if len(req.Params) != 0 {
 			return fmt.Errorf("no parameters accepted")

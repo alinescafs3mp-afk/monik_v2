@@ -2,11 +2,15 @@
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: Audit 7, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_7_2026-09-14.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: Audit 10, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_10_2026-09-14.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
 The configurable bootstrap URL remains `https://46.120.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 
-## Audit 7 additions
+## Audit 10 release publication
+
+Signed bundles now publish under immutable content-addressed paths with transactional catalogue/trust/results. New rollouts require `immutable_release_v1`; upgrade old workers locally once, preserving enrollment, then re-import valid signed bundles. Read [transition and limits](docs/V10_RELEASES_RU.md). Published files are not installation proof. Independent supervisor recovery, full restore, rollout cohorts and long history remain open.
+
+## Earlier Audit 7 additions
 
 Service monitoring and display are independent controls. New discoveries remain paused by default; opt-in automatic monitoring requires `selective_monitor_v1`. Existing enabled checks are preserved. TV mode adds compact rows, device density and paging without browser zoom; login can retain a revocable 30-day session without storing the password in app storage. Current physical-TV/browser/native release acceptance is not claimed.
 
@@ -38,9 +42,9 @@ make dist
 
 Server/UI first, then compatible agents, preserving identities, protected state, keys and the actual selected endpoint. Take a complete protected backup before schema/index changes and test on a populated copy. Do not blindly run setup over an existing enrollment. Use CLI help for the chosen build and paths rather than assuming a sample data path matches your service account.
 
-Linux service-account/ownership provisioning, Windows restricted identities/ACLs, native boot and independent service-host self-update recovery remain incomplete/not accepted. A running old supervisor is not proof a replacement will boot. Worker update and rebind contain tested partial implementations, not a finished fleet rollout. Immutable release publishing/cohort resume, full controller restore/reconciliation and long-term aggregates remain release blockers. Some corresponding APIs deliberately reject unfinished actions; do not remove guards to make buttons green.
+Linux service-account/ownership provisioning, Windows restricted identities/ACLs, native boot and independent service-host self-update recovery remain incomplete/not accepted. A running old supervisor is not proof a replacement will boot. Worker update and rebind contain tested partial implementations, not a finished fleet rollout. Immutable publication is now implemented; cohort resume, native recovery, full controller restore/reconciliation and long-term aggregates remain release blockers. Some corresponding APIs deliberately reject unfinished actions; do not remove guards to make buttons green.
 
-No remote shell, host reboot or unrelated application/container control. External Telegram/email notifications remain deferred. Keep signing private keys and production runtime state out of this repository and ordinary diagnostics.
+No shell through the monitoring agent, host reboot or unrelated application/container control. The separately owner-authorized fixed-target SSH console remains optional and isolated from agent authority. External Telegram/email notifications remain deferred. Keep signing private keys and production runtime state out of this repository and ordinary diagnostics.
 
 ## Layout
 

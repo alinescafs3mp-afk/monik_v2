@@ -469,3 +469,19 @@ CREATE TABLE IF NOT EXISTS operation_attention (
 );
 CREATE INDEX IF NOT EXISTS idx_operations_created_id ON operations(created_at DESC,id DESC);
 CREATE INDEX IF NOT EXISTS idx_operation_attention_required ON operation_attention(required,acknowledged_generation,generation);
+
+-- Versioned immutable release catalogue. Legacy mutable entries remain visible
+-- but are not eligible for new rollout commands.
+CREATE TABLE IF NOT EXISTS release_publications (
+ release_id TEXT PRIMARY KEY REFERENCES releases(id),
+ object_digest TEXT NOT NULL UNIQUE,
+ file_inventory TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ format_version INTEGER NOT NULL CHECK(format_version=1)
+);
+CREATE TABLE IF NOT EXISTS release_trust (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+ revision INTEGER NOT NULL CHECK(revision>0),
+ root_json BLOB NOT NULL,
+ versions_json TEXT NOT NULL
+);

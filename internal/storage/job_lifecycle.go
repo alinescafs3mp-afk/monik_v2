@@ -9,7 +9,7 @@ import (
 func (s *Store) expireAndBlockJobs() error {
 	ops := map[string]bool{}
 	err := s.WithTx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT job_id,operation_id,agent_id,action,status,deadline FROM agent_jobs WHERE status IN ('queued','waiting_offline','delivered','accepted','running','awaiting_confirmation') ORDER BY deadline,job_id LIMIT 1000`)
+		rows, err := tx.Query(`SELECT job_id,operation_id,agent_id,action,status,deadline FROM agent_jobs WHERE status IN ('preparing','queued','waiting_offline','delivered','accepted','running','awaiting_confirmation') ORDER BY deadline,job_id LIMIT 1000`)
 		if err != nil {
 			return err
 		}

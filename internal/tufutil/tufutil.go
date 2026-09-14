@@ -2,6 +2,7 @@ package tufutil
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto"
 	"crypto/ed25519"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -60,15 +62,34 @@ func InitKeys(dir string) (*KeySet, error) {
 }
 
 func loadOrGen(path string) (ed25519.PrivateKey, error) {
-	if b, err := os.ReadFile(path); err == nil && len(b) == ed25519.PrivateKeySize {
+	b, err := os.ReadFile(path)
+	if err == nil {
+		if len(b) != ed25519.PrivateKeySize || !bytes.Equal(ed25519.NewKeyFromSeed(b[:ed25519.SeedSize]), b) {
+			return nil, fmt.Errorf("existing signing key is invalid; restore it, do not replace it")
+		}
 		return ed25519.PrivateKey(b), nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
 	}
 	_, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(path, priv, 0o600); err != nil {
+	// Never truncate an existing key, including a concurrent creator's file.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
 		return nil, err
+	}
+	if _, err = f.Write(priv); err == nil {
+		err = f.Sync()
+	}
+	ce := f.Close()
+	if err != nil {
+		return nil, err
+	}
+	if ce != nil {
+		return nil, ce
 	}
 	return priv, nil
 }
@@ -472,6 +493,7 @@ func extractBundle(bundlePath string) (tmp string, err error) {
 		}
 	}()
 	var total int64
+	entries := 0
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -479,6 +501,10 @@ func extractBundle(bundlePath string) (tmp string, err error) {
 		}
 		if err != nil {
 			return "", err
+		}
+		entries++
+		if entries > 512 {
+			return "", fmt.Errorf("too many archive entries")
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			if hdr.Typeflag == tar.TypeDir {
@@ -490,7 +516,7 @@ func extractBundle(bundlePath string) (tmp string, err error) {
 		if strings.HasPrefix(name, "..") || filepath.IsAbs(name) || strings.Contains(name, `\`) {
 			return "", fmt.Errorf("path traversal rejected")
 		}
-		if hdr.Size > 200<<20 {
+		if hdr.Size < 0 || hdr.Size > 200<<20 || strings.HasSuffix(hdr.Name, ".json") && !strings.Contains(hdr.Name, "targets/") && hdr.Size > 2<<20 {
 			return "", fmt.Errorf("entry too large")
 		}
 		total += hdr.Size
@@ -530,7 +556,16 @@ func collectArtifacts(repoDir string) ([]Artifact, []map[string]string, error) {
 	}
 	var plats []map[string]string
 	var arts []Artifact
+	names := make([]string, 0, len(tg.Signed.Targets))
 	for name, info := range tg.Signed.Targets {
+		if !ValidTargetName(name) || info == nil || info.Length < 0 || info.Length > 200<<20 {
+			return nil, nil, fmt.Errorf("invalid signed target entry")
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		info := tg.Signed.Targets[name]
 		p := filepath.Join(repoDir, "targets", name)
 		b, err := os.ReadFile(p)
 		if err != nil {
