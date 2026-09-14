@@ -20,11 +20,30 @@ func ValidateAgentConfig(c AgentConfig) error {
 		return fmt.Errorf("at most 128 check definitions per agent")
 	}
 	seen := map[string]bool{}
+	services := map[string]bool{}
 	for _, d := range c.Checks {
 		if d.ID == "" || d.ServiceID == "" || seen[d.ID] {
 			return fmt.Errorf("check/service identity missing or duplicated")
 		}
 		seen[d.ID] = true
+		if services[d.ServiceID] {
+			return fmt.Errorf("only one primary check per service is supported")
+		}
+		services[d.ServiceID] = true
+		if d.Method == "HEAD" && (d.ExpectJSONPath != "" || d.ExpectText != "") {
+			return fmt.Errorf("body expectations require GET")
+		}
+		for _, status := range d.ExpectedStatus {
+			if status < 100 || status > 599 {
+				return fmt.Errorf("invalid expected HTTP status")
+			}
+		}
+		if len(d.ExpectText) > 4096 || len(d.ExpectJSONPath) > 256 || len(d.ExpectJSONValue) > 4096 {
+			return fmt.Errorf("check expectation exceeds limit")
+		}
+		if d.Path != "" && (!strings.HasPrefix(d.Path, "/") || strings.ContainsAny(d.Path, "?#\r\n")) {
+			return fmt.Errorf("invalid check path")
+		}
 		if _, err := netutil.ParseURL(d.URL); err != nil {
 			return err
 		}

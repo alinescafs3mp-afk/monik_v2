@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -28,7 +29,7 @@ func ParseTrial(params map[string]any) (protocol.CheckDefinition, error) {
 	}
 	method, _ := params["method"].(string)
 	if method == "" {
-		method = "HEAD"
+		method = "GET"
 	}
 	method = strings.ToUpper(method)
 	if method != "GET" && method != "HEAD" {
@@ -39,14 +40,14 @@ func ParseTrial(params map[string]any) (protocol.CheckDefinition, error) {
 	}
 	kind, _ := params["kind"].(string)
 	if kind == "" {
-		kind = "http_health"
+		kind = "baseline_http"
 	}
 	id, _ := params["id"].(string)
 	if id == "" {
 		id = "trial"
 	}
 	def = protocol.CheckDefinition{
-		ID: id, Kind: kind, URL: raw, Method: method, TimeoutSeconds: 2,
+		ID: id, Kind: kind, URL: raw, Method: method, TimeoutSeconds: 2, IntervalSeconds: 5,
 	}
 	def.ServiceID, _ = params["service_id"].(string)
 	def.DialTarget, _ = params["dial_target"].(string)
@@ -56,23 +57,33 @@ func ParseTrial(params map[string]any) (protocol.CheckDefinition, error) {
 	def.ExpectJSONPath, _ = params["expect_json_path"].(string)
 	def.ExpectJSONValue, _ = params["expect_json_value"].(string)
 	def.SecretID, _ = params["secret_id"].(string)
-	if v, ok := params["timeout_seconds"].(float64); ok && v > 0 && v <= 5 {
-		def.TimeoutSeconds = int(v)
+	def.SecretHeader, _ = params["secret_header"].(string)
+	def.Path, _ = params["path"].(string)
+	if v, ok := params["timeout_seconds"]; ok && fmt.Sprint(v) != "2" {
+		return def, fmt.Errorf("this worker supports a two-second probe timeout")
 	}
 	if v, ok := params["insecure_tls"].(bool); ok {
 		def.InsecureTLS = v
 	}
-	switch exp := params["expected_status"].(type) {
-	case []any:
-		for _, item := range exp {
-			if n, ok := item.(float64); ok {
-				def.ExpectedStatus = append(def.ExpectedStatus, int(n))
-			}
+	if exp, exists := params["expected_status"]; exists {
+		raw, err := json.Marshal(exp)
+		if err != nil {
+			return def, err
 		}
-	case []float64:
-		for _, n := range exp {
-			def.ExpectedStatus = append(def.ExpectedStatus, int(n))
+		if err := json.Unmarshal(raw, &def.ExpectedStatus); err != nil {
+			return def, fmt.Errorf("expected_status must be an array of integer HTTP codes")
 		}
 	}
+	// Use the same contract as a saved check so preview cannot silently drop fields.
+	validated := def
+	if validated.ServiceID == "" {
+		validated.ServiceID = "trial"
+	}
+	cfg := protocol.DefaultAgentConfig()
+	cfg.Checks = []protocol.CheckDefinition{validated}
+	if err := protocol.ValidateAgentConfig(cfg); err != nil {
+		return def, err
+	}
+
 	return def, nil
 }

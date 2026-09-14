@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -39,6 +38,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/operations", a.needAuth(a.handleSubmitOp))
 	mux.HandleFunc("POST /api/v1/operations/lookup", a.needAuth(a.handleLookupOp))
 	mux.HandleFunc("GET /api/v1/events", a.needAuth(a.handleSSE))
+	mux.HandleFunc("GET /api/v1/exports/{id}", a.needAuth(a.handleExportDownload))
 	mux.HandleFunc("GET /api/v1/history/point", a.needAuth(a.handleHistoryPoint))
 	mux.HandleFunc("GET /api/v1/history/series", a.needAuth(a.handleHistorySeries))
 	mux.HandleFunc("GET /api/v1/settings", a.needAuth(a.handleSettings))
@@ -125,7 +125,7 @@ func (a *App) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req SetupRequest
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := parseJSONLimit(r, &req, 1<<20); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
@@ -145,7 +145,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
+	if err := parseJSONLimit(r, &body, 1<<16); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
@@ -281,6 +281,11 @@ func (a *App) handleAgents(w http.ResponseWriter, r *http.Request, s *storage.Se
 	out := make([]map[string]any, 0, len(agents))
 	for _, ag := range agents {
 		st, reason := contact(ag, a.Clock.Now())
+		migration, err := a.Store.AgentMigrationStatus(ag.ID)
+		if err != nil {
+			a.writeErr(w, 500, "db", "migration lookup failed")
+			return
+		}
 		out = append(out, map[string]any{
 			"id": ag.ID, "display_name": display(ag), "hostname": ag.Hostname, "os": ag.OS, "arch": ag.Arch,
 			"worker_version": ag.WorkerVersion, "service_host_version": ag.ServiceHostVersion,
@@ -288,7 +293,7 @@ func (a *App) handleAgents(w http.ResponseWriter, r *http.Request, s *storage.Se
 			"desired_hash": ag.DesiredHash, "applied_hash": ag.AppliedHash,
 			"last_live_at": ag.LastLiveAt, "state": st, "reason": reason,
 			"pinned": ag.Pinned, "hidden": ag.Hidden, "archived": ag.Archived, "revoked": ag.Revoked,
-			"conflict": ag.Conflict, "addresses": json.RawMessage(orJSON(ag.Addresses)),
+			"migration": migration, "conflict": ag.Conflict, "addresses": json.RawMessage(orJSON(ag.Addresses)),
 			"capabilities": json.RawMessage(orJSON(ag.Capabilities)),
 		})
 	}
@@ -344,7 +349,15 @@ func (a *App) handleService(w http.ResponseWriter, r *http.Request, s *storage.S
 }
 
 func (a *App) handleIncidents(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	incs, _ := a.Store.OpenIncidents()
+	if r.URL.Query().Has("from") || r.URL.Query().Has("to") {
+		a.searchHistoricalIncidents(w, r)
+		return
+	}
+	incs, err := a.Store.OpenIncidents()
+	if err != nil {
+		a.writeErr(w, 500, "db", "incident lookup failed")
+		return
+	}
 	a.writeJSON(w, 200, map[string]any{"incidents": incs})
 }
 
@@ -374,7 +387,7 @@ func (a *App) handleLookupOp(w http.ResponseWriter, r *http.Request, s *storage.
 		TargetMode       string          `json:"target_mode"`
 		Params           json.RawMessage `json:"params"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := parseJSON(r, &body); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
@@ -470,6 +483,10 @@ func (a *App) handleHistoryPoint(w http.ResponseWriter, r *http.Request, s *stor
 	}
 	agentID := r.URL.Query().Get("agent_id")
 	host, obs, err := a.Store.HostAt(agentID, at)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		a.writeErr(w, 500, "db", "historical lookup failed")
+		return
+	}
 	if err != nil {
 		a.writeJSON(w, 200, map[string]any{"at": at, "found": false})
 		return
@@ -654,6 +671,10 @@ func (a *App) handleSettingsPost(w http.ResponseWriter, r *http.Request, s *stor
 }
 
 func (a *App) handleReauth(w http.ResponseWriter, r *http.Request, s *storage.Session) {
+	if !a.rateLimit("reauth:"+s.UserID, 8, time.Minute) {
+		a.writeErr(w, 429, "rate_limited", "too many authentication attempts")
+		return
+	}
 	var body struct {
 		Password string `json:"password"`
 	}
@@ -814,10 +835,6 @@ func confinedJoin(root, name string) (string, error) {
 
 func recentOK(s *storage.Session, now time.Time) bool {
 	return s.RecentAuthUntil != nil && now.Before(*s.RecentAuthUntil)
-}
-
-func parseJSON(r *http.Request, v any) error {
-	return json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(v)
 }
 
 func (a *App) requireRecent(w http.ResponseWriter, s *storage.Session) bool {

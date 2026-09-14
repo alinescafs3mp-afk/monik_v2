@@ -2,11 +2,12 @@ package install
 
 import (
 	"fmt"
-	"io"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/servicehost"
 )
@@ -32,23 +33,21 @@ func LinuxDefaults() Options {
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
+	info, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("source must be a regular file")
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if target, e := os.Stat(dst); e == nil && os.SameFile(info, target) {
+		return nil
+	}
+	b, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Chmod(mode)
+	return secure.AtomicWrite(dst, b, mode)
 }
 
 func InstallLinux(opts Options) error {
@@ -60,6 +59,14 @@ func InstallLinux(opts Options) error {
 	}
 	if opts.User == "" {
 		opts.User = "monik"
+	}
+	for _, c := range opts.User {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return fmt.Errorf("invalid service user")
+		}
+	}
+	if !filepath.IsAbs(opts.Prefix) || !filepath.IsAbs(opts.StateDir) || (opts.ConfigPath != "" && !filepath.IsAbs(opts.ConfigPath)) {
+		return fmt.Errorf("service paths must be absolute")
 	}
 	if err := os.MkdirAll(opts.Prefix, 0o755); err != nil {
 		return err
@@ -89,8 +96,11 @@ func InstallLinux(opts Options) error {
 		return err
 	}
 	if !opts.SkipSystemctl {
-		_ = exec.Command("systemctl", "daemon-reload").Run()
-		_ = exec.Command("systemctl", "enable", "--now", "monik-agent.service").Run()
+		for _, args := range [][]string{{"daemon-reload"}, {"enable", "--now", "monik-agent.service"}, {"is-active", "--quiet", "monik-agent.service"}} {
+			if err := exec.Command("systemctl", args...).Run(); err != nil {
+				return fmt.Errorf("systemctl %s failed: %w; service installation is not confirmed", strings.Join(args, " "), err)
+			}
+		}
 	}
 	return nil
 }

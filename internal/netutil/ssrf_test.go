@@ -22,7 +22,7 @@ func TestValidateControllerURL(t *testing.T) {
 		t.Fatal("http")
 	}
 	if _, err := ValidateControllerURL("https://169.254.169.254/"); err == nil {
-		t.Fatal("metadata");
+		t.Fatal("metadata")
 	}
 	if _, err := ValidateControllerURL("https://192.0.2.8:8777"); err != nil {
 		t.Fatal(err)

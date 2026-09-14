@@ -38,3 +38,29 @@ func TestInstallLinuxCopiesProtectedLayout(t *testing.T) {
 		t.Fatalf("unit: %s", unit)
 	}
 }
+
+func TestReviewInstallCopyDoesNotTruncateItself(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "agent")
+	if err := os.WriteFile(p, []byte("working-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(p, p, 0755); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	if string(b) != "working-binary" {
+		t.Fatal("self-install truncated binary")
+	}
+}
+func TestReviewFailedCopyKeepsWorkingTarget(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "current")
+	_ = os.WriteFile(dst, []byte("old"), 0755)
+	if err := copyFile(filepath.Join(dir, "missing"), dst, 0755); err == nil {
+		t.Fatal("missing source accepted")
+	}
+	b, _ := os.ReadFile(dst)
+	if string(b) != "old" {
+		t.Fatal("failed copy destroyed current")
+	}
+}

@@ -1,9 +1,7 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -106,7 +104,7 @@ func (a *App) handleCredentialNext(w http.ResponseWriter, r *http.Request) {
 		JobID    string `json:"job_id"`
 		Verifier string `json:"verifier"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil || body.Verifier == "" {
+	if err := parseJSONLimit(r, &body, 1<<16); err != nil || body.Verifier == "" {
 		a.writeErr(w, 400, "malformed", "job_id and verifier required")
 		return
 	}

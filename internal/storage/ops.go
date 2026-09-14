@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/actions"
@@ -291,8 +292,8 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 	}
 	changed := false
 	err = s.WithTx(func(tx *sql.Tx) error {
-		var opID, status, previous, action, created string
-		if err := tx.QueryRow(`SELECT operation_id,status,COALESCE(result,''),action,created_at FROM agent_jobs WHERE job_id=? AND agent_id=?`, rec.JobID, agentID).Scan(&opID, &status, &previous, &action, &created); err != nil {
+		var opID, status, previous, action, created, envelope string
+		if err := tx.QueryRow(`SELECT operation_id,status,COALESCE(result,''),action,created_at,envelope FROM agent_jobs WHERE job_id=? AND agent_id=?`, rec.JobID, agentID).Scan(&opID, &status, &previous, &action, &created, &envelope); err != nil {
 			return ErrNotFound
 		}
 		if rec.OperationID != "" && rec.OperationID != opID {
@@ -308,6 +309,10 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 			return ErrConflict
 		}
 		if rec.Status == protocol.TargetSucceeded {
+			var job protocol.JobEnvelope
+			if err := json.Unmarshal([]byte(envelope), &job); err != nil {
+				return err
+			}
 			proven := false
 			switch action {
 			case "agent.collect_now", "agent.discover_now":
@@ -333,29 +338,47 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 			case "agent.diagnostics":
 				proven = rec.Stage == "diagnostics" && rec.Evidence["os"] != nil
 			case "secret.replace":
-				proven = rec.Evidence["secret_id"] != nil && rec.Evidence["version"] != nil && rec.Evidence["value"] == nil
+				id, _ := job.Params["secret_id"].(string)
+				var version int
+				err := tx.QueryRow(`SELECT version FROM check_secrets WHERE id=? AND agent_id=?`, id, agentID).Scan(&version)
+				proven = err == nil && id != "" && rec.Evidence["secret_id"] == id && fmt.Sprint(rec.Evidence["version"]) == fmt.Sprint(version) && rec.Evidence["value"] == nil
+			case "check.trial":
+				proven = rec.Stage == "redacted_trial_result" && rec.Evidence["trial"] == true && rec.Evidence["vantage"] == "agent/local" && rec.Evidence["quality"] != nil && rec.Evidence["transport"] != nil
+			case "credential.rotate":
+				var current string
+				err := tx.QueryRow(`SELECT credential_hash FROM agents WHERE id=?`, agentID).Scan(&current)
+				proven = err == nil && current != "" && rec.Evidence["verifier_sha256"] == current && rec.Stage == "new_credential_authentication_receipt"
+			case "trust.stage", "trust.retire":
+				fingerprint, _ := job.Params["fingerprint"].(string)
+				proven = fingerprint != "" && rec.Evidence["fingerprint"] == fingerprint && rec.Evidence["roots"] != nil && (action == "trust.stage" && rec.Stage == "persisted_scoped_trust" || action == "trust.retire" && rec.Stage == "acknowledged_trust_removal")
 			case "agent.restart":
 				session, _ := rec.Evidence["session_id"].(string)
 				var current string
 				_ = tx.QueryRow(`SELECT session_id FROM agents WHERE id=?`, agentID).Scan(&current)
-				proven = session != "" && session == current
+				previousSession, _ := job.Params["previous_session"].(string)
+				proven = session != "" && session == current && previousSession != "" && session != previousSession
 			case "update.rollout", "update.rollback":
 				digest, _ := rec.Evidence["worker_digest"].(string)
 				session, _ := rec.Evidence["session_id"].(string)
 				var gotDigest, gotSession string
 				_ = tx.QueryRow(`SELECT IFNULL(worker_digest,''), IFNULL(session_id,'') FROM agents WHERE id=?`, agentID).Scan(&gotDigest, &gotSession)
-				proven = digest != "" && digest == gotDigest && session != "" && session == gotSession
+				expectedDigest, _ := job.Params["sha256"].(string)
+				previousSession, _ := job.Params["previous_session"].(string)
+				if action == "update.rollback" && expectedDigest == "" && rec.Evidence["rollback_tx_id"] != nil && rec.Evidence["previous_good_digest"] == digest {
+					expectedDigest = digest
+				}
+				proven = digest != "" && digest == gotDigest && expectedDigest != "" && digest == expectedDigest && session != "" && session == gotSession && previousSession != "" && session != previousSession
 			case "rebind.prepare":
-				proven = rec.Stage == "rebind.prepared" && rec.Evidence["plan_id"] != nil
+				proven = rec.Stage == "rebind.prepared" && job.Params["plan_id"] != nil && rec.Evidence["plan_id"] == job.Params["plan_id"] && fmt.Sprint(rec.Evidence["generation"]) == fmt.Sprint(job.Params["generation"])
 			case "rebind.arm":
-				proven = rec.Stage == "rebind.armed" && rec.Evidence["plan_id"] != nil
+				proven = rec.Stage == "rebind.armed" && job.Params["plan_id"] != nil && rec.Evidence["plan_id"] == job.Params["plan_id"]
 			case "rebind.activate":
 				gen := fmt.Sprint(rec.Evidence["generation"])
 				var got int64
 				_ = tx.QueryRow(`SELECT endpoint_generation FROM agents WHERE id=?`, agentID).Scan(&got)
-				proven = rec.Evidence["plan_id"] != nil && gen != "" && fmt.Sprint(got) == gen
+				proven = rec.Stage == "rebind.confirmed" && job.Params["plan_id"] != nil && rec.Evidence["plan_id"] == job.Params["plan_id"] && gen == fmt.Sprint(job.Params["generation"]) && fmt.Sprint(got) == gen && rec.Evidence["candidate_url"] == job.Params["candidate_url"]
 			case "rebind.retire":
-				proven = rec.Stage == "rebind.retired"
+				proven = rec.Stage == "rebind.retired" && job.Params["plan_id"] != nil && rec.Evidence["plan_id"] == job.Params["plan_id"]
 			}
 			if !proven {
 				rec.Status = protocol.TargetRejected
@@ -374,6 +397,15 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 			return err
 		}
 		_, err = tx.Exec(`UPDATE operation_targets SET status=?,stage=?,message=?,error_code=?,retryable=?,evidence=?,updated_at=? WHERE operation_id=? AND agent_id=?`, rec.Status, rec.Stage, rec.Message, rec.ErrorCode, boolInt(rec.Retryable), string(ev), s.now().UTC().Format(dbTimeFormat), opID, agentID)
+		if err == nil && strings.HasPrefix(action, "rebind.") && rec.Status == protocol.TargetSucceeded {
+			var job protocol.JobEnvelope
+			if json.Unmarshal([]byte(envelope), &job) == nil {
+				phase := map[string]string{"rebind.prepare": "prepared", "rebind.arm": "armed", "rebind.activate": "confirmed", "rebind.retire": "retired"}[action]
+				if phase != "" {
+					_, err = tx.Exec(`UPDATE migration_targets SET state=?,reason=?,updated_at=? WHERE plan_id=? AND agent_id=?`, phase, rec.Message, s.now().UTC().Format(dbTimeFormat), job.Params["plan_id"], agentID)
+				}
+			}
+		}
 		changed = err == nil
 		return err
 	})
@@ -434,8 +466,18 @@ func (s *Store) OpenIncidents() ([]map[string]any, error) {
 }
 
 func (s *Store) AckIncident(id, actor string) error {
-	_, err := s.db().Exec(`UPDATE incidents SET acked_at=?, acked_by=? WHERE id=?`, s.now().UTC().Format(dbTimeFormat), actor, id)
-	return err
+	result, err := s.db().Exec(`UPDATE incidents SET acked_at=?, acked_by=? WHERE id=?`, s.now().UTC().Format(dbTimeFormat), actor, id)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (s *Store) FindOpenIncident(entityID, metric string) (string, error) {

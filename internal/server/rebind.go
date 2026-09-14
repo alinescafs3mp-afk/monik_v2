@@ -33,7 +33,7 @@ func (a *App) handleRebind(op *protocol.Operation, req protocol.SubmitOperation,
 			PlanID: planID, ControllerID: a.ControllerID(), CurrentURL: a.Cfg.AdvertisedURL,
 			CandidateURL: candidate, Generation: a.Store.NextMigrationGeneration(), Mode: mode, PayloadHash: hash,
 			TrustPEM: string(a.CACertPEM()), ExpiresAt: a.Clock.Now().Add(24 * time.Hour).UTC(),
-			PrimaryLossSeconds: 300,
+			PrimaryLossSeconds: 30,
 		}
 		if err := a.Store.InsertMigration(plan, op.ID); err != nil {
 			return err
@@ -42,12 +42,12 @@ func (a *App) handleRebind(op *protocol.Operation, req protocol.SubmitOperation,
 			if t.AgentID == "server" || t.Status == protocol.TargetRejected {
 				continue
 			}
-			_ = a.Store.SetMigrationTarget(planID, t.AgentID, "prepared", "")
+			_ = a.Store.SetMigrationTarget(planID, t.AgentID, "queued", "awaiting agent persistence")
 			extra := map[string]any{
 				"plan_id": planID, "candidate_url": candidate, "payload_hash": hash,
 				"generation": plan.Generation, "controller_id": plan.ControllerID,
 				"current_url": plan.CurrentURL, "trust_pem": plan.TrustPEM,
-				"expires_at": plan.ExpiresAt.Format(time.RFC3339),
+				"expires_at": plan.ExpiresAt.Format(time.RFC3339), "primary_loss_seconds": plan.PrimaryLossSeconds,
 			}
 			if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
 				_ = a.Store.PatchJobParams(jobID, extra)
@@ -57,7 +57,7 @@ func (a *App) handleRebind(op *protocol.Operation, req protocol.SubmitOperation,
 			if t.Status == protocol.TargetWaitingOffline {
 				st = protocol.TargetWaitingOffline
 			}
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, st, stage, "migration plan persisted; controller URL is unchanged", "", true, extra)
+			_ = a.Store.UpdateTarget(op.ID, t.AgentID, st, stage, "plan saved on controller; awaiting agent persistence; URL unchanged", "", true, extra)
 		}
 		_ = a.Store.SetSetting("active_migration_id", planID)
 		return nil
@@ -81,8 +81,8 @@ func (a *App) handleRebind(op *protocol.Operation, req protocol.SubmitOperation,
 			if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
 				_ = a.Store.PatchJobParams(jobID, extra)
 			}
-			_ = a.Store.SetMigrationTarget(id, t.AgentID, "armed", "")
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetQueued, "rebind.armed", "fallback trigger persisted", "", true, extra)
+			_ = a.Store.SetMigrationTarget(id, t.AgentID, "arm_queued", "awaiting agent persistence")
+			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetQueued, "rebind.armed", "fallback trigger queued; awaiting agent persistence", "", true, extra)
 		}
 		return nil
 	case "rebind.activate":
@@ -134,7 +134,7 @@ func (a *App) handleRebind(op *protocol.Operation, req protocol.SubmitOperation,
 			if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
 				_ = a.Store.PatchJobParams(jobID, extra)
 			}
-			_ = a.Store.SetMigrationTarget(id, t.AgentID, "retired", "")
+			_ = a.Store.SetMigrationTarget(id, t.AgentID, "retire_queued", "awaiting agent confirmation")
 			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetQueued, "rebind.retire_queued", "waiting for endpoint retirement receipt", "", true, extra)
 		}
 		return nil
@@ -188,7 +188,7 @@ func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation
 			continue
 		}
 		if req.Action == "update.rollback" {
-			extra := map[string]any{"release_id": releaseID, "os": ag.OS, "arch": ag.Arch, "component": "worker"}
+			extra := map[string]any{"release_id": releaseID, "os": ag.OS, "arch": ag.Arch, "component": "worker", "previous_session": ag.SessionID}
 			if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
 				_ = a.Store.PatchJobParams(jobID, extra)
 			}
@@ -203,7 +203,7 @@ func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation
 		extra := map[string]any{
 			"release_id": releaseID, "os": ag.OS, "arch": ag.Arch,
 			"name": art["name"], "sha256": art["sha256"], "length": art["length"],
-			"component": "worker",
+			"component": "worker", "previous_session": ag.SessionID,
 		}
 		if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
 			_ = a.Store.PatchJobParams(jobID, extra)
@@ -226,6 +226,11 @@ func (a *App) handleRestart(op *protocol.Operation) error {
 			_ = a.Store.MarkTargetAndJob(op.ID, t.AgentID, protocol.TargetUnsupported, "unmanaged", "unmanaged worker cannot restart itself; install the service host first", false, nil)
 			continue
 		}
+		if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
+			if err := a.Store.PatchJobParams(jobID, map[string]any{"previous_session": ag.SessionID}); err != nil {
+				return err
+			}
+		}
 		_ = a.Store.UpdateTarget(op.ID, t.AgentID, t.Status, "restart.queued", "managed restart authorized", "", true, nil)
 	}
 	return nil
@@ -234,7 +239,11 @@ func (a *App) handleRestart(op *protocol.Operation) error {
 func matchArtifact(arts []map[string]any, osn, arch string) map[string]any {
 	osn, arch = strings.ToLower(osn), strings.ToLower(arch)
 	for _, art := range arts {
-		if strings.EqualFold(fmt.Sprint(art["os"]), osn) && strings.EqualFold(fmt.Sprint(art["arch"]), arch) {
+		want := osn + "-" + arch + "/monik-agent"
+		if osn == "windows" {
+			want += ".exe"
+		}
+		if fmt.Sprint(art["name"]) == want && strings.EqualFold(fmt.Sprint(art["os"]), osn) && strings.EqualFold(fmt.Sprint(art["arch"]), arch) {
 			return art
 		}
 	}

@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +76,9 @@ func (h *Host) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
+		h.updateMu.Lock()
 		h.stopWorker()
+		h.updateMu.Unlock()
 	}()
 	for {
 		c, err := ln.Accept()
@@ -136,6 +140,8 @@ func (h *Host) dispatch(req Request, fromNetwork bool) Response {
 		}
 		return Response{OK: true, Message: msg, PID: pid}
 	case "restart_worker":
+		h.updateMu.Lock()
+		defer h.updateMu.Unlock()
 		if err := h.restartWorker(); err != nil {
 			return Response{OK: false, Message: err.Error()}
 		}
@@ -196,6 +202,9 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 	if component == "" {
 		component = "worker"
 	}
+	if component != "worker" {
+		return Response{OK: false, Message: "service-host self replacement requires an independent native recovery installer; only worker activation is supported", Stage: "unsupported_component"}
+	}
 	if src == "" || expect == "" {
 		return Response{OK: false, Message: "path and sha256 are required", Stage: "blocked"}
 	}
@@ -207,8 +216,14 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 	if err != nil {
 		return Response{OK: false, Message: err.Error(), Stage: string(update.StageIdle)}
 	}
-	oldSHA, _ := update.SHA256File(target)
-	newSHA, _ := update.SHA256File(staged)
+	oldSHA, err := update.SHA256File(target)
+	if err != nil {
+		return Response{OK: false, Message: "cannot verify current worker before update: " + err.Error()}
+	}
+	newSHA, err := update.SHA256File(staged)
+	if err != nil {
+		return Response{OK: false, Message: err.Error()}
+	}
 	j := &update.Journal{
 		TxID: idgen.New(), Stage: update.StageStaged, OldPath: target, NewPath: staged,
 		Current: target, PrevPath: filepath.Join(h.StateDir, "updates", "prev.bin"),
@@ -218,7 +233,9 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		return Response{OK: false, Message: err.Error()}
 	}
 	j.Stage = update.StageSwitching
-	_ = j.Save(h.StateDir)
+	if err := j.Save(h.StateDir); err != nil {
+		return Response{OK: false, Message: err.Error()}
+	}
 	if component == "worker" {
 		h.stopWorker()
 	}
@@ -233,7 +250,11 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		return Response{OK: false, Message: err.Error(), Stage: string(update.StageRollback)}
 	}
 	j.Stage = update.StageProbation
-	_ = j.Save(h.StateDir)
+	if err := j.Save(h.StateDir); err != nil {
+		_ = update.Rollback(target, j.PrevPath)
+		_ = h.startWorker()
+		return Response{OK: false, Message: "probation journal could not be persisted", Stage: string(update.StageRollback)}
+	}
 	if component == "worker" {
 		if err := h.startWorker(); err != nil {
 			_ = update.Rollback(target, j.PrevPath)
@@ -261,14 +282,22 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		}
 	}
 	j.Stage = update.StageConfirmed
-	_ = j.Save(h.StateDir)
+	if err := j.Save(h.StateDir); err != nil {
+		return Response{OK: false, Message: err.Error(), Stage: string(update.StageProbation)}
+	}
 	return Response{OK: true, Message: "activated", Stage: string(j.Stage)}
 }
 
 func (h *Host) rollbackUpdate(params map[string]string) Response {
+	if component := params["component"]; component != "" && component != "worker" {
+		return Response{OK: false, Message: "unsupported rollback component"}
+	}
 	j, err := update.Load(h.StateDir)
 	if err != nil {
 		return Response{OK: false, Message: err.Error()}
+	}
+	if j.Current != h.WorkerBin || j.PrevPath != filepath.Join(h.StateDir, "updates", "prev.bin") {
+		return Response{OK: false, Message: "recovery journal does not identify this managed worker"}
 	}
 	if j.PrevPath == "" || j.Stage == update.StageIdle {
 		return Response{OK: false, Message: "no previous-good slot in the recovery journal"}
@@ -308,12 +337,22 @@ func (h *Host) recoverJournal() error {
 	}
 	switch j.Stage {
 	case update.StageSwitching, update.StageProbation:
-		if j.PrevPath != "" {
-			_ = update.Rollback(h.WorkerBin, j.PrevPath)
-			j.Stage = update.StageRollback
-			j.Reason = "recovered incomplete transaction on service-host start"
-			_ = j.Save(h.StateDir)
+		if j.Current != h.WorkerBin || j.PrevPath != filepath.Join(h.StateDir, "updates", "prev.bin") || j.OldSHA == "" {
+			return fmt.Errorf("invalid worker recovery journal")
 		}
+		current, _ := update.SHA256File(h.WorkerBin)
+		if current != j.OldSHA {
+			previous, err := update.SHA256File(j.PrevPath)
+			if err != nil || previous != j.OldSHA {
+				return fmt.Errorf("previous-good binary cannot be verified")
+			}
+			if err := update.Rollback(h.WorkerBin, j.PrevPath); err != nil {
+				return err
+			}
+		}
+		j.Stage = update.StageRollback
+		j.Reason = "recovered incomplete transaction on service-host start"
+		return j.Save(h.StateDir)
 	}
 	return nil
 }
@@ -403,7 +442,14 @@ func (h *Host) reap(ctx context.Context) {
 			if backoff < 30*time.Second {
 				backoff *= 2
 			}
-			_ = h.startWorker()
+			// A worker intentionally stopped for activation must not be resurrected
+			// by the reaper while its binary is being replaced.
+			if h.updateMu.TryLock() {
+				if ctx.Err() == nil {
+					_ = h.startWorker()
+				}
+				h.updateMu.Unlock()
+			}
 		}
 	}
 }
@@ -435,7 +481,7 @@ NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
-`, bin, agent, cfg, state, user)
+`, unitArgument(bin), unitArgument(agent), unitArgument(cfg), unitArgument(state), user)
 }
 
 func PlanWindowsService(hostBin, workerBin, cfg string) string {
@@ -443,4 +489,9 @@ func PlanWindowsService(hostBin, workerBin, cfg string) string {
 sc.exe description MonikAgent "Monik agent service host"
 sc.exe start MonikAgent
 `, hostBin, workerBin, cfg)
+}
+
+// systemd does not use shell quoting; protect its own specifier/environment expansion.
+func unitArgument(value string) string {
+	return strconv.Quote(strings.NewReplacer("%", "%%", "$", "$$").Replace(value))
 }

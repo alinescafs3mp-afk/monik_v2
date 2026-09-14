@@ -1,12 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { get, setStream } from "../api";
+import { readPreference, savePreference } from "../presentation";
+import NavIcon from "./NavIcon.vue";
 
 defineProps<{ me: Record<string, unknown> | null; stream: string }>();
 defineEmits<{ logout: [] }>();
 
 const route = useRoute();
+const collapsed = ref(readPreference('monik:sidebar-collapsed', 'false') === 'true');
+const mobileOpen = ref(false);
+const media = window.matchMedia('(max-width: 860px)');
+const isMobile = ref(media.matches);
+function resizeMenu() { isMobile.value = media.matches; mobileOpen.value = false; }
+const preferenceNotice = ref('');
+function toggleSidebar() {
+  if (isMobile.value) { mobileOpen.value = !mobileOpen.value; return; }
+  collapsed.value = !collapsed.value;
+  preferenceNotice.value = savePreference('monik:sidebar-collapsed', String(collapsed.value)) ? '' : 'Выбор действует до закрытия страницы: хранилище браузера недоступно.';
+}
+function escapeMenu(event: KeyboardEvent) { if (event.key === 'Escape' && mobileOpen.value) { mobileOpen.value = false; document.getElementById('sidebar-toggle')?.focus(); } }
+watch(() => route.fullPath, () => { mobileOpen.value = false; });
 const q = ref("");
 const attn = ref(0);
 const running = ref(0);
@@ -18,23 +33,23 @@ const groups = [
   {
     title: "Мониторинг",
     items: [
-      { to: "/", label: "Обзор" },
-      { to: "/machines", label: "Машины" },
-      { to: "/services", label: "Сервисы" },
-      { to: "/problems", label: "Проблемы и история" },
+      { to: "/", label: "Обзор", icon: "overview" },
+      { to: "/machines", label: "Машины", icon: "machine" },
+      { to: "/services", label: "Сервисы", icon: "service" },
+      { to: "/problems", label: "Проблемы и история", icon: "problem" },
     ],
   },
   {
     title: "Управление",
     items: [
-      { to: "/agents", label: "Агенты" },
-      { to: "/operations", label: "Операции" },
-      { to: "/updates", label: "Обновления" },
+      { to: "/agents", label: "Агенты", icon: "agent" },
+      { to: "/operations", label: "Операции", icon: "operation" },
+      { to: "/updates", label: "Обновления", icon: "update" },
     ],
   },
   {
     title: "Конфигурация",
-    items: [{ to: "/settings", label: "Настройки и диагностика" }],
+    items: [{ to: "/settings", label: "Настройки и диагностика", icon: "settings" }],
   },
 ];
 
@@ -47,7 +62,7 @@ async function refreshOps() {
     attn.value = ops.filter((o) => o.status === "attention_required" || o.status === "completed_with_errors").length;
     running.value = ops.filter((o) => o.status === "queued" || o.status === "running").length;
   } catch {
-    /* ignore */
+    attn.value = -1;
   }
 }
 
@@ -69,6 +84,8 @@ function connectSSE() {
 }
 
 onMounted(() => {
+  media.addEventListener("change", resizeMenu);
+  window.addEventListener("keydown", escapeMenu);
   void refreshOps();
   connectSSE();
   poll = window.setInterval(() => {
@@ -76,38 +93,40 @@ onMounted(() => {
   }, 8000);
 });
 onUnmounted(() => {
+  media.removeEventListener("change", resizeMenu);
+  window.removeEventListener("keydown", escapeMenu);
   es?.close();
   if (poll) window.clearInterval(poll);
 });
 </script>
 
 <template>
-  <div class="shell">
-    <nav class="nav" aria-label="Основная навигация">
-      <h1>Monik</h1>
-      <p class="muted">{{ tz }}</p>
-      <p class="badge">
+  <div class="shell" :class="{'sidebar-collapsed':collapsed,'mobile-menu-open':mobileOpen}">
+    <a href="#main-content" class="skip-link">К содержимому</a>
+    <nav id="main-nav" class="nav" aria-label="Основная навигация">
+      <h1><span aria-hidden="true">M</span><span class="nav-label">onik</span></h1>
+      <p class="muted nav-label">{{ tz }}</p>
+      <p class="badge" :title="conn === 'live' ? 'Живые обновления' : 'Живые обновления приостановлены'">
         <span class="dot" :class="conn === 'live' ? 'ok' : 'warn'" />
-        <span v-if="conn === 'live'">Живые обновления</span>
-        <span v-else>Живые обновления приостановлены</span>
+        <span class="nav-label">{{ conn === 'live' ? 'Живые обновления' : 'Живые обновления приостановлены' }}</span>
       </p>
-      <div v-for="g in groups" :key="g.title">
-        <p class="muted">{{ g.title }}</p>
-        <router-link v-for="i in g.items" :key="i.to" :to="i.to">{{ i.label }}</router-link>
+      <div v-for="g in groups" :key="g.title" class="nav-group">
+        <p class="muted nav-label">{{ g.title }}</p>
+        <router-link v-for="i in g.items" :key="i.to" :to="i.to" :title="i.label" :aria-label="i.label"><NavIcon :name="i.icon"/><span class="nav-label">{{ i.label }}</span></router-link>
       </div>
-      <router-link to="/add">Добавить машину</router-link>
+      <router-link to="/add" title="Добавить машину" aria-label="Добавить машину"><NavIcon name="add"/><span class="nav-label">Добавить машину</span></router-link>
     </nav>
-    <div>
-      <header class="bar" style="padding: 0.8rem 1.2rem 0">
+    <div class="shell-content">
+      <header class="bar app-topbar">
+        <button id="sidebar-toggle" type="button" class="sidebar-toggle" :aria-expanded="isMobile ? mobileOpen : !collapsed" aria-controls="main-nav" :aria-label="(isMobile ? !mobileOpen : collapsed) ? 'Развернуть меню' : 'Свернуть меню'" title="Развернуть или свернуть меню" @click="toggleSidebar"><NavIcon name="menu"/><span class="sr">Меню</span></button>
         <strong>{{ (route.meta.title as string) || "Monik" }}</strong>
-        <input v-model="q" type="search" placeholder="Поиск хоста или сервиса" aria-label="Глобальный поиск" @keydown.enter="$router.push({ path: '/machines', query: { q } })" />
-        <router-link to="/operations">Операции {{ running }}/{{ attn }}</router-link>
+        <form class="global-search" @submit.prevent="$router.push({ path:'/machines', query:{ q } })"><input v-model="q" type="search" placeholder="Поиск машины" aria-label="Глобальный поиск"/></form>
+        <router-link to="/operations">Операции {{ running }}/{{ attn < 0 ? '?' : attn }}</router-link>
         <span class="muted">{{ (me && (me.username as string)) || "" }}</span>
         <button type="button" @click="$emit('logout')">Выйти</button>
       </header>
-      <main class="main">
-        <slot />
-      </main>
+      <p v-if="preferenceNotice" class="muted preference-notice" role="status">{{ preferenceNotice }}</p>
+      <main id="main-content" class="main" tabindex="-1"><slot /></main>
     </div>
   </div>
 </template>

@@ -83,12 +83,11 @@ func (s *Store) ArtifactJSON(releaseID string) json.RawMessage {
 }
 
 func (s *Store) NextMigrationGeneration() int64 {
-	var n sql.NullInt64
-	_ = s.db().QueryRow(`SELECT MAX(generation) FROM controller_migrations`).Scan(&n)
-	if !n.Valid {
-		return 1
+	var n int64
+	if err := s.db().QueryRow(`SELECT MAX(g) FROM (SELECT COALESCE(MAX(generation),0) g FROM controller_migrations UNION ALL SELECT COALESCE(MAX(endpoint_generation),0) g FROM agents)`).Scan(&n); err != nil {
+		return 0
 	}
-	return n.Int64 + 1
+	return n + 1
 }
 
 func (s *Store) HasActiveLifecycle(agentID string) (string, bool) {
@@ -211,4 +210,43 @@ func (s *Store) MarkTargetAndJob(opID, agentID string, st protocol.TargetStatus,
 	}
 	_, err = s.db().Exec(`UPDATE agent_jobs SET status=? WHERE job_id=?`, string(st), jobID)
 	return err
+}
+
+// Only already selected targets may update migration progress. Never upsert
+// membership from a device report, and never let backlog refresh this state.
+func (s *Store) RecordMigrationStatus(agentID string, m *protocol.MigrationStatus, generation int64) error {
+	if m == nil {
+		return nil
+	}
+	switch m.State {
+	case "prepared", "armed", "activating", "confirmed", "expired":
+	default:
+		return ErrConflict
+	}
+	var candidate, state string
+	var expected int64
+	err := s.db().QueryRow(`SELECT c.candidate_url,c.generation,t.state FROM controller_migrations c JOIN migration_targets t ON t.plan_id=c.id WHERE c.id=? AND t.agent_id=?`, m.PlanID, agentID).Scan(&candidate, &expected, &state)
+	if err != nil {
+		return err
+	}
+	if candidate != m.Candidate || expected != m.Generation || m.State == "confirmed" && generation != expected {
+		return ErrConflict
+	}
+	if state == "retired" {
+		return nil
+	}
+	reason := m.Reason
+	if len(reason) > 512 {
+		reason = reason[:512]
+	}
+	_, err = s.db().Exec(`UPDATE migration_targets SET state=?,reason=?,updated_at=? WHERE plan_id=? AND agent_id=?`, m.State, reason, s.now().UTC().Format(dbTimeFormat), m.PlanID, agentID)
+	return err
+}
+func (s *Store) AgentMigrationStatus(agentID string) (*protocol.MigrationStatus, error) {
+	m := &protocol.MigrationStatus{}
+	err := s.db().QueryRow(`SELECT c.id,c.generation,c.candidate_url,t.state,COALESCE(t.reason,'') FROM controller_migrations c JOIN migration_targets t ON t.plan_id=c.id WHERE t.agent_id=? ORDER BY c.generation DESC LIMIT 1`, agentID).Scan(&m.PlanID, &m.Generation, &m.Candidate, &m.State, &m.Reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return m, err
 }

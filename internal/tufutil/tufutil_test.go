@@ -97,3 +97,86 @@ func TestImportTrustedRejectsExpiredTimestamp(t *testing.T) {
 		t.Fatal("expired timestamp accepted")
 	}
 }
+
+func TestReviewMixedSignedMetadataIsRejected(t *testing.T) {
+	keys, repo := t.TempDir(), t.TempDir()
+	signBundle(t, keys, repo, "old", "one")
+	oldTargets, _ := os.ReadFile(filepath.Join(repo, "targets.json"))
+	signBundle(t, keys, repo, "new", "two")
+	root, _ := os.ReadFile(filepath.Join(repo, "root.json"))
+	os.WriteFile(filepath.Join(repo, "targets.json"), oldTargets, 0600)
+	if _, err := VerifyRepo(root, repo, HighWater{}, time.Now()); err == nil {
+		t.Fatal("a valid old targets signature must not satisfy a newer snapshot version")
+	}
+}
+
+func TestReviewTargetBytesMustMatchSignedEntry(t *testing.T) {
+	repo := t.TempDir()
+	signBundle(t, t.TempDir(), repo, "authentic", "one")
+	root, e := os.ReadFile(filepath.Join(repo, "root.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e := VerifyRepo(root, repo, HighWater{}, time.Now()); e != nil {
+		t.Fatal(e)
+	}
+	if e := VerifyTarget(repo, "linux-amd64/monik-agent", []byte("authentic")); e != nil {
+		t.Fatal(e)
+	}
+	if e := VerifyTarget(repo, "linux-amd64/monik-agent", []byte("arbitrary")); e == nil {
+		t.Fatal("command checksum replaced the signed target authority")
+	}
+	if e := VerifyTarget(repo, "linux-amd64/monik-service-host", []byte("authentic")); e == nil {
+		t.Fatal("unsigned component")
+	}
+}
+func TestReviewCorruptVersionJournalCannotResetRollbackProtection(t *testing.T) {
+	dir := t.TempDir()
+	if e := SaveHighWater(dir, HighWater{Targets: 42}); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(HighWaterPath(dir), []byte("broken"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := ReadHighWater(dir); e == nil {
+		t.Fatal("corrupt highwater silently accepted")
+	}
+}
+
+func TestReviewInvalidTargetCannotReplacePublishedRelease(t *testing.T) {
+	keys, repo, dest := t.TempDir(), t.TempDir(), t.TempDir()
+	good := signBundle(t, keys, repo, "good", "one")
+	if _, e := ImportTrusted(good, dest, ImportOpts{Enroll: true}); e != nil {
+		t.Fatal(e)
+	}
+	before, e := ReadHighWater(dest)
+	if e != nil {
+		t.Fatal(e)
+	}
+	signBundle(t, keys, repo, "next", "two")
+	if e := os.WriteFile(filepath.Join(repo, "targets", "linux-amd64", "monik-agent"), []byte("tampered"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	bad := filepath.Join(t.TempDir(), "bad.tgz")
+	if e := PackBundle(repo, bad, "two", ""); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := ImportTrusted(bad, dest, ImportOpts{}); e == nil {
+		t.Fatal("invalid bytes accepted")
+	}
+	after, e := ReadHighWater(dest)
+	if e != nil || after != before {
+		t.Fatalf("versions advanced on invalid import: %+v %v", after, e)
+	}
+	raw, e := os.ReadFile(filepath.Join(dest, "targets", "linux-amd64", "monik-agent"))
+	if e != nil || string(raw) != "good" {
+		t.Fatalf("working target replaced: %s %v", raw, e)
+	}
+	empty := t.TempDir()
+	if _, e := ImportTrusted(bad, empty, ImportOpts{Enroll: true}); e == nil {
+		t.Fatal("invalid initial import accepted")
+	}
+	if _, e := LoadTrustedRoot(empty); !os.IsNotExist(e) {
+		t.Fatalf("invalid import enrolled trust: %v", e)
+	}
+}

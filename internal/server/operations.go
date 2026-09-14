@@ -1,10 +1,10 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,7 +21,7 @@ import (
 
 func (a *App) handleSubmitOp(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	var req protocol.SubmitOperation
-	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&req); err != nil {
+	if err := parseJSONLimit(r, &req, 8<<20); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
@@ -96,6 +96,23 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		a.writeErr(w, 400, "no_targets", "no agents in frozen target set")
 		return
 	}
+	if base, ok := req.Params["base_revision"].(float64); ok && req.BaseRevision == nil {
+		n := int64(base)
+		if base != float64(n) {
+			a.writeErr(w, 400, "bad_revision", "revision must be an integer")
+			return
+		}
+		req.BaseRevision = &n
+	}
+	if req.BaseRevision != nil && (req.Action == "check.apply" || req.Action == "profile.apply" || req.Action == "service.pause" || req.Action == "service.ignore") {
+		for _, id := range targets {
+			ag, err := a.Store.Agent(id)
+			if err != nil || ag.DesiredRevision != *req.BaseRevision {
+				a.writeErr(w, 409, "config_conflict", "Configuration changed; refresh and review before saving")
+				return
+			}
+		}
+	}
 	now := a.Clock.Now().UTC()
 	op := &protocol.Operation{
 		ID: idgen.New(), Action: req.Action, Status: protocol.OpQueued,
@@ -128,7 +145,7 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 			op.Targets = nil
 		}
 		if len(op.Targets) == 0 {
-			op.Targets = []protocol.TargetResult{{AgentID: "server", Status: protocol.TargetSucceeded, Stage: "commit", Message: "server-only"}}
+			op.Targets = []protocol.TargetResult{{AgentID: "server", Status: protocol.TargetAccepted, Stage: "accepted", Message: "Saved; waiting for the server-side effect"}}
 		}
 	}
 	if actions.LifecycleConflict(req.Action) {
@@ -259,23 +276,7 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		}
 		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit", "cancelled only targets not yet dispatched; delivered targets remain unresolved", "", false, nil)
 	case "history.export":
-		dir := filepath.Join(a.Cfg.DataDir, "exports")
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
-		}
-		path := filepath.Join(dir, op.ID+".json")
-		ops, err := a.Store.OpenIncidents()
-		if err != nil {
-			return err
-		}
-		b, err := json.MarshalIndent(map[string]any{"exported_at": a.Clock.Now().UTC(), "open_incidents": ops, "note": "raw 48h series remains on the history API"}, "", "  ")
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, b, 0o600); err != nil {
-			return err
-		}
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "bounded_artifact_ready", "export written", "", false, map[string]any{"path": path})
+		return a.exportHistory(op, req)
 	case "profile.apply", "check.apply", "service.pause", "service.ignore":
 		return a.bumpDesired(op, req)
 	case "secret.replace":
@@ -314,7 +315,10 @@ func (a *App) applyPreference(req protocol.SubmitOperation) error {
 		return a.Store.UpdateAgentFlags(id, map[string]any{"display_name": name})
 	case "agent.pin":
 		id, _ := req.Params["agent_id"].(string)
-		pinned, _ := req.Params["pinned"].(bool)
+		pinned, ok := req.Params["pinned"].(bool)
+		if !ok {
+			return fmt.Errorf("pinned must be a boolean")
+		}
 		return a.Store.UpdateAgentFlags(id, map[string]any{"pinned": boolInt(pinned)})
 	case "agent.archive":
 		id, _ := req.Params["agent_id"].(string)
@@ -339,47 +343,112 @@ func boolInt(b bool) int {
 }
 
 func (a *App) bumpDesired(op *protocol.Operation, req protocol.SubmitOperation) error {
+	type change struct {
+		id         string
+		before     int64
+		body, hash string
+		status     protocol.TargetStatus
+	}
+	var changes []change
 	for _, t := range op.Targets {
 		if t.AgentID == "server" || t.Status == protocol.TargetRejected {
 			continue
 		}
 		ag, err := a.Store.Agent(t.AgentID)
 		if err != nil {
-			continue
+			return err
 		}
-		var cfg protocol.AgentConfig
+		cfg := protocol.DefaultAgentConfig()
 		if ag.DesiredConfig != "" {
-			_ = json.Unmarshal([]byte(ag.DesiredConfig), &cfg)
-		} else {
-			cfg = protocol.DefaultAgentConfig()
+			if err := json.Unmarshal([]byte(ag.DesiredConfig), &cfg); err != nil {
+				return err
+			}
 		}
-		applyConfigPatch(&cfg, req)
+		if err := applyConfigPatch(&cfg, req); err != nil {
+			return err
+		}
 		if err := protocol.ValidateAgentConfig(cfg); err != nil {
 			return err
 		}
-		for _, check := range cfg.Checks {
-			sv, err := a.Store.Service(check.ServiceID)
+		for _, d := range cfg.Checks {
+			sv, err := a.Store.Service(d.ServiceID)
 			if err != nil || sv.AgentID != ag.ID {
 				return fmt.Errorf("check service does not belong to selected agent")
 			}
 		}
-		body, _ := json.Marshal(cfg)
-		hash := secure.SHA256Bytes(body)
-		rev := ag.DesiredRevision + 1
-		if err := a.Store.SetDesired(t.AgentID, rev, hash, string(body)); err != nil {
+		body, err := json.Marshal(cfg)
+		if err != nil {
 			return err
 		}
-		stage := "desired_committed"
-		if t.Status == protocol.TargetWaitingOffline {
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetWaitingOffline, stage, "desired revision stored; waiting for agent", "", true, map[string]any{"revision": rev, "hash": hash})
-		} else {
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetQueued, stage, "desired revision stored", "", true, map[string]any{"revision": rev, "hash": hash})
-		}
+		changes = append(changes, change{ag.ID, ag.DesiredRevision, string(body), secure.SHA256Bytes(body), t.Status})
 	}
-	return nil
+	// Validate the entire frozen set before changing any desired configuration.
+	return a.Store.WithTx(func(tx *sql.Tx) error {
+		for _, c := range changes {
+			result, err := tx.Exec(`UPDATE agents SET desired_revision=?,desired_hash=?,desired_config=? WHERE id=? AND desired_revision=?`, c.before+1, c.hash, c.body, c.id, c.before)
+			if err != nil {
+				return err
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if n != 1 {
+				return storage.ErrConflict
+			}
+			// Applied acknowledgements are verified against this exact immutable version.
+			if _, err := tx.Exec(`INSERT INTO config_revisions(agent_id,revision,hash,body,created_at,actor) VALUES(?,?,?,?,?,?)`, c.id, c.before+1, c.hash, c.body, a.Clock.Now().UTC().Format("2006-01-02T15:04:05.000000000Z07:00"), op.Actor); err != nil {
+				return err
+			}
+			evidence, _ := json.Marshal(map[string]any{"revision": c.before + 1, "hash": c.hash})
+			if _, err := tx.Exec(`UPDATE operation_targets SET stage='desired_committed',message='Desired configuration committed; waiting for agent',evidence=? WHERE operation_id=? AND agent_id=?`, string(evidence), op.ID, c.id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
-func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) {
+func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) error {
+	if req.Action == "check.apply" {
+		chk, ok := req.Params["check"].(map[string]any)
+		if !ok {
+			return fmt.Errorf("check object required")
+		}
+		b, err := json.Marshal(chk)
+		if err != nil {
+			return err
+		}
+		var d protocol.CheckDefinition
+		if err := json.Unmarshal(b, &d); err != nil {
+			return fmt.Errorf("invalid check fields: %w", err)
+		}
+		if d.ID == "" || d.ServiceID == "" {
+			return fmt.Errorf("check and service identity required")
+		}
+	}
+	if raw, ok := req.Params["collect_seconds"]; ok && fmt.Sprint(raw) != "5" {
+		return fmt.Errorf("this worker supports exactly five-second host collection")
+	}
+	if req.Action == "service.pause" || req.Action == "service.ignore" {
+		field := "paused"
+		if req.Action == "service.ignore" {
+			field = "ignored"
+		}
+		if _, ok := req.Params[field].(bool); !ok {
+			return fmt.Errorf("%s must be a boolean", field)
+		}
+		id, _ := req.Params["service_id"].(string)
+		found := false
+		for _, d := range cfg.Checks {
+			if d.ServiceID == id && id != "" {
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("service has no matching configured check")
+		}
+	}
 	if v, ok := req.Params["paused"].(bool); ok && req.Action == "profile.apply" {
 		cfg.Paused = v
 	}
@@ -398,7 +467,8 @@ func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) {
 		if json.Unmarshal(b, &d) == nil && d.ID != "" {
 			found := false
 			for i := range cfg.Checks {
-				if cfg.Checks[i].ID == d.ID {
+				if cfg.Checks[i].ID == d.ID || cfg.Checks[i].ServiceID == d.ServiceID {
+					d.ID = cfg.Checks[i].ID
 					cfg.Checks[i] = d
 					found = true
 				}
@@ -424,6 +494,7 @@ func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) {
 			}
 		}
 	}
+	return nil
 }
 
 func (a *App) replaceSecret(op *protocol.Operation, req protocol.SubmitOperation, secretPlain string) error {
@@ -431,14 +502,16 @@ func (a *App) replaceSecret(op *protocol.Operation, req protocol.SubmitOperation
 	header, _ := req.Params["header"].(string)
 	agentID, _ := req.Params["agent_id"].(string)
 	checkID, _ := req.Params["check_id"].(string)
-	if agentID == "" {
-		for _, t := range op.Targets {
-			if t.AgentID != "" && t.AgentID != "server" && t.Status != protocol.TargetRejected {
-				agentID = t.AgentID
-				break
-			}
+	var eligible []string
+	for _, t := range op.Targets {
+		if t.AgentID != "server" && t.Status != protocol.TargetRejected {
+			eligible = append(eligible, t.AgentID)
 		}
 	}
+	if len(eligible) != 1 || (agentID != "" && agentID != eligible[0]) {
+		return fmt.Errorf("secret delivery requires exactly its selected agent")
+	}
+	agentID = eligible[0]
 	if name == "" || header == "" || secretPlain == "" || agentID == "" {
 		return fmt.Errorf("name, header, value, agent_id required")
 	}

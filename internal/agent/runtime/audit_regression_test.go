@@ -13,6 +13,7 @@ import (
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/tlsutil"
 )
 
@@ -173,7 +174,7 @@ func TestTrustRetireRefusesLastRoot(t *testing.T) {
 func TestPreparedRebindIsStoredWithoutSwitchingController(t *testing.T) {
 	a, ts := auditWorker(t, func(http.ResponseWriter, *http.Request) {})
 	job := auditEnvelope("rebind.prepare")
-	job.Params = map[string]any{"plan_id": "plan-1", "candidate_url": "https://192.0.2.9:8777", "generation": float64(2), "controller_id": "controller"}
+	job.Params = map[string]any{"plan_id": "plan-1", "candidate_url": "https://192.0.2.9:8777", "generation": float64(2), "controller_id": "controller", "expires_at": time.Now().Add(time.Hour).Format(time.RFC3339), "payload_hash": secure.SHA256Bytes([]byte("https://192.0.2.9:8777|controller"))}
 	a.handleJob(job)
 	if a.jobs["job"].Status != protocol.TargetSucceeded {
 		t.Fatalf("%+v", a.jobs["job"])

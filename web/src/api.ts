@@ -12,6 +12,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.method && !["GET","HEAD"].includes(init.method) && state.csrf) headers.set("X-CSRF-Token", state.csrf);
   const ctl = new AbortController(), timeout = setTimeout(() => ctl.abort(), 15000);
   const abort = () => ctl.abort(); init.signal?.addEventListener("abort", abort, { once: true });
+  if (init.signal?.aborted) ctl.abort();
   try {
     let res: Response;
     try { res = await fetch(path, { ...init, headers, credentials: "same-origin", signal: ctl.signal }); }

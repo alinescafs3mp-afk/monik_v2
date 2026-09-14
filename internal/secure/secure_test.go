@@ -48,4 +48,3 @@ func TestSHA256File(t *testing.T) {
 		t.Fatalf("%s %d %v", sum, n, err)
 	}
 }
-

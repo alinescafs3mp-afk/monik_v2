@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -44,7 +45,8 @@ func InstallWindows(opts Options) error {
 		return err
 	}
 	defer m.Disconnect()
-	bin := fmt.Sprintf(`"%s" run --worker "%s" --config "%s" --state "%s"`, hostDst, workerDst, opts.ConfigPath, opts.StateDir)
+	args := []string{"run", "--worker", workerDst, "--config", opts.ConfigPath, "--state", opts.StateDir}
+	bin := windows.ComposeCommandLine(append([]string{hostDst}, args...))
 	cfg := mgr.Config{
 		DisplayName:      "Monik agent service host",
 		Description:      "Supervises the Monik collector worker and signed updates",
@@ -53,13 +55,31 @@ func InstallWindows(opts Options) error {
 	}
 	s, err := m.OpenService("MonikAgent")
 	if err != nil {
-		s, err = m.CreateService("MonikAgent", bin, cfg)
+		s, err = m.CreateService("MonikAgent", hostDst, cfg, args...)
 		if err != nil {
 			return err
 		}
 	}
 	defer s.Close()
-	_ = s.SetRecoveryActions([]mgr.RecoveryAction{{Type: mgr.ServiceRestart, Delay: 5 * time.Second}}, 60)
+	actual, err := s.Config()
+	if err != nil {
+		return err
+	}
+	actual.BinaryPathName = bin
+	actual.StartType = mgr.StartAutomatic
+	if err := s.UpdateConfig(actual); err != nil {
+		return err
+	}
+	if err := s.SetRecoveryActions([]mgr.RecoveryAction{{Type: mgr.ServiceRestart, Delay: 5 * time.Second}}, 60); err != nil {
+		return err
+	}
+	status, err := s.Query()
+	if err != nil {
+		return err
+	}
+	if status.State == svc.Running {
+		return nil
+	}
 	return s.Start()
 }
 

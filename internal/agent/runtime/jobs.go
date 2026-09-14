@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/servicehost"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/tlsutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/update"
 )
 
 type storedSecret struct {
@@ -36,15 +38,20 @@ type storedSecret struct {
 }
 
 type lifecycleIntent struct {
-	Kind           string `json:"kind"`
-	JobID          string `json:"job_id"`
-	OperationID    string `json:"operation_id"`
-	ExpectedDigest string `json:"expected_digest,omitempty"`
-	CandidateURL   string `json:"candidate_url,omitempty"`
-	TrustPEM       string `json:"trust_pem,omitempty"`
-	Generation     int64  `json:"generation,omitempty"`
-	PlanID         string `json:"plan_id,omitempty"`
-	ControllerID   string `json:"controller_id,omitempty"`
+	PreviousSession  string    `json:"previous_session,omitempty"`
+	Kind             string    `json:"kind"`
+	JobID            string    `json:"job_id"`
+	OperationID      string    `json:"operation_id"`
+	ExpectedDigest   string    `json:"expected_digest,omitempty"`
+	CandidateURL     string    `json:"candidate_url,omitempty"`
+	TrustPEM         string    `json:"trust_pem,omitempty"`
+	Generation       int64     `json:"generation,omitempty"`
+	PlanID           string    `json:"plan_id,omitempty"`
+	ControllerID     string    `json:"controller_id,omitempty"`
+	PreviousURL      string    `json:"previous_url,omitempty"`
+	PreviousTrust    string    `json:"previous_trust,omitempty"`
+	SwitchedAt       time.Time `json:"switched_at,omitempty"`
+	Acknowledgements int       `json:"acknowledgements,omitempty"`
 }
 
 func intentPath(dir string) string {
@@ -59,11 +66,7 @@ func saveIntent(dir string, in *lifecycleIntent) error {
 	if err != nil {
 		return err
 	}
-	tmp := intentPath(dir) + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, intentPath(dir))
+	return secure.AtomicWrite(intentPath(dir), b, 0600)
 }
 
 func loadIntent(dir string) (*lifecycleIntent, error) {
@@ -139,13 +142,13 @@ func (a *Agent) jobTrial(job protocol.JobEnvelope, rec protocol.JobReceipt, now 
 	rec.Evidence = map[string]any{
 		"trial": true, "vantage": "agent/local", "transport": obs.Transport,
 		"http_status": obs.HTTPStatus, "latency_ms": obs.LatencyMS,
-		"app_result": obs.AppResult, "app_reason": obs.AppReason, "quality": obs.Quality,
+		"app_result": obs.AppResult, "app_reason": obs.AppReason, "quality": obs.Quality, "feedback": obs.Feedback,
 	}
 	return rec
 }
 
 func (a *Agent) jobRotate(job protocol.JobEnvelope, rec protocol.JobReceipt, now time.Time) protocol.JobReceipt {
-	nextPath := filepath.Join(a.State.File.StateDir, "next.credential")
+	nextPath := filepath.Join(a.State.File.StateDir, "rotation-"+secure.SHA256Bytes([]byte(job.JobID))+".credential")
 	next, err := configfile.ReadCredential(nextPath)
 	if err != nil || next == "" {
 		next, err = idgen.Secret(32)
@@ -169,7 +172,11 @@ func (a *Agent) jobRotate(job protocol.JobEnvelope, rec protocol.JobReceipt, now
 		return rec
 	}
 	prevPath := filepath.Join(a.State.File.StateDir, "previous.credential")
-	_ = configfile.WriteCredential(prevPath, a.Cred)
+	if err := configfile.WriteCredential(prevPath, a.Cred); err != nil {
+		rec.Status = protocol.TargetFailed
+		rec.Message = "could not preserve prior credential"
+		return rec
+	}
 	if err := configfile.WriteCredential(a.State.File.CredentialPath, next); err != nil {
 		rec.Status = protocol.TargetFailed
 		rec.Message = "could not switch credential file"
@@ -209,11 +216,19 @@ func trustBundlePath(dir string) string {
 	return filepath.Join(dir, "trust-bundle.pem")
 }
 
-func (a *Agent) currentTrustPEM() []byte {
-	if b, err := os.ReadFile(trustBundlePath(a.State.File.StateDir)); err == nil && len(b) > 0 {
-		return b
+func (a *Agent) currentTrustPEM() []byte { return []byte(a.State.File.CACertPEM) }
+
+func (a *Agent) persistTrust(raw []byte) error {
+	if _, err := tlsutil.PoolFromPEM(raw); err != nil {
+		return err
 	}
-	return []byte(a.State.File.CACertPEM)
+	old := a.State.File.CACertPEM
+	a.State.File.CACertPEM = string(raw)
+	if err := a.State.Save(); err != nil {
+		a.State.File.CACertPEM = old
+		return err
+	}
+	return a.applyTrustPool()
 }
 
 func (a *Agent) applyTrustPool() error {
@@ -261,7 +276,7 @@ func (a *Agent) jobTrustStage(job protocol.JobEnvelope, rec protocol.JobReceipt,
 		seen[fp] = true
 		merged = append(merged, c)
 	}
-	if err := os.WriteFile(trustBundlePath(a.State.File.StateDir), encodeCerts(merged), 0o600); err != nil {
+	if err := a.persistTrust(encodeCerts(merged)); err != nil {
 		rec.Status = protocol.TargetFailed
 		rec.Message = "could not persist trust bundle"
 		return rec
@@ -321,7 +336,17 @@ func (a *Agent) jobTrustRetire(job protocol.JobEnvelope, rec protocol.JobReceipt
 		rec.ErrorCode = "last_root"
 		return rec
 	}
-	if err := os.WriteFile(trustBundlePath(a.State.File.StateDir), encodeCerts(kept), 0o600); err != nil {
+	// An unused spare CA is not a recovery route. Verify the current controller
+	// under the remaining roots before removing the root that may serve it.
+	candidate := &protocol.MigrationPlan{PlanID: "trust-retirement-check", ControllerID: a.State.File.ControllerID, CandidateURL: a.State.File.ControllerURL, Generation: a.State.File.EndpointGeneration + 1, ExpiresAt: now.Add(time.Minute), TrustPEM: string(encodeCerts(kept)), PayloadHash: secure.SHA256Bytes([]byte(a.State.File.ControllerURL + "|" + a.State.File.ControllerID))}
+	if err := a.verifyCandidate(candidate); err != nil {
+		rec.Status = protocol.TargetRejected
+		rec.Stage = "trust_would_disconnect"
+		rec.Message = "remaining trust cannot verify the current controller; no trust was removed"
+		rec.ErrorCode = "trust_would_disconnect"
+		return rec
+	}
+	if err := a.persistTrust(encodeCerts(kept)); err != nil {
 		rec.Status = protocol.TargetFailed
 		rec.Message = "could not persist trust bundle"
 		return rec
@@ -407,7 +432,7 @@ func (a *Agent) jobRestart(job protocol.JobEnvelope, rec protocol.JobReceipt, no
 		rec.Message = "unmanaged worker cannot restart itself"
 		return rec
 	}
-	if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{Kind: "restart", JobID: job.JobID, OperationID: job.OperationID}); err != nil {
+	if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{Kind: "restart", PreviousSession: a.Session, JobID: job.JobID, OperationID: job.OperationID}); err != nil {
 		rec.Status = protocol.TargetFailed
 		rec.Message = "could not persist restart intent"
 		rec.ErrorCode = "intent"
@@ -438,7 +463,15 @@ func (a *Agent) jobUpdate(job protocol.JobEnvelope, rec protocol.JobReceipt, now
 	}
 	if job.Action == "update.rollback" {
 		expect, _ := job.Params["sha256"].(string)
-		if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{Kind: "rollback", JobID: job.JobID, OperationID: job.OperationID, ExpectedDigest: expect}); err != nil {
+		journal, err := update.Load(a.State.File.StateDir)
+		if err != nil || journal.OldSHA == "" || journal.TxID == "" || (expect != "" && expect != journal.OldSHA) {
+			rec.Status = protocol.TargetRejected
+			rec.Stage = "no_verified_rollback"
+			rec.Message = "rollback requires a matching previous-good update journal"
+			return rec
+		}
+		expect = journal.OldSHA
+		if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{Kind: "rollback", PreviousSession: a.Session, JobID: job.JobID, OperationID: job.OperationID, ExpectedDigest: expect}); err != nil {
 			rec.Status = protocol.TargetFailed
 			rec.Message = "could not persist rollback intent"
 			return rec
@@ -480,7 +513,7 @@ func (a *Agent) jobUpdate(job protocol.JobEnvelope, rec protocol.JobReceipt, now
 		rec.Retryable = true
 		return rec
 	}
-	if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{Kind: "update", JobID: job.JobID, OperationID: job.OperationID, ExpectedDigest: sha}); err != nil {
+	if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{Kind: "update", PreviousSession: a.Session, JobID: job.JobID, OperationID: job.OperationID, ExpectedDigest: sha}); err != nil {
 		rec.Status = protocol.TargetFailed
 		rec.Message = "could not persist update intent"
 		return rec
@@ -504,6 +537,13 @@ func (a *Agent) jobUpdate(job protocol.JobEnvelope, rec protocol.JobReceipt, now
 }
 
 func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error) {
+	expectedName := goruntime.GOOS + "-" + goruntime.GOARCH + "/monik-agent"
+	if goruntime.GOOS == "windows" {
+		expectedName += ".exe"
+	}
+	if name != expectedName {
+		return "", fmt.Errorf("artifact must match this worker platform and component")
+	}
 	root, err := a.trustedRoot()
 	if err != nil {
 		return "", err
@@ -513,7 +553,7 @@ func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error)
 		return "", err
 	}
 	defer os.RemoveAll(tmp)
-	for _, meta := range []string{"root.json", "timestamp.json", "snapshot.json", "targets.json"} {
+	for _, meta := range []string{"timestamp.json", "snapshot.json", "targets.json"} {
 		b, err := a.getBytes("/api/v1/agent/tuf/"+meta, false)
 		if err != nil {
 			return "", fmt.Errorf("tuf %s: %w", meta, err)
@@ -522,12 +562,24 @@ func (a *Agent) downloadVerifiedArtifact(name, expectSHA string) (string, error)
 			return "", err
 		}
 	}
-	if _, err := tufutil.VerifyRepo(root, tmp, tufutil.HighWater{}, a.Clock.Now().UTC()); err != nil {
+	trustDir := filepath.Join(a.State.File.StateDir, "update-trust")
+	prior, err := tufutil.ReadHighWater(trustDir)
+	if err != nil {
+		return "", err
+	}
+	hw, err := tufutil.VerifyRepo(root, tmp, prior, a.Clock.Now().UTC())
+	if err != nil {
 		return "", fmt.Errorf("tuf metadata: %w", err)
+	}
+	if err := tufutil.SaveHighWater(trustDir, hw); err != nil {
+		return "", fmt.Errorf("persist authenticated metadata versions: %w", err)
 	}
 	raw, err := a.getBytes("/api/v1/agent/artifacts/"+name, true)
 	if err != nil {
 		return "", err
+	}
+	if err := tufutil.VerifyTarget(tmp, name, raw); err != nil {
+		return "", fmt.Errorf("signed target: %w", err)
 	}
 	sum := sha256.Sum256(raw)
 	got := hex.EncodeToString(sum[:])
@@ -550,16 +602,9 @@ func (a *Agent) trustedRoot() ([]byte, error) {
 	if path == "" {
 		path = filepath.Join(a.State.File.StateDir, "tuf-root.json")
 	}
-	if b, err := os.ReadFile(path); err == nil && len(b) > 0 {
-		return b, nil
-	}
-	b, err := a.getBytes("/api/v1/agent/update-root", true)
-	if err != nil {
-		return nil, fmt.Errorf("no enrolled TUF root: %w", err)
-	}
-	if err := os.WriteFile(path, b, 0o600); err == nil {
-		a.State.File.UpdateRootPath = path
-		_ = a.State.Save()
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) == 0 {
+		return nil, fmt.Errorf("enrolled TUF root is unavailable; repair enrollment, never trust an update-supplied root")
 	}
 	return b, nil
 }
@@ -581,94 +626,101 @@ func (a *Agent) getBytes(path string, auth bool) ([]byte, error) {
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, 200<<20))
+	limit := int64(2 << 20)
+	if strings.HasPrefix(path, "/api/v1/agent/artifacts/") {
+		limit = 200 << 20
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > limit {
+		return nil, fmt.Errorf("download exceeds limit")
+	}
+	return b, nil
 }
 
 func (a *Agent) jobRebind(job protocol.JobEnvelope, rec protocol.JobReceipt, now time.Time) protocol.JobReceipt {
 	planID, _ := job.Params["plan_id"].(string)
-	switch job.Action {
-	case "rebind.prepare":
+	failed := func(stage string, err error) protocol.JobReceipt {
+		rec.Status = protocol.TargetRejected
+		rec.Stage = stage
+		rec.Message = err.Error()
+		rec.ErrorCode = stage
+		return rec
+	}
+	if job.Action == "rebind.prepare" {
 		plan, err := planFromParams(job.Params)
 		if err != nil {
-			rec.Status = protocol.TargetRejected
-			rec.Message = err.Error()
-			rec.ErrorCode = "bad_plan"
-			return rec
+			return failed("bad_plan", err)
 		}
+		if err := a.validatePlan(plan); err != nil {
+			return failed("bad_plan", err)
+		}
+		if existing, err := configfile.LoadMigration(a.State.File.StateDir); err == nil && existing.PlanID != plan.PlanID && (existing.Generation >= plan.Generation || existing.ArmFallback && existing.ConfirmedAt == nil && existing.ExpiresAt.After(now)) {
+			return failed("plan_conflict", fmt.Errorf("a newer or armed local plan is still active"))
+		}
+		if existing, e := configfile.LoadMigration(a.State.File.StateDir); e != nil || existing.PlanID != plan.PlanID {
+			if plan.Generation <= a.State.File.EndpointGeneration {
+				return failed("generation_reused", fmt.Errorf("a new plan requires a strictly newer endpoint generation"))
+			}
+		}
+		plan.CurrentURL = a.State.File.ControllerURL
 		if err := configfile.SaveMigration(a.State.File.StateDir, plan); err != nil {
-			rec.Status = protocol.TargetFailed
-			rec.Message = "could not persist migration plan"
-			return rec
+			return failed("persist_failed", err)
 		}
 		rec.Status = protocol.TargetSucceeded
 		rec.Stage = "rebind.prepared"
+		rec.Message = "plan persisted; candidate connectivity not yet verified"
 		rec.ErrorCode = ""
-		rec.Message = "plan stored; controller URL unchanged"
 		rec.AppliedAt = &now
 		rec.Evidence = map[string]any{"plan_id": plan.PlanID, "generation": plan.Generation}
 		return rec
-	case "rebind.arm":
-		plan, err := configfile.LoadMigration(a.State.File.StateDir)
-		if err != nil || plan == nil || (planID != "" && plan.PlanID != planID) {
-			rec.Status = protocol.TargetRejected
-			rec.Stage = "rebind.unprepared"
-			rec.Message = "no prepared plan to arm"
-			rec.ErrorCode = "unprepared"
-			return rec
+	}
+	plan, err := configfile.LoadMigration(a.State.File.StateDir)
+	if err != nil || planID == "" || plan == nil || plan.PlanID != planID {
+		return failed("rebind.unprepared", fmt.Errorf("matching persisted migration plan is required"))
+	}
+	if job.Action == "rebind.retire" {
+		if plan.ConfirmedAt == nil || a.State.File.ControllerURL != plan.CandidateURL {
+			return failed("unconfirmed", fmt.Errorf("candidate has not confirmed fresh durable contact"))
 		}
-		plan.ArmFallback = true
-		_ = configfile.SaveMigration(a.State.File.StateDir, plan)
-		rec.Status = protocol.TargetSucceeded
-		rec.Stage = "rebind.armed"
-		rec.ErrorCode = ""
-		rec.Message = "fallback armed"
-		rec.AppliedAt = &now
-		rec.Evidence = map[string]any{"plan_id": plan.PlanID}
-		return rec
-	case "rebind.activate":
-		plan, err := configfile.LoadMigration(a.State.File.StateDir)
-		if err != nil || plan == nil || (planID != "" && plan.PlanID != planID) {
-			rec.Status = protocol.TargetRejected
-			rec.Stage = "rebind.unprepared"
-			rec.Message = "no prepared plan; refusing to discover an unknown replacement address"
-			rec.ErrorCode = "unprepared"
-			return rec
+		if err := configfile.ClearMigration(a.State.File.StateDir); err != nil {
+			return failed("persist_failed", err)
 		}
-		if err := a.verifyCandidate(plan); err != nil {
-			rec.Status = protocol.TargetFailed
-			rec.Stage = "candidate_unverified"
-			rec.Message = err.Error()
-			rec.ErrorCode = "identity"
-			rec.Retryable = true
-			return rec
-		}
-		if err := saveIntent(a.State.File.StateDir, &lifecycleIntent{
-			Kind: "rebind_switch", JobID: job.JobID, OperationID: job.OperationID,
-			CandidateURL: plan.CandidateURL, TrustPEM: plan.TrustPEM, Generation: plan.Generation,
-			PlanID: plan.PlanID, ControllerID: plan.ControllerID,
-		}); err != nil {
-			rec.Status = protocol.TargetFailed
-			rec.Message = "could not persist switch intent"
-			return rec
-		}
-		a.State.File.EndpointGeneration = plan.Generation
-		_ = a.State.Save()
-		rec.Status = protocol.TargetSucceeded
-		rec.Stage = "rebind.activating"
-		rec.ErrorCode = ""
-		rec.Message = "candidate verified; switch waits for receipt acknowledgement"
-		rec.AppliedAt = &now
-		rec.Evidence = map[string]any{"plan_id": plan.PlanID, "generation": plan.Generation}
-		return rec
-	case "rebind.retire":
-		_ = configfile.ClearMigration(a.State.File.StateDir)
-		clearIntent(a.State.File.StateDir)
 		rec.Status = protocol.TargetSucceeded
 		rec.Stage = "rebind.retired"
 		rec.ErrorCode = ""
-		rec.Message = "prepared endpoint retired"
+		rec.Message = "old endpoint retired; current confirmed endpoint retained"
 		rec.AppliedAt = &now
 		rec.Evidence = map[string]any{"plan_id": planID}
+		return rec
+	}
+	if err := a.validatePlan(plan); err != nil {
+		return failed("bad_plan", err)
+	}
+	if job.Action == "rebind.arm" {
+		plan.ArmFallback = true
+		if err := configfile.SaveMigration(a.State.File.StateDir, plan); err != nil {
+			return failed("persist_failed", err)
+		}
+		rec.Status = protocol.TargetSucceeded
+		rec.Stage = "rebind.armed"
+		rec.ErrorCode = ""
+		rec.Message = "primary-loss trigger persisted; switching is not yet confirmed"
+		rec.AppliedAt = &now
+		rec.Evidence = map[string]any{"plan_id": planID}
+		return rec
+	}
+	if job.Action == "rebind.activate" {
+		if err := a.beginMigration(plan, job.JobID, job.OperationID); err != nil {
+			return failed("candidate_unverified", err)
+		}
+		rec.Status = protocol.TargetAwaitingConfirmation
+		rec.Stage = "rebind.trial"
+		rec.ErrorCode = ""
+		rec.Message = "candidate trial started; awaiting three committed live exchanges over at least 15 seconds"
+		rec.Evidence = map[string]any{"plan_id": planID, "generation": plan.Generation}
 		return rec
 	}
 	return rec
@@ -688,6 +740,10 @@ func planFromParams(p map[string]any) (*protocol.MigrationPlan, error) {
 	plan.CurrentURL, _ = p["current_url"].(string)
 	plan.TrustPEM, _ = p["trust_pem"].(string)
 	plan.PayloadHash, _ = p["payload_hash"].(string)
+	plan.PrimaryLossSeconds = 30
+	if n, ok := p["primary_loss_seconds"].(float64); ok && n >= 15 && n <= 3600 {
+		plan.PrimaryLossSeconds = int(n)
+	}
 	if exp, _ := p["expires_at"].(string); exp != "" {
 		t, _ := time.Parse(time.RFC3339, exp)
 		plan.ExpiresAt = t
@@ -696,6 +752,9 @@ func planFromParams(p map[string]any) (*protocol.MigrationPlan, error) {
 }
 
 func (a *Agent) verifyCandidate(plan *protocol.MigrationPlan) error {
+	if err := a.validatePlan(plan); err != nil {
+		return err
+	}
 	pem := plan.TrustPEM
 	if pem == "" {
 		pem = a.State.File.CACertPEM
@@ -714,8 +773,9 @@ func (a *Agent) verifyCandidate(plan *protocol.MigrationPlan) error {
 			Proxy:           nil,
 		},
 	}
+	defer client.CloseIdleConnections()
 	var last error
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 1; i++ {
 		req, err := http.NewRequest(http.MethodGet, strings.TrimRight(plan.CandidateURL, "/")+"/api/v1/agent/identity", nil)
 		if err != nil {
 			return err
@@ -754,52 +814,75 @@ func (a *Agent) verifyCandidate(plan *protocol.MigrationPlan) error {
 }
 
 func (a *Agent) applySwitch(in *lifecycleIntent) error {
-	if in.CandidateURL == "" {
-		return fmt.Errorf("missing candidate")
+	if _, err := netutil.ValidateControllerURL(in.CandidateURL); err != nil {
+		return err
 	}
+	trust := in.TrustPEM
+	if trust == "" {
+		trust = a.State.File.CACertPEM
+	}
+	pool, err := tlsutil.PoolFromPEM([]byte(trust))
+	if err != nil {
+		return err
+	}
+	previous := a.State.File
 	a.State.File.ControllerURL = in.CandidateURL
-	if in.TrustPEM != "" {
-		a.State.File.CACertPEM = in.TrustPEM
-		if pool, err := tlsutil.PoolFromPEM([]byte(in.TrustPEM)); err == nil {
-			a.client.Transport = &http.Transport{
-				TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
-				Proxy:           nil,
-			}
-		}
-	}
-	if in.Generation > 0 {
+	a.State.File.CACertPEM = trust
+	if in.Generation > a.State.File.EndpointGeneration {
 		a.State.File.EndpointGeneration = in.Generation
 	}
-	return a.State.Save()
+	if err := a.State.Save(); err != nil {
+		a.State.File = previous
+		return err
+	}
+	a.client.CloseIdleConnections()
+	a.client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, Proxy: nil}
+	return nil
 }
 
+// Completion requires both a different worker session and the supervisor's
+// durable probation outcome. Launching the candidate alone is not success.
 func (a *Agent) reconcileIntents() {
 	in, err := loadIntent(a.State.File.StateDir)
-	if err != nil || in == nil || in.JobID == "" {
+	if err != nil || in == nil || in.JobID == "" || in.Kind == "rebind_switch" {
+		return
+	}
+	if in.PreviousSession == "" || in.PreviousSession == a.Session {
 		return
 	}
 	now := a.Clock.Now().UTC()
+	rec := protocol.JobReceipt{JobID: in.JobID, OperationID: in.OperationID, Status: protocol.TargetSucceeded, AppliedAt: &now, Evidence: map[string]any{"worker_digest": a.digest, "session_id": a.Session}}
 	switch in.Kind {
 	case "update", "rollback":
-		if in.ExpectedDigest != "" && a.digest == in.ExpectedDigest {
-			a.jobs[in.JobID] = protocol.JobReceipt{
-				JobID: in.JobID, OperationID: in.OperationID, Status: protocol.TargetSucceeded,
-				Stage: "build_digest_session", Message: "new worker digest matches authorized build",
-				AppliedAt: &now, Evidence: map[string]any{"worker_digest": a.digest, "session_id": a.Session},
-			}
-			clearIntent(a.State.File.StateDir)
+		j, err := update.Load(a.State.File.StateDir)
+		if err != nil || j.TxID == "" || j.Current != a.selfBin {
+			return
+		}
+		if in.Kind == "update" && j.Stage == update.StageRollback && j.NewSHA == in.ExpectedDigest && a.digest == j.OldSHA {
+			rec.Status = protocol.TargetRolledBack
+			rec.Stage = "restored_previous_worker"
+			rec.Message = "update failed; supervisor restored the previous worker"
+			rec.Evidence["rollback_tx_id"] = j.TxID
+		} else if in.Kind == "update" && j.Stage == update.StageConfirmed && j.NewSHA == in.ExpectedDigest && a.digest == in.ExpectedDigest {
+			rec.Stage = "build_digest_session"
+			rec.Message = "new worker passed supervisor probation and reports its authorized digest"
+			rec.Evidence["update_tx_id"] = j.TxID
+		} else if in.Kind == "rollback" && j.Stage == update.StageRollback && j.OldSHA == in.ExpectedDigest && a.digest == in.ExpectedDigest {
+			rec.Stage = "build_digest_session"
+			rec.Message = "previous worker restored and reports the journaled digest"
+			rec.Evidence["rollback_tx_id"] = j.TxID
+			rec.Evidence["previous_good_digest"] = j.OldSHA
+		} else {
+			return
 		}
 	case "restart":
-		a.jobs[in.JobID] = protocol.JobReceipt{
-			JobID: in.JobID, OperationID: in.OperationID, Status: protocol.TargetSucceeded,
-			Stage: "new_worker_session", Message: "new worker session after managed restart",
-			AppliedAt: &now, Evidence: map[string]any{"session_id": a.Session},
-		}
-		clearIntent(a.State.File.StateDir)
-	case "rebind_switch":
-		if a.State.File.ControllerURL == in.CandidateURL {
-			clearIntent(a.State.File.StateDir)
-		}
+		rec.Stage = "new_worker_session"
+		rec.Message = "new worker session after managed restart"
+	default:
+		return
 	}
-	_ = a.saveJobsLocked()
+	a.jobs[in.JobID] = rec
+	if err := a.saveJobsLocked(); err == nil {
+		clearIntent(a.State.File.StateDir)
+	}
 }

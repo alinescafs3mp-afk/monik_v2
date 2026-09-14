@@ -65,17 +65,35 @@ def run(binary: Path, output: Path) -> None:
                     page.locator('input[type="password"]').fill(access["password"])
                     page.get_by_role("button", name="Войти", exact=True).click()
                     expect(page.get_by_role("heading", name="Состояние машин", exact=True)).to_be_visible()
+                    expect(page.locator("article.host-card")).to_have_count(0)
+                    page.goto(base + "/machines", wait_until="domcontentloaded")
+                    checkbox = page.get_by_role("checkbox", name="Показывать в обзоре: Audit host", exact=True)
+                    expect(checkbox).not_to_be_checked()
+                    checkbox.click()
+                    expect(checkbox).to_be_checked()
+                    page.goto(base + "/", wait_until="domcontentloaded")
                     card = page.locator("article.host-card").filter(has=page.get_by_role("heading", name="Audit host", exact=True))
                     expect(card).to_have_count(1)
-                    for text in ["CPU", "RAM", "DISK", "Средний ping", "HTTP 200", "HTTP 401", "HTTP 503"]:
+                    expect(page.get_by_role("heading", name="Offline fixture", exact=True)).to_have_count(0)
+                    assert "host-line" in (card.get_attribute("class") or ""), "default overview is not rows"
+                    for text in ["CPU", "RAM", "DISK", "Средний ping", "HTTP 503"]:
                         expect(card).to_contain_text(text)
                     expect(card).to_contain_text("95%")
                     expect(card).to_contain_text("23,4 мс")
+                    page.get_by_role("button", name="Карточки", exact=True).click()
+                    for text in ["HTTP 200", "HTTP 401", "HTTP 503"]:
+                        expect(card).to_contain_text(text)
+                    page.get_by_role("button", name="Строки", exact=True).click()
+                    page.get_by_role("button", name="Свернуть меню", exact=True).click()
+                    expect(page.locator(".shell")).to_have_class("shell sidebar-collapsed")
+                    page.reload(wait_until="domcontentloaded")
+                    expect(page.locator(".shell")).to_have_class("shell sidebar-collapsed")
+                    expect(card).to_have_count(1)
                     page.screenshot(path=str(output / "overview-desktop.png"), full_page=True)
-                    results.append("authenticated overview with CPU/RAM/DISK/ping and distinct HTTP outcomes")
-
-                    card.get_by_role("button", name="Закрепить", exact=True).click()
-                    expect(card.get_by_role("button", name="Открепить", exact=True)).to_be_visible()
+                    results.append("overview rows contain only selected machines; layout and sidebar persist across reload")
+                    page.goto(base + "/machines", wait_until="domcontentloaded")
+                    checkbox = page.get_by_role("checkbox", name="Показывать в обзоре: Audit host", exact=True)
+                    expect(checkbox).to_be_checked()
                     writes = []
                     def lose_response(route):
                         if route.request.method == "POST":
@@ -86,17 +104,27 @@ def run(binary: Path, output: Path) -> None:
                         else:
                             route.continue_()
                     page.route("**/api/v1/operations", lose_response)
-                    card.get_by_role("button", name="Открепить", exact=True).click()
-                    expect(card.get_by_role("button", name="Закрепить", exact=True)).to_be_visible()
+                    checkbox.click()
+                    expect(checkbox).not_to_be_checked()
                     assert len(writes) == 1, "lost response duplicated the mutation"
                     page.unroute("**/api/v1/operations", lose_response)
                     assert page.evaluate("JSON.parse(sessionStorage.getItem('monik:pending-operations:v1') || '[]').length") == 0
-                    results.append("pin persisted; lost mutation response reconciled without duplicate POST")
+                    checkbox.click()
+                    expect(checkbox).to_be_checked()
+                    page.goto(base + "/", wait_until="domcontentloaded")
+                    card = page.locator("article.host-card").filter(has=page.get_by_role("heading", name="Audit host", exact=True))
+                    expect(card).to_have_count(1)
+                    results.append("server-side overview checkbox persists; lost response reconciled with one POST")
 
                     card.locator("a.card-main").click()
                     expect(page.get_by_role("heading", name="Audit host", exact=True)).to_be_visible()
                     expect(page.locator("svg.chart").first).to_be_visible()
                     assert page.locator("svg.chart").count() >= 6
+                    expect(page.locator("svg.chart").first.locator(".y-tick text")).to_have_count(5)
+                    expect(page.locator("svg.chart").first.locator(".x-tick")).to_have_count(5)
+                    expect(page.locator("svg.chart").first).to_contain_text("25")
+                    expect(page.locator("svg.chart").first.locator(".chart-unit")).to_have_text("%")
+                    results.append("chart axis values, timestamps and units are visible without hover")
                     expect(page.locator("figure").filter(has=page.locator("strong", has_text="CPU")).first).to_contain_text("99%")
                     for hours in [1, 2, 3, 6, 12, 24]:
                         expect(page.get_by_role("button", name=f"{hours}ч", exact=True)).to_be_visible()
@@ -108,6 +136,18 @@ def run(binary: Path, output: Path) -> None:
                     assert date.input_value() == before, "live data moved the fixed history window"
                     page.screenshot(path=str(output / "machine-history.png"), full_page=True)
                     results.append("machine graphs, extrema, six range presets and fixed history")
+                    page.get_by_role("button", name="Экспорт интервала в JSON", exact=True).click()
+                    download_link = page.get_by_role("link", name="Скачать экспорт", exact=True)
+                    expect(download_link).to_be_visible()
+                    export_path = download_link.get_attribute("href")
+                    assert export_path.startswith("/api/v1/exports/")
+                    exported = context.request.get(base + export_path)
+                    assert exported.ok
+                    export_data = exported.json()
+                    assert export_data["entity_id"] == "audit-host"
+                    assert export_data["count"] > 0 and export_data["precision"] == "raw"
+                    assert "cpu_percent" in export_data["samples"][0]["payload"]
+                    results.append("history export button returns authenticated raw telemetry for the displayed interval")
 
                     page.get_by_role("button", name="LIVE", exact=True).click()
                     page.get_by_role("button", name="Собрать сейчас", exact=True).click()
@@ -117,6 +157,14 @@ def run(binary: Path, output: Path) -> None:
                     expect(page.locator("main")).to_contain_text("В очереди")
                     page.screenshot(path=str(output / "operation-pending.png"), full_page=True)
                     results.append("accepted operation stays pending without synthetic worker completion")
+                    page.goto(base + "/problems", wait_until="domcontentloaded")
+                    expect(page.get_by_role("heading", name="Проблемы и история", exact=True)).to_be_visible()
+                    page.get_by_label("Состояние", exact=True).select_option("all")
+                    page.get_by_role("button", name="HISTORY", exact=True).click()
+                    expect(page.get_by_label("Конец интервала")).to_be_visible()
+                    expect(page.get_by_role("button", name="24ч", exact=True)).to_be_visible()
+                    expect(page.locator("main")).to_contain_text("Инциденты, пересекающие выбранный интервал")
+                    results.append("historical incident controls expose fixed time, state filters and shared ranges")
 
                     page.goto(base + "/updates", wait_until="domcontentloaded")
                     expect(page.locator("main")).to_contain_text("TUF root")
@@ -128,7 +176,14 @@ def run(binary: Path, output: Path) -> None:
                     expect(page.get_by_role("heading", name="Audit host", exact=True)).to_be_visible()
                     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "mobile horizontal overflow"
                     page.screenshot(path=str(output / "overview-mobile.png"), full_page=True)
-                    results.append("mobile overview has no horizontal overflow")
+                    page.get_by_role("button", name="Развернуть меню", exact=True).click()
+                    expect(page.locator("#main-nav")).to_be_visible()
+                    page.keyboard.press("Escape")
+                    expect(page.locator("#main-nav")).not_to_be_visible()
+                    page.goto(base + "/machines/audit-host", wait_until="domcontentloaded")
+                    expect(page.locator("svg.chart").first.locator(".x-tick")).to_have_count(3)
+                    page.screenshot(path=str(output / "machine-mobile.png"), full_page=True)
+                    results.append("mobile overview fits; menu closes on Escape and charts use three readable time ticks")
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")
                     context.close()

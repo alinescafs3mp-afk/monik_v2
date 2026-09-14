@@ -30,6 +30,13 @@ func ValidateControllerURL(raw string) (*url.URL, error) {
 	if u.Fragment != "" {
 		return nil, fmt.Errorf("url fragment is not allowed")
 	}
+	if u.RawQuery != "" || u.ForceQuery || (u.Path != "" && u.Path != "/") || u.Opaque != "" {
+		return nil, fmt.Errorf("controller URL must be an HTTPS origin without query or path")
+	}
+	if u.Hostname() == "" {
+		return nil, fmt.Errorf("controller host required")
+	}
+
 	host := u.Hostname()
 	if ip := net.ParseIP(host); ip != nil {
 		if IsMetadata(ip) && !ip.IsLoopback() {

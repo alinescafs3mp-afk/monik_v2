@@ -95,6 +95,9 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 				item.Summary += " · здоровье приложения не настроено"
 			}
 		}
+		if obs != nil && obs.Feedback != nil && obs.Feedback.Health != "" {
+			item.Summary += " · ответ: " + obs.Feedback.HealthSource + "=" + obs.Feedback.Health
+		}
 		if sv.Paused || sv.Ignored || obs != nil && obs.Quality == protocol.QualityPaused {
 			item.State = "paused"
 			item.Summary = "Проверки приостановлены"

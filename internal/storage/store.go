@@ -174,7 +174,7 @@ func (s *Store) SessionByToken(raw string) (*Session, error) {
 		return nil, err
 	}
 	sess.ExpiresAt, _ = time.Parse(time.RFC3339Nano, exp.String)
-	if s.now().After(sess.ExpiresAt) {
+	if !s.now().Before(sess.ExpiresAt) {
 		return nil, ErrNotFound
 	}
 	if rau.Valid {
@@ -349,7 +349,7 @@ func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *proto
 		display_name=COALESCE(NULLIF(?,''),display_name),
 		worker_version=COALESCE(NULLIF(?,''),worker_version), worker_digest=COALESCE(NULLIF(?,''),worker_digest),
 		service_host_version=COALESCE(NULLIF(?,''),service_host_version), service_host_digest=COALESCE(NULLIF(?,''),service_host_digest),
-		managed_ready=CASE WHEN ?= '1' THEN 1 ELSE managed_ready END
+		managed_ready=CASE WHEN ?= '1' THEN 1 ELSE 0 END
 		WHERE id=?`, args...)
 	return err
 }

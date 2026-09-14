@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -28,7 +27,7 @@ func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req protocol.EnrollRequest
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+	if err := parseJSONLimit(r, &req, 1<<20); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
@@ -36,14 +35,24 @@ func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 400, "missing", "code and agent_id required")
 		return
 	}
-	if err := a.Store.ConsumeEnrollmentCode(strings.TrimSpace(req.Code)); err != nil {
-		a.writeErr(w, 409, "code", err.Error())
+	if len(req.AgentID) > 128 || len(req.Hostname) > 255 || len(req.DisplayName) > 255 || len(req.Code) > 128 {
+		a.writeErr(w, 400, "invalid_identity", "enrollment field too long")
 		return
 	}
-	cred, err := idgen.Secret(32)
-	if err != nil {
-		a.writeErr(w, 500, "cred", "could not issue credential")
-		return
+	cred := req.Credential
+	if cred != "" {
+		decoded, err := hex.DecodeString(cred)
+		if err != nil || len(decoded) != 32 {
+			a.writeErr(w, 400, "invalid_proof", "credential must encode 32 random bytes")
+			return
+		}
+	} else {
+		var err error
+		cred, err = idgen.Secret(32)
+		if err != nil {
+			a.writeErr(w, 500, "cred", "could not issue credential")
+			return
+		}
 	}
 	cfg := protocol.DefaultAgentConfig()
 	cfg.DisplayName = req.DisplayName
@@ -54,13 +63,15 @@ func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
 		OS: req.OS, Arch: req.Arch, DesiredRevision: 1, DesiredHash: hash, DesiredConfig: string(body),
 		WorkerVersion: req.Version,
 	}
-	if err := a.Store.InsertAgent(row, secure.HashToken(cred)); err != nil {
-		a.writeErr(w, 409, "identity", "agent id already enrolled; reset identity to re-enroll")
+	replayed, err := a.Store.EnrollAgent(strings.TrimSpace(req.Code), row, secure.HashToken(cred), req.Credential != "")
+	if err != nil {
+		a.writeErr(w, 409, "enrollment_conflict", "code expired, used by another identity, or identity unavailable; no partial registration committed")
 		return
 	}
-	_ = a.Store.SetDesired(req.AgentID, 1, hash, string(body))
-	a.Store.Audit("agent", "enroll", req.AgentID, req.Hostname)
-	_ = a.Store.AppendEvent("agent", "agent", req.AgentID, 1, map[string]any{"event": "enrolled"})
+	if !replayed {
+		a.Store.Audit("agent", "enroll", req.AgentID, req.Hostname)
+		_ = a.Store.AppendEvent("agent", "agent", req.AgentID, 1, map[string]any{"event": "enrolled"})
+	}
 	rootJSON := ""
 	if b, err := tufutil.LoadTrustedRoot(filepath.Join(a.Cfg.DataDir, "tuf")); err == nil {
 		rootJSON = string(b)
@@ -86,7 +97,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 	_ = cred
 	agentID = ag.ID
 	var rep protocol.AgentReport
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&rep); err != nil {
+	if err := parseJSONLimit(r, &rep, 4<<20); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid report")
 		return
 	}
@@ -103,6 +114,9 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if accepted.Live {
+		if err := a.Store.RecordMigrationStatus(ag.ID, rep.Migration, rep.EndpointGeneration); err != nil {
+			a.Log.Warn("migration status rejected", "agent_id", ag.ID)
+		}
 		if rep.Host != nil && a.Clock.Now().Sub(rep.ObservedAt) <= protocol.StaleContact {
 			_ = a.Store.SetState("agent", ag.ID, "ok", "")
 			a.evalHostIncidents(ag.ID, rep.Host, rep.ObservedAt)
@@ -204,13 +218,13 @@ func (a *App) ensureBaselineCheck(agentID string, ep protocol.DiscoveredEndpoint
 		cfg = protocol.DefaultAgentConfig()
 	}
 	for _, c := range cfg.Checks {
-		if c.ServiceID == ep.ServiceID || c.URL == ep.URL {
+		if c.ServiceID == ep.ServiceID {
 			return
 		}
 	}
 	cfg.Checks = append(cfg.Checks, protocol.CheckDefinition{
 		ID: idgen.New(), ServiceID: ep.ServiceID, Kind: "baseline_http",
-		URL: ep.URL, DialTarget: ep.DialTarget, Method: "HEAD",
+		URL: ep.URL, DialTarget: ep.DialTarget, Method: "GET",
 		HostHeader: ep.HostHeader, TLSServerName: ep.TLSServerName,
 		TimeoutSeconds: 2, IntervalSeconds: 5,
 	})
@@ -264,7 +278,7 @@ func (a *App) handleReleaseImport(w http.ResponseWriter, r *http.Request, s *sto
 		return
 	}
 	var body map[string]any
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
+	if err := parseJSONLimit(r, &body, 1<<20); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}

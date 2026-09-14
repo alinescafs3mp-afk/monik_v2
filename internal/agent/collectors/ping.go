@@ -1,7 +1,11 @@
 package collectors
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -30,7 +34,8 @@ func NewPinger() *Pinger { return &Pinger{} }
 
 func (p *Pinger) Observe(ctx context.Context, target string, timeout time.Duration, now time.Time) {
 	s := sample{at: now, sent: true}
-	rtt, err := pingOnce(ctx, target, timeout)
+	rtt, sent, err := pingOnce(ctx, target, timeout)
+	s.sent = sent
 	if err != nil {
 		if os.IsPermission(err) || isPerm(err) {
 			s.sent = false
@@ -77,7 +82,7 @@ func (p *Pinger) Summary(now time.Time, window time.Duration, target string) (*p
 	perm := false
 	first := true
 	for _, s := range p.samples {
-		if s.at.Before(cut) {
+		if !s.at.After(cut) || s.at.After(now) {
 			continue
 		}
 		kept = append(kept, s)
@@ -120,52 +125,95 @@ func (p *Pinger) Summary(now time.Time, window time.Duration, target string) (*p
 	return out, protocol.Capability{Status: protocol.CapSupported, LastSuccess: &t}
 }
 
-func pingOnce(ctx context.Context, target string, timeout time.Duration) (time.Duration, error) {
+// Only a reply to this particular request is evidence of reachability. UDP
+// ping sockets can have their ID rewritten by the kernel, hence the nonce
+// and source/sequence checks remain mandatory even in that mode.
+func matchesReply(packet []byte, peer net.Addr, target net.IP, id, seq int, nonce []byte, raw bool) bool {
+	var source net.IP
+	switch p := peer.(type) {
+	case *net.IPAddr:
+		source = p.IP
+	case *net.UDPAddr:
+		source = p.IP
+	}
+	if source == nil || !source.Equal(target) {
+		return false
+	}
+	m, err := icmp.ParseMessage(1, packet)
+	if err != nil || m.Type != ipv4.ICMPTypeEchoReply || m.Code != 0 {
+		return false
+	}
+	e, ok := m.Body.(*icmp.Echo)
+	return ok && e.Seq == seq && (!raw || e.ID == id) && bytes.Equal(e.Data, nonce)
+}
+
+func pingOnce(ctx context.Context, target string, timeout time.Duration) (time.Duration, bool, error) {
 	ip := net.ParseIP(target)
 	if ip == nil {
 		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", target)
-		if err != nil || len(ips) == 0 {
-			return 0, err
+		if err != nil {
+			return 0, false, err
+		}
+		if len(ips) == 0 {
+			return 0, false, fmt.Errorf("no IPv4 address")
 		}
 		ip = ips[0]
 	}
+	if ip.To4() == nil {
+		return 0, false, fmt.Errorf("IPv4 ICMP target required")
+	}
 	c, err := icmp.ListenPacket("udp4", "0.0.0.0")
+	raw := false
 	if err != nil {
+		raw = true
 		c, err = icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 	}
 	defer c.Close()
-	_ = c.SetDeadline(time.Now().Add(timeout))
-	wm := icmp.Message{Type: ipv4.ICMPTypeEcho, Code: 0, Body: &icmp.Echo{ID: os.Getpid() & 0xffff, Seq: 1, Data: []byte("monik")}}
+	deadline := time.Now().Add(timeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, false, err
+	}
+	if err := c.SetDeadline(deadline); err != nil {
+		return 0, false, err
+	}
+	stop := context.AfterFunc(ctx, func() { _ = c.SetDeadline(time.Now()) })
+	defer stop()
+	nonce := make([]byte, 24)
+	if _, err := rand.Read(nonce); err != nil {
+		return 0, false, err
+	}
+	id, seq := os.Getpid()&0xffff, 1
+	wm := icmp.Message{Type: ipv4.ICMPTypeEcho, Code: 0, Body: &icmp.Echo{ID: id, Seq: seq, Data: nonce}}
 	wb, err := wm.Marshal(nil)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	dst := &net.IPAddr{IP: ip}
+	var dst net.Addr = &net.UDPAddr{IP: ip}
+	if raw {
+		dst = &net.IPAddr{IP: ip}
+	}
 	start := time.Now()
-	if _, err := c.WriteTo(wb, dst); err != nil {
-		if ua, ok := tryUDP(ip); ok {
-			if _, err2 := c.WriteTo(wb, ua); err2 != nil {
-				return 0, err
-			}
-		} else {
-			return 0, err
+	n, err := c.WriteTo(wb, dst)
+	if err != nil {
+		return 0, false, err
+	}
+	if n != len(wb) {
+		return 0, false, errors.New("short ICMP write")
+	}
+	buf := make([]byte, 1500)
+	for {
+		n, peer, err := c.ReadFrom(buf)
+		if err != nil {
+			return 0, true, err
+		}
+		if matchesReply(buf[:n], peer, ip, id, seq, nonce, raw) {
+			return time.Since(start), true, nil
 		}
 	}
-	rb := make([]byte, 1500)
-	n, _, err := c.ReadFrom(rb)
-	if err != nil {
-		return 0, err
-	}
-	_, err = icmp.ParseMessage(1, rb[:n])
-	if err != nil {
-		return time.Since(start), nil
-	}
-	return time.Since(start), nil
-}
-
-func tryUDP(ip net.IP) (*net.UDPAddr, bool) {
-	return &net.UDPAddr{IP: ip}, true
 }

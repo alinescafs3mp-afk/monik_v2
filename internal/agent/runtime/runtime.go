@@ -28,41 +28,60 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/tlsutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/version"
 )
 
 type Agent struct {
-	CfgPath        string
-	State          *configfile.State
-	Cred           string
-	Clock          clock.Clock
-	Host           *collectors.Host
-	Ping           *collectors.Pinger
-	Spool          *spool.Store
-	Session        string
-	Seq            atomic.Int64
-	cfg            protocol.AgentConfig
-	cfgRev         int64
-	cfgHash        string
-	mu             sync.Mutex
-	client         *http.Client
-	jobs           map[string]protocol.JobReceipt
-	started        time.Time
-	selfBin        string
-	digest         string
-	discoveries    chan *protocol.DiscoveryDelta
-	observations   chan protocol.CheckObservation
-	discovering    atomic.Bool
-	checking       atomic.Bool
-	forceDiscovery bool
-	secrets        map[string]storedSecret
+	CfgPath            string
+	State              *configfile.State
+	Cred               string
+	Clock              clock.Clock
+	Host               *collectors.Host
+	Ping               *collectors.Pinger
+	Spool              *spool.Store
+	Session            string
+	Seq                atomic.Int64
+	cfg                protocol.AgentConfig
+	cfgRev             int64
+	cfgHash            string
+	mu                 sync.Mutex
+	client             *http.Client
+	jobs               map[string]protocol.JobReceipt
+	started            time.Time
+	selfBin            string
+	digest             string
+	discoveries        chan *protocol.DiscoveryDelta
+	observations       chan protocol.CheckObservation
+	discovering        atomic.Bool
+	checking           atomic.Bool
+	forceDiscovery     bool
+	secrets            map[string]storedSecret
+	lastContact        time.Time
+	nextMigrationTrial time.Time
 }
 
 func Open(cfgPath string) (*Agent, error) {
 	st, err := configfile.Load(cfgPath)
 	if err != nil {
 		return nil, err
+	}
+	// Import the previous trust-bundle format exactly once. New changes live in
+	// the atomically replaced agent configuration, including after a rebind.
+	if raw, readErr := os.ReadFile(trustBundlePath(st.File.StateDir)); readErr == nil {
+		if in, e := loadIntent(st.File.StateDir); e != nil || in.Kind != "rebind_switch" || st.File.ControllerURL != in.CandidateURL {
+			if _, e := tlsutil.PoolFromPEM(raw); e != nil {
+				return nil, e
+			}
+			st.File.CACertPEM = string(raw)
+			if e := st.Save(); e != nil {
+				return nil, e
+			}
+		}
+		if e := os.Remove(trustBundlePath(st.File.StateDir)); e != nil {
+			return nil, e
+		}
 	}
 	cred, err := configfile.ReadCredential(st.File.CredentialPath)
 	if err != nil {
@@ -73,9 +92,30 @@ func Open(cfgPath string) (*Agent, error) {
 		return nil, err
 	}
 	cfg := protocol.DefaultAgentConfig()
-	if c, err := configfile.LoadAppliedConfig(st.File.StateDir); err == nil {
-		cfg = c
+	revision := int64(0)
+	if applied, e := configfile.LoadAppliedEnvelope(st.File.StateDir); e == nil {
+		cfg = applied.Body
+		revision = applied.Revision
+		if revision < 0 {
+			revision = st.File.AppliedRevision
+		}
+		// A previous worker can apply a newer configuration while rolled back.
+		// Adopt it only with its matching persisted revision/hash, never by mtime.
+		if st.File.AppliedRevision > revision {
+			raw, e := os.ReadFile(filepath.Join(st.File.StateDir, "applied.json"))
+			var legacy protocol.AgentConfig
+			if e == nil && json.Unmarshal(raw, &legacy) == nil && protocol.ValidateAgentConfig(legacy) == nil && configfile.HashConfig(legacy) == st.File.AppliedHash {
+				cfg = legacy
+				revision = st.File.AppliedRevision
+				if e := configfile.SaveAppliedConfig(st.File.StateDir, cfg, revision, st.File.AppliedHash); e != nil {
+					return nil, e
+				}
+			}
+		}
+	} else if !os.IsNotExist(e) {
+		return nil, fmt.Errorf("applied config journal: %w", e)
 	}
+
 	pool, err := tlsutil.PoolFromPEM([]byte(st.File.CACertPEM))
 	if err != nil {
 		return nil, err
@@ -95,9 +135,12 @@ func Open(cfgPath string) (*Agent, error) {
 		jobs: map[string]protocol.JobReceipt{}, started: time.Now(), selfBin: self, digest: fileDigest(self), discoveries: make(chan *protocol.DiscoveryDelta, 1), observations: make(chan protocol.CheckObservation, 128),
 		secrets: map[string]storedSecret{},
 	}
+	a.lastContact = a.Clock.Now()
 	a.cfgHash = configfile.HashConfig(cfg)
-	a.cfgRev = st.File.AppliedRevision
-	_ = a.applyTrustPool()
+	a.cfgRev = revision
+	if err := a.applyTrustPool(); err != nil {
+		return nil, fmt.Errorf("controller trust: %w", err)
+	}
 	if b, err := os.ReadFile(filepath.Join(st.File.StateDir, "job-receipts.json")); err == nil {
 		if err := json.Unmarshal(b, &a.jobs); err != nil {
 			return nil, fmt.Errorf("job receipt journal corrupt: %w", err)
@@ -136,6 +179,10 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) tick(ctx context.Context, discover bool) {
 	now := a.Clock.Now().UTC()
+	a.mu.Lock()
+	a.reconcileIntents()
+	a.maintainMigration()
+	a.mu.Unlock()
 	var host *protocol.HostMetrics
 	caps := map[string]protocol.Capability{}
 	collectRequested := false
@@ -227,6 +274,7 @@ drained:
 	seq := a.Seq.Add(1)
 	rep := protocol.AgentReport{SchemaVersion: protocol.SchemaVersion, AgentID: a.State.File.AgentID, SessionID: a.Session, Sequence: seq, ObservedAt: now, ReportedAt: a.Clock.Now().UTC(), ConfigRevision: a.cfgRev, ConfigHash: a.cfgHash, EndpointGeneration: a.State.File.EndpointGeneration, WorkerVersion: version.Version, WorkerDigest: a.digest, ManagedReady: a.managed(), Host: host, Capabilities: caps, Checks: obs, Discovery: disc, IsLive: true, Spool: ptrSpool(a.Spool.Status())}
 	a.mu.Lock()
+	rep.Migration = a.migrationStatus()
 	for id, job := range a.jobs {
 		if job.Status == protocol.TargetAccepted {
 			wasDiscovery := job.Stage == "discover_pending"
@@ -287,7 +335,8 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.State.File.ControllerURL+"/api/v1/agent/report", bytes.NewReader(b))
+	sentURL := a.State.File.ControllerURL
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, sentURL+"/api/v1/agent/report", bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
@@ -311,6 +360,10 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 		return fmt.Errorf("invalid controller identity or uncommitted acknowledgement")
 	}
 	if rep.IsLive {
+		a.mu.Lock()
+		a.lastContact = a.Clock.Now()
+		a.recordMigrationContact(sentURL)
+		a.mu.Unlock()
 		a.applyControl(cr)
 	}
 	return nil
@@ -324,16 +377,16 @@ func (a *Agent) applyControl(cr protocol.ControlResponse) {
 			if err := configfile.SaveAppliedConfig(a.State.File.StateDir, d.Body, d.Revision, hash); err == nil {
 				a.State.File.AppliedRevision = d.Revision
 				a.State.File.AppliedHash = hash
-				if err := a.State.Save(); err == nil {
-					a.cfg = d.Body
-					a.cfgRev = d.Revision
-					a.cfgHash = hash
-				}
+				// The atomic applied envelope, not the identity-file mirror, is authoritative.
+				a.cfg = d.Body
+				a.cfgRev = d.Revision
+				a.cfgHash = hash
+				_ = a.State.Save()
 			}
 		}
 	}
-	// Never replace a known controller URL with an unverified candidate. The
-	// migration state machine is explicitly unavailable until its release gate.
+	// Receipt delivery never authorizes a URL switch. Candidate trials are managed
+	// separately and confirmed only by committed live exchanges on that URL.
 	a.mu.Lock()
 	for _, id := range cr.ReceiptAcks {
 		job, ok := a.jobs[id]
@@ -342,10 +395,6 @@ func (a *Agent) applyControl(cr protocol.ControlResponse) {
 		}
 		switch job.Status {
 		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported, protocol.TargetExpired, protocol.TargetRolledBack:
-			if in, err := loadIntent(a.State.File.StateDir); err == nil && in != nil && in.JobID == id && in.Kind == "rebind_switch" {
-				_ = a.applySwitch(in)
-				clearIntent(a.State.File.StateDir)
-			}
 			delete(a.jobs, id)
 		}
 		// An ACK for acceptance is not an ACK for completion. Keep pending
@@ -438,7 +487,9 @@ func (a *Agent) drain(ctx context.Context) {
 		if err := a.send(ctx, it); err != nil {
 			return
 		}
-		a.Spool.Drop(it.ObservedAt)
+		if err := a.Spool.DropReport(it); err != nil {
+			return
+		}
 	}
 }
 
@@ -464,7 +515,12 @@ func (a *Agent) secretForLocked(d protocol.CheckDefinition) (header, value strin
 	}
 	s, ok := a.secrets[d.SecretID]
 	if !ok {
-		return "", ""
+		hdr, val, ver, err := a.fetchSecret(d.SecretID)
+		if err != nil {
+			return "", ""
+		}
+		s = storedSecret{ID: d.SecretID, Header: hdr, Value: val, Version: ver}
+		a.secrets[d.SecretID] = s
 	}
 	return s.Header, s.Value
 }
@@ -474,26 +530,5 @@ func (a *Agent) saveJobsLocked() error {
 	if err != nil {
 		return err
 	}
-	dir := a.State.File.StateDir
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".job-receipts-*")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	defer os.Remove(name)
-	if _, err = f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, filepath.Join(dir, "job-receipts.json"))
+	return secure.AtomicWrite(filepath.Join(a.State.File.StateDir, "job-receipts.json"), b, 0600)
 }

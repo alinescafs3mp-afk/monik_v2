@@ -46,7 +46,7 @@ type App struct {
 	Master    []byte
 	HTTP      *http.Server
 	mu        sync.Mutex
-	limiters  sync.Map
+	limiters  map[string]*rateBucket
 }
 
 func Open(cfg Config) (*App, error) {
@@ -214,6 +214,7 @@ func (a *App) Run(ctx context.Context) error {
 		Addr:              a.Cfg.Listen,
 		Handler:           a.csrfAndSecurity(mux),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 16,
 		TLSConfig:         a.TLS.TLSConfig(),
@@ -327,22 +328,45 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+type rateBucket struct {
+	count int
+	until time.Time
+}
+
+const maxRateBuckets = 4096
+
 func (a *App) rateLimit(key string, n int, window time.Duration) bool {
-	type bucket struct {
-		n    int
-		from time.Time
-	}
-	now := a.Clock.Now()
-	v, _ := a.limiters.LoadOrStore(key, &bucket{from: now})
-	b := v.(*bucket)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if now.Sub(b.from) > window {
-		b.n = 0
-		b.from = now
+	now := a.Clock.Now()
+	if a.limiters == nil {
+		a.limiters = map[string]*rateBucket{}
 	}
-	b.n++
-	return b.n <= n
+	b := a.limiters[key]
+	if b != nil && !now.Before(b.until) {
+		delete(a.limiters, key)
+		b = nil
+	}
+	if b == nil {
+		if len(a.limiters) >= maxRateBuckets {
+			for k, v := range a.limiters {
+				if !now.Before(v.until) {
+					delete(a.limiters, k)
+				}
+			}
+		}
+		// Do not evict an active limit just because an attacker varies source keys.
+		if len(a.limiters) >= maxRateBuckets {
+			return false
+		}
+		b = &rateBucket{until: now.Add(window)}
+		a.limiters[key] = b
+	}
+	if b.count >= n {
+		return false
+	}
+	b.count++
+	return true
 }
 
 func (a *App) csrfAndSecurity(next http.Handler) http.Handler {
@@ -369,6 +393,10 @@ func (a *App) csrfAndSecurity(next http.Handler) http.Handler {
 }
 
 func (a *App) serveUI(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		a.writeErr(w, 404, "not_found", "API route not found")
+		return
+	}
 	if r.URL.Path == "/health" {
 		a.writeJSON(w, 200, map[string]any{"ok": true, "setup_required": !a.SetupComplete(), "version": version.Version})
 		return

@@ -219,6 +219,10 @@ func cmdIdentity(args []string) int {
 }
 
 func cmdController(args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "controller show|recover")
+		return 2
+	}
 	fs := flag.NewFlagSet("controller", flag.ExitOnError)
 	cfg := fs.String("config", setup.DefaultConfigPath(), "config")
 	profile := fs.String("profile", "", "trusted recovery profile")
@@ -240,8 +244,8 @@ func cmdController(args []string) int {
 			fmt.Fprintln(os.Stderr, "--profile required")
 			return 2
 		}
-		fmt.Println("recover: import trusted profile and rewrite controller URL without deleting agent_id")
-		return 0
+		fmt.Fprintln(os.Stderr, "automated profile recovery is not implemented; the configuration was NOT changed")
+		return 1
 	default:
 		return 2
 	}

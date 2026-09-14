@@ -1,24 +1,23 @@
-# Implementation status
+# Implementation status after cumulative source audit 3
 
-Source after remaining typed-action wiring on top of P0 lifecycle and audit integration `140446e`.
+Baseline: `2f63c0b59498beb9436c092554cfef10e1942489`. This source includes all audit 2 changes plus audit 3. Read `docs/AUDIT_REVIEW_3_2026-09-14.md`, `docs/RELEASE_COMPLETION_PLAN.md` and `ACCEPTANCE_LEDGER.md`.
 
-**Pre-release.** Native Windows SCM/boot, 24h soak and the owner's live LAN process are not acceptance evidence.
+**PRE-RELEASE. Not all owner v3 requirements are complete. No production deployment or remote write was performed in audit 3. Historical reports describe historical states, not this revision's acceptance.**
 
-| Area | Actual status |
+| Area | Current implementation / remaining boundary |
 |---|---|
-| Go server, SQLite, Vue build | Implemented; rebuild UI after this change |
-| Five-second telemetry and local HTTP checks | Implemented with atomic ingestion/replay |
-| Overview and machine drill-down | CPU/RAM/DISK/ping/services and raw-history graphs |
-| Durable operations | Delivery/receipts/idempotency/expiry; typed registry actions are implemented. Fail-closed is empty: do not add a clickable action without tests |
-| Signed worker and service-host updates | Implemented against an independently enrolled TUF root, confined staging, service-host probation and rollback journal. Native Windows crash-recovery and 24h soak are **NOT RUN** |
-| Safe controller rebind | prepare/arm/activate/retire via jobs; prepare does not rewrite the controller URL; activate without a prepared plan is rejected. Offline unprepared agents cannot discover a replacement address |
-| Secrets | Values stripped before persist; AES-GCM at rest; agent fetches by id over enrolled TLS. Historical plaintext from older builds is not rewritten by redaction |
-| Credential rotation | Agent writes the next token first, registers its verifier over the old channel, then authenticates with the new token; the controller accepts a bounded overlap and retires the old hash |
-| Controller trust overlap | `trust.stage` appends a PEM root on the agent; `trust.retire` refuses to drop the last remaining root |
-| Check trial | One-shot GET/HEAD on the **agent** under the local probe policy. The controller never dials the trial URL |
-| Native install | Linux copies host+worker into `/usr/lib/monik` and writes systemd; Windows service API is compiled. Reboot-before-login and Windows SCM acceptance are **NOT RUN** |
-| Backup/restore | Consistent DB snapshot helper; NOT verified full-controller restore |
-| TLS renewal | SAN-preserving leaf bundle; Windows native durability not tested |
-| Load/soak | NOT RUN |
+| Overview/navigation | Dense rows, optional cards, persistent per-machine overview pin, collapsible sidebar and visible chart graduations preserved. Current visual acceptance NOT RUN. |
+| Machine history | Six ranges, extrema/gaps, raw point lookup, bounds/units/timezone. True raw JSON export now implemented with strict limits. Long-term aggregates incomplete. |
+| Problems history | Interval-overlap search, lifecycle/severity/metric/entity filters, stable pagination and fixed-history controls implemented. Not a bitemporal historical-status engine. |
+| Service feedback | Bounded HTTP metadata/known health fields preserved. No raw response bodies; self-reported health is not full app proof. |
+| Enrollment | Atomic code/identity/config binding and persisted-proof retry implemented. Selected URL retained; existing configuration protected. Server-first rollout needed for new client proof. Native concurrent installation/recovery NOT ACCEPTED. |
+| Telemetry/config | Existing atomic ingest/dedup preserved; desired revisions now also published transactionally into confirmation history. New spool records keyed by transport identity; current worker reads legacy and v2 queue. |
+| UI feedback/auth | Coalesced refresh, network versus authentication distinction, historical download links and no nonexistent-incident acknowledgement added. Recent-auth UX, native/browser acceptance pending. |
+| Worker updates | Prior target-link/signature/activation corrections retained; full immutable publication, cohort orchestration and native crash recovery remain open. |
+| Service-host updates | Explicitly unavailable until independent native replacement/recovery exists. Mandatory release blocker. |
+| Rebind/trust/credentials | Prior bounded state-machine corrections retained. Full offline time/cancel/expiry/restore/native evidence incomplete. |
+| Rules/maintenance/retry/resume | `rule.save`, `maintenance.set`, `operation.retry_selected`, `update.resume` remain explicitly unavailable. `history.export` is no longer on that list. |
+| Storage/backup/restore | Recent raw data and bounded export are implemented; large retention jobs, long aggregation and complete protected-controller restore are NOT ACCEPTED. |
+| Native fleet/load | Linux and Windows compile. Native SCM/systemd boot/recovery, full v3 battery, fleet-scale load and 24h soak NOT RUN here. |
 
-Default initial controller URL stays `https://46.120.103.61:8777`. Telegram is deferred. Applying this source must not restart the owner's live server as part of the source commit.
+Default initial URL remains `https://46.120.103.61:8777`; the actually selected/persisted controller address takes precedence. Never reset an existing deployment to a compiled default. Telegram and general remote OS commands remain out of scope.

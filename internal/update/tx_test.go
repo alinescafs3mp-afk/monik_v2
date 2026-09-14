@@ -40,3 +40,29 @@ func TestStageActivateRollback(t *testing.T) {
 		t.Fatalf("rolled %s", b)
 	}
 }
+
+func TestReviewActivationFailureKeepsCurrentExecutable(t *testing.T) {
+	d := t.TempDir()
+	cur := filepath.Join(d, "current")
+	_ = os.WriteFile(cur, []byte("good"), 0755)
+	if e := Activate(cur, filepath.Join(d, "missing"), filepath.Join(d, "previous")); e == nil {
+		t.Fatal("missing candidate accepted")
+	}
+	b, _ := os.ReadFile(cur)
+	if string(b) != "good" {
+		t.Fatal("current executable removed before candidate ready")
+	}
+}
+func TestReviewStagedSymlinkMustRemainInsideState(t *testing.T) {
+	d := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "foreign")
+	_ = os.WriteFile(outside, []byte("file"), 0755)
+	src := filepath.Join(d, "link")
+	if e := os.Symlink(outside, src); e != nil {
+		t.Fatal(e)
+	}
+	sum, _ := SHA256File(outside)
+	if _, e := StageBinary(d, src, sum); e == nil {
+		t.Fatal("followed artifact symlink outside state")
+	}
+}

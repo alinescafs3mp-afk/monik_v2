@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,11 +63,7 @@ func (j *Journal) Save(stateDir string) error {
 	if err != nil {
 		return err
 	}
-	tmp := Path(stateDir) + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, Path(stateDir))
+	return secure.AtomicWrite(Path(stateDir), b, 0600)
 }
 
 func SHA256File(path string) (string, error) {
@@ -79,16 +76,16 @@ func SHA256File(path string) (string, error) {
 }
 
 func confined(stateDir, path string) error {
-	absState, err := filepath.Abs(stateDir)
+	absState, err := filepath.EvalSymlinks(stateDir)
 	if err != nil {
 		return err
 	}
-	absPath, err := filepath.Abs(path)
+	absPath, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return err
 	}
 	rel, err := filepath.Rel(absState, absPath)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("artifact path is outside the protected state directory")
 	}
 	return nil
@@ -100,6 +97,10 @@ func StageBinary(stateDir, src, expectSHA string) (staged string, err error) {
 	}
 	if err := confined(stateDir, src); err != nil {
 		return "", err
+	}
+	info, err := os.Stat(src)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", fmt.Errorf("artifact is not a regular file")
 	}
 	sum, err := SHA256File(src)
 	if err != nil {
@@ -117,7 +118,7 @@ func StageBinary(stateDir, src, expectSHA string) (staged string, err error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dst, b, 0o755); err != nil {
+	if err := atomicBinary(dst, b); err != nil {
 		return "", err
 	}
 	got, err := SHA256File(dst)
@@ -130,32 +131,27 @@ func StageBinary(stateDir, src, expectSHA string) (staged string, err error) {
 	return dst, nil
 }
 
+// Keep the current executable in place until the complete candidate is ready.
+// A failed backup or write must never remove the last runnable version.
 func Activate(current, staged, prev string) error {
-	if err := os.MkdirAll(filepath.Dir(prev), 0o700); err != nil {
-		return err
-	}
-	if _, err := os.Stat(current); err == nil {
-		_ = os.Remove(prev)
-		if err := os.Rename(current, prev); err != nil {
-			b, rerr := os.ReadFile(current)
-			if rerr != nil {
-				return err
-			}
-			if werr := os.WriteFile(prev, b, 0o755); werr != nil {
-				return werr
-			}
-		}
-	}
-	b, err := os.ReadFile(staged)
+	candidate, err := os.ReadFile(staged)
 	if err != nil {
 		return err
 	}
-	tmp := current + ".new"
-	if err := os.WriteFile(tmp, b, 0o755); err != nil {
+	old, err := os.ReadFile(current)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, current)
+	if err := os.MkdirAll(filepath.Dir(prev), 0o700); err != nil {
+		return err
+	}
+	if err := atomicBinary(prev, old); err != nil {
+		return err
+	}
+	return atomicBinary(current, candidate)
 }
+
+func atomicBinary(path string, b []byte) error { return secure.AtomicWrite(path, b, 0755) }
 
 func Rollback(current, prev string) error {
 	if _, err := os.Stat(prev); err != nil {
@@ -165,9 +161,5 @@ func Rollback(current, prev string) error {
 	if err != nil {
 		return err
 	}
-	tmp := current + ".rb"
-	if err := os.WriteFile(tmp, b, 0o755); err != nil {
-		return err
-	}
-	return os.Rename(tmp, current)
+	return atomicBinary(current, b)
 }

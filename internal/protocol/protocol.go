@@ -178,6 +178,18 @@ type PingSummary struct {
 	WindowSec  int      `json:"window_seconds"`
 }
 
+// ResponseFeedback contains only bounded protocol metadata and allowlisted health tokens.
+// It deliberately excludes arbitrary response text, headers and JSON values.
+type ResponseFeedback struct {
+	Method       string `json:"method"`
+	StatusText   string `json:"status_text,omitempty"`
+	ContentType  string `json:"content_type,omitempty"`
+	BodyState    string `json:"body_state"`
+	SampledBytes int    `json:"sampled_bytes"`
+	Health       string `json:"health,omitempty"`
+	HealthSource string `json:"health_source,omitempty"`
+}
+
 type CheckObservation struct {
 	ServiceID  string             `json:"service_id"`
 	CheckID    string             `json:"check_id"`
@@ -192,6 +204,7 @@ type CheckObservation struct {
 	LatencyMS  *float64           `json:"latency_ms,omitempty"`
 	AppResult  string             `json:"app_result,omitempty"` // not_configured, pass, fail
 	AppReason  string             `json:"app_reason,omitempty"`
+	Feedback   *ResponseFeedback  `json:"feedback,omitempty"`
 	Quality    ObservationQuality `json:"quality"`
 	ConfigRev  int64              `json:"config_revision"`
 }
@@ -244,6 +257,7 @@ type JobReceipt struct {
 }
 
 type SpoolStatus struct {
+	Error    string     `json:"error,omitempty"`
 	Bytes    int64      `json:"bytes"`
 	Items    int        `json:"items"`
 	Dropped  int64      `json:"dropped"`
@@ -364,20 +378,22 @@ type JobEnvelope struct {
 }
 
 type MigrationPlan struct {
-	PlanID             string    `json:"plan_id"`
-	ControllerID       string    `json:"controller_id"`
-	CurrentURL         string    `json:"current_url"`
-	CandidateURL       string    `json:"candidate_url"`
-	Generation         int64     `json:"generation"`
-	Mode               string    `json:"mode"`
-	PayloadHash        string    `json:"payload_hash"`
-	TrustPEM           string    `json:"trust_pem,omitempty"`
-	ExpiresAt          time.Time `json:"expires_at"`
-	ArmFallback        bool      `json:"arm_fallback"`
-	PrimaryLossSeconds int       `json:"primary_loss_seconds"`
+	ConfirmedAt        *time.Time `json:"confirmed_at,omitempty"`
+	PlanID             string     `json:"plan_id"`
+	ControllerID       string     `json:"controller_id"`
+	CurrentURL         string     `json:"current_url"`
+	CandidateURL       string     `json:"candidate_url"`
+	Generation         int64      `json:"generation"`
+	Mode               string     `json:"mode"`
+	PayloadHash        string     `json:"payload_hash"`
+	TrustPEM           string     `json:"trust_pem,omitempty"`
+	ExpiresAt          time.Time  `json:"expires_at"`
+	ArmFallback        bool       `json:"arm_fallback"`
+	PrimaryLossSeconds int        `json:"primary_loss_seconds"`
 }
 
 type EnrollRequest struct {
+	Credential  string `json:"credential,omitempty"` // Optional persisted client proof for safe enrollment retry.
 	Code        string `json:"code"`
 	DisplayName string `json:"display_name,omitempty"`
 	Hostname    string `json:"hostname"`

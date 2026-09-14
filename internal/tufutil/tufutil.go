@@ -585,6 +585,7 @@ func ImportTrusted(bundlePath, destDir string, opts ImportOpts) (*BundleResult, 
 		now = time.Now().UTC()
 	}
 	trusted := opts.TrustedRoot
+	enroll := false
 	if len(trusted) == 0 {
 		if existing, err := LoadTrustedRoot(destDir); err == nil {
 			trusted = existing
@@ -601,9 +602,7 @@ func ImportTrusted(bundlePath, destDir string, opts ImportOpts) (*BundleResult, 
 		if _, err := VerifyRepo(bundleRoot, tmp, HighWater{}, now); err != nil {
 			return nil, fmt.Errorf("cannot enroll untrusted root: %w", err)
 		}
-		if err := SaveTrustedRoot(destDir, bundleRoot); err != nil {
-			return nil, err
-		}
+		enroll = true
 		trusted = bundleRoot
 	} else {
 		enrolled, err := parseRoot(trusted)
@@ -617,9 +616,24 @@ func ImportTrusted(bundlePath, destDir string, opts ImportOpts) (*BundleResult, 
 			}
 		}
 	}
-	hw, err := VerifyRepo(trusted, tmp, LoadHighWater(destDir), now)
+	prior, err := ReadHighWater(destDir)
 	if err != nil {
 		return nil, err
+	}
+	hw, err := VerifyRepo(trusted, tmp, prior, now)
+	if err != nil {
+		return nil, err
+	}
+	// Validate all target bytes before changing enrolled trust, serving files or
+	// advancing versions. An invalid bundle must not damage the current release.
+	arts, plats, err := collectArtifacts(tmp)
+	if err != nil {
+		return nil, err
+	}
+	if enroll {
+		if err := SaveTrustedRoot(destDir, trusted); err != nil {
+			return nil, err
+		}
 	}
 	repoDir := filepath.Join(destDir, "repository")
 	targetDir := filepath.Join(destDir, "targets")
@@ -645,11 +659,7 @@ func ImportTrusted(bundlePath, destDir string, opts ImportOpts) (*BundleResult, 
 	if err := copyTree(filepath.Join(tmp, "targets"), targetDir); err != nil {
 		return nil, err
 	}
-	if err := saveHighWater(destDir, hw); err != nil {
-		return nil, err
-	}
-	arts, plats, err := collectArtifacts(tmp)
-	if err != nil {
+	if err := SaveHighWater(destDir, hw); err != nil {
 		return nil, err
 	}
 	for i := range arts {

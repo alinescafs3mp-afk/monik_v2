@@ -1,0 +1,44 @@
+{
+  "date": "2026-09-13",
+  "baseline_commit": "2f63c0b59498beb9436c092554cfef10e1942489",
+  "baseline_tree": "c1ac8f958dca5ad11819bc0d5e7e97244ed5198b",
+  "scope": "corrected local source, not deployed production",
+  "toolchain": {
+    "go": "1.27.0",
+    "node": "22.16.0"
+  },
+  "checks": {
+    "go_race": {
+      "status": "PASS",
+      "top_level_tests": 101,
+      "test_and_subtest_pass_events": 133,
+      "tested_packages": 14
+    },
+    "go_vet": "PASS",
+    "frontend_node": {
+      "status": "PASS",
+      "tests": 20
+    },
+    "tsc_no_emit": "PASS",
+    "vue_vite_build": "PASS",
+    "linux_amd64_four_commands": "PASS",
+    "windows_amd64_four_commands": "PASS cross-compilation only",
+    "browser_script_syntax": "PASS",
+    "whitespace": "PASS",
+    "local_browser": "BLOCKED: ERR_BLOCKED_BY_ADMINISTRATOR at isolated HTTPS loopback",
+    "revised_remote_browser_CI": "NOT RUN",
+    "native_windows_boot": "NOT RUN",
+    "independent_supervisor_self_update": "NOT IMPLEMENTED",
+    "24h_soak_50_agents": "NOT RUN",
+    "full_v3_acceptance": "NOT RUN",
+    "owner_live_installation": "NOT ACCESSED"
+  },
+  "command_exit_codes": {
+    "go-vet": 0,
+    "dist": 0,
+    "whitespace": 0,
+    "browser-syntax": 0,
+    "frontend": 0,
+    "go-tests": 0
+  }
+}

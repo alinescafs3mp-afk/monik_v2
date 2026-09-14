@@ -1,28 +1,28 @@
-# Acceptance ledger: audited source
+# Acceptance ledger: cumulative source audit 3
 
-Base reviewed: `2515a91b34d3cbbd1b4a68f74513b5462c53145c`, 2026-09-13. This ledger does not carry forward unverified deployment/UI claims from the first source revision.
+Session date: 2026-09-14. Source baseline `2f63c0b59498beb9436c092554cfef10e1942489`; prior audit 2 imported and retained. Integration commit on owner main; LAN deploy follows the commit. Native Windows SCM and 24h soak remain NOT RUN.
 
-| Check | Result | Evidence/scope |
+| Check | Result | Evidence / limits |
 |---|---|---|
-| Go tests with race detector | PASS | 55 top-level tests / 73 test and subtest pass events in 12 packages; `go test -race -count=1 -json ./...` |
-| Static Go checks | PASS | `go vet ./...` |
-| Frontend request/feedback regressions | PASS | `cd web && npm test`: 9 Node tests |
-| TypeScript | PASS | `tsc --noEmit`; no separate vue-tsc claim |
-| Vue production build | PASS | `npm run build` |
-| Linux amd64 binaries | PASS | all four commands, CGO disabled |
-| Windows amd64 binaries | PASS | all four commands; compile only |
-| Browser script syntax | PASS | Python compile check |
-| Local browser walkthrough | BLOCKED | `ERR_BLOCKED_BY_ADMINISTRATOR` on isolated loopback fixture; visual acceptance NOT RUN |
-| CI browser fixture | PASS | `tests/browser/audit.py` against compiled `tests/fixtures/audit-server`; 7 checks; synthetic loopback, not native-fleet evidence |
-| Native Windows service/reboot | NOT RUN | Compilation is not SCM acceptance |
-| Signed update security and native crash recovery | PARTIAL | Enrolled TUF root, confined activate/rollback and Linux unit tests exist; native Windows crash recovery and 24h soak NOT RUN |
-| Prepared/confirmed rebind with offline agents | PARTIAL | prepare/arm/activate/retire jobs; unprepared activate rejects; native multi-host cutover NOT RUN |
-| Credential rotation overlap | PASS (unit/integration) | Next token persisted first; pending verifier accepted; old hash retired after the new token authenticates |
-| Controller trust stage/retire | PASS (unit/integration) | Extra PEM staged; retiring the last root is rejected |
-| Trial check without controller SSRF | PASS (unit/integration) | Controller does not dial; agent runs one GET/HEAD under local policy; definition not saved |
-| Full-controller backup/restore | NOT ACCEPTED | Database snapshot is not a protected full-controller restore |
-| 24h soak / 50-agent capacity | NOT RUN | No capacity claims |
-| Owner's live server | NOT ACCESSED | Source audit only; no credentials used or deployment changed |
-| Complete v3 acceptance battery | NOT RUN | Mandatory blockers listed in audit report |
+| Go race suite | PASS | 116 top-level tests, 148 test/subtest pass events, 16 tested packages, no failed events |
+| Go vet | PASS | Actual `go vet ./...` |
+| Frontend tests | PASS | 27 Node tests, including 7 new history/refresh/auth-classification cases |
+| TypeScript | PASS | `tsc --noEmit`; not a claim of separate vue-tsc component checking |
+| Production Vue/Vite | PASS | Actual embedded UI build with locked dependencies |
+| Linux amd64 | PASS | All four programs built |
+| Windows amd64 | PASS | All four cross-built; no native SCM/boot execution |
+| Python browser script | PASS | `tests/browser/audit.py` against compiled `tests/fixtures/audit-server`; 10 checks including history export and incident filters |
+| Git whitespace | PASS | Final patch also checked during packaging |
+| Baseline source + imported audit2 tree | MATCH | Reproduced c1ac8f... and 0d15c9... before new changes |
+| New failing regressions before fixes | CONFIRMED | Config revision journal, consumed code on conflict, enrollment proof retry, trailing JSON, same-timestamp spool collision |
+| Enrollment behavior | PASS bounded integration | Local HTTPS test servers; no production endpoint |
+| Historical incident search/export | PASS bounded tests | Real temporary SQLite rows, interval/cursor/limit/access checks; not long-retention/load evidence |
+| Raw queue compatibility | PASS bounded tests | Current worker reads legacy + new format, exact acknowledgement and corrupt-file visibility; native downgrade tests pending |
+| Updated real-browser walkthrough | PASS (synthetic loopback) | Chromium `--no-sandbox`; Problems filters needed `aria-label` so `get_by_label("Состояние")` resolves; not native-fleet evidence |
+| Service-host self-update | NOT IMPLEMENTED | Explicit guard retained; mandatory release feature |
+| Native systemd/SCM power-loss recovery | NOT RUN | Local process tests/cross-builds are not native installation evidence |
+| Long-term aggregates/full protected restore | NOT ACCEPTED | Genuine incomplete features recorded in completion plan |
+| Full v3 battery, fleet capacity, 24h soak | NOT RUN | No release-ready/capacity guarantee |
+| Owner's installation | DEPLOY AFTER COMMIT | Existing `lan-host` is not re-enrolled; advertised URL stays `https://192.168.12.128:8777` |
 
-Machine-readable evidence: `docs/audit/validation-2026-09-13.json`. Browser screenshots/results, when the new CI run completes, are separate GitHub Actions artifacts. Never relabel synthetic fixture outcomes as native-agent evidence.
+Machine-readable evidence: `docs/audit/validation-review3-2026-09-14.json`. Complete logs and cumulative patch reproduction evidence are delivered with the archive. SDK: Go 1.27.0 and Node 22.16.0. Runtime timestamps report September 13 and are preserved as produced; package date follows the session date.

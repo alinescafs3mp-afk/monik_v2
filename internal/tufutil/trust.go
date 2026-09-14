@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/theupdateframework/go-tuf/v2/metadata"
 )
 
@@ -50,11 +51,7 @@ func SaveTrustedRoot(tufDir string, root []byte) error {
 	if err := os.MkdirAll(filepath.Join(tufDir, "trusted"), 0o700); err != nil {
 		return err
 	}
-	tmp := TrustedRootPath(tufDir) + ".tmp"
-	if err := os.WriteFile(tmp, root, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, TrustedRootPath(tufDir))
+	return secure.AtomicWrite(TrustedRootPath(tufDir), root, 0600)
 }
 
 func LoadHighWater(tufDir string) HighWater {
@@ -67,7 +64,7 @@ func LoadHighWater(tufDir string) HighWater {
 	return h
 }
 
-func saveHighWater(tufDir string, h HighWater) error {
+func SaveHighWater(tufDir string, h HighWater) error {
 	if err := os.MkdirAll(filepath.Join(tufDir, "trusted"), 0o700); err != nil {
 		return err
 	}
@@ -75,11 +72,26 @@ func saveHighWater(tufDir string, h HighWater) error {
 	if err != nil {
 		return err
 	}
-	tmp := HighWaterPath(tufDir) + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
+	return secure.AtomicWrite(HighWaterPath(tufDir), b, 0600)
+}
+
+// ReadHighWater refuses corrupt state instead of silently resetting anti-rollback protection.
+func ReadHighWater(tufDir string) (HighWater, error) {
+	var h HighWater
+	b, err := os.ReadFile(HighWaterPath(tufDir))
+	if os.IsNotExist(err) {
+		return h, nil
 	}
-	return os.Rename(tmp, HighWaterPath(tufDir))
+	if err != nil {
+		return h, err
+	}
+	if err := json.Unmarshal(b, &h); err != nil {
+		return h, fmt.Errorf("invalid TUF version journal: %w", err)
+	}
+	if h.Root < 0 || h.Targets < 0 || h.Timestamp < 0 || h.Snapshot < 0 {
+		return h, fmt.Errorf("invalid negative TUF version")
+	}
+	return h, nil
 }
 
 func parseRoot(raw []byte) (*metadata.Metadata[metadata.RootType], error) {
@@ -178,6 +190,12 @@ func VerifyRepo(trustedRoot []byte, repoDir string, hw HighWater, now time.Time)
 	if err := rejectReplay("targets", tg.Signed.Version, hw.Targets); err != nil {
 		return hw, err
 	}
+	if err := verifyMetaLink(ts.Signed.Meta["snapshot.json"], sn.Signed.Version, filepath.Join(repoDir, "snapshot.json")); err != nil {
+		return hw, fmt.Errorf("timestamp/snapshot link: %w", err)
+	}
+	if err := verifyMetaLink(sn.Signed.Meta["targets.json"], tg.Signed.Version, filepath.Join(repoDir, "targets.json")); err != nil {
+		return hw, fmt.Errorf("snapshot/targets link: %w", err)
+	}
 	out := HighWater{
 		Root:      root.Signed.Version,
 		Timestamp: ts.Signed.Version,
@@ -214,4 +232,32 @@ func existingVersion(path string, role string) int64 {
 		}
 	}
 	return 0
+}
+
+func verifyMetaLink(link *metadata.MetaFiles, actualVersion int64, path string) error {
+	if link == nil || link.Version < 1 || link.Version != actualVersion {
+		return fmt.Errorf("referenced metadata version mismatch")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return link.VerifyLengthHashes(b)
+}
+
+// VerifyTarget must be called only after VerifyRepo has authenticated this targets file.
+// The command's digest is a consistency assertion, never the source of trust.
+func VerifyTarget(repoDir, name string, raw []byte) error {
+	if name == "" || strings.Contains(name, "\\") || strings.HasPrefix(name, "/") || strings.Contains(name, "..") {
+		return fmt.Errorf("invalid target path")
+	}
+	tg := metadata.Targets()
+	if _, err := tg.FromFile(filepath.Join(repoDir, "targets.json")); err != nil {
+		return err
+	}
+	info, ok := tg.Signed.Targets[name]
+	if !ok || info == nil {
+		return fmt.Errorf("artifact is not in authenticated targets metadata")
+	}
+	return info.VerifyLengthHashes(raw)
 }

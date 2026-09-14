@@ -47,7 +47,7 @@ func TestActivateVerifiedWorkerPassesProbation(t *testing.T) {
 		t.Fatal(err)
 	}
 	incoming := filepath.Join(dir, "incoming")
-	next := "#!/bin/sh\nexec sleep 30\n"
+	next := "#!/bin/sh\n# candidate version\nexec sleep 30\n"
 	if err := os.WriteFile(incoming, []byte(next), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -76,5 +76,35 @@ func TestActivateVerifiedWorkerPassesProbation(t *testing.T) {
 	b, _ := os.ReadFile(worker)
 	if string(b) != next {
 		t.Fatal("verified worker was not installed")
+	}
+}
+
+func TestReviewBrokenCandidateRestoresPreviousWorker(t *testing.T) {
+	dir := t.TempDir()
+	worker := filepath.Join(dir, "worker")
+	prior := []byte("#!/bin/sh\nexec sleep 30\n")
+	_ = os.WriteFile(worker, prior, 0755)
+	incoming := filepath.Join(dir, "candidate")
+	_ = os.WriteFile(incoming, []byte("#!/bin/sh\nexit 1\n"), 0755)
+	sum, _ := update.SHA256File(incoming)
+	h := &Host{WorkerBin: worker, StateDir: dir, Probation: 50 * time.Millisecond}
+	if e := h.startWorker(); e != nil {
+		t.Fatal(e)
+	}
+	defer h.stopWorker()
+	reply := h.activateUpdate(map[string]string{"path": incoming, "sha256": sum, "component": "worker"})
+	if reply.OK || reply.Stage != string(update.StageRollback) {
+		t.Fatalf("%+v", reply)
+	}
+	b, _ := os.ReadFile(worker)
+	if string(b) != string(prior) {
+		t.Fatal("previous worker not restored")
+	}
+}
+func TestReviewServiceHostCannotPretendSelfUpdate(t *testing.T) {
+	h := &Host{StateDir: t.TempDir()}
+	r := h.activateUpdate(map[string]string{"component": "service_host", "path": "candidate", "sha256": "digest"})
+	if r.OK || r.Stage != "unsupported_component" {
+		t.Fatalf("%+v", r)
 	}
 }
