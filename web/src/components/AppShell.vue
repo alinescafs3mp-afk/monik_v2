@@ -77,7 +77,7 @@ function connectSSE() {
     conn.value = "paused";
     setStream("paused");
   };
-  for (const type of ["metrics","discovery","agent","incident","operation","resnapshot"]) es.addEventListener(type,()=>window.dispatchEvent(new Event("monik:refresh")));
+  for (const type of ["metrics","discovery","agent","incident","operation","enrollment","resnapshot"]) es.addEventListener(type,()=>window.dispatchEvent(new Event("monik:refresh")));
   es.addEventListener("operation", () => {
     void refreshOps();
   });
@@ -106,10 +106,6 @@ onUnmounted(() => {
     <nav id="main-nav" class="nav" aria-label="Основная навигация">
       <h1><span aria-hidden="true">M</span><span class="nav-label">onik</span></h1>
       <p class="muted nav-label">{{ tz }}</p>
-      <p class="badge" :title="conn === 'live' ? 'Живые обновления' : 'Живые обновления приостановлены'">
-        <span class="dot" :class="conn === 'live' ? 'ok' : 'warn'" />
-        <span class="nav-label">{{ conn === 'live' ? 'Живые обновления' : 'Живые обновления приостановлены' }}</span>
-      </p>
       <div v-for="g in groups" :key="g.title" class="nav-group">
         <p class="muted nav-label">{{ g.title }}</p>
         <router-link v-for="i in g.items" :key="i.to" :to="i.to" :title="i.label" :aria-label="i.label"><NavIcon :name="i.icon"/><span class="nav-label">{{ i.label }}</span></router-link>
@@ -119,12 +115,13 @@ onUnmounted(() => {
     <div class="shell-content">
       <header class="bar app-topbar">
         <button id="sidebar-toggle" type="button" class="sidebar-toggle" :aria-expanded="isMobile ? mobileOpen : !collapsed" aria-controls="main-nav" :aria-label="(isMobile ? !mobileOpen : collapsed) ? 'Развернуть меню' : 'Свернуть меню'" title="Развернуть или свернуть меню" @click="toggleSidebar"><NavIcon name="menu"/><span class="sr">Меню</span></button>
-        <strong>{{ (route.meta.title as string) || "Monik" }}</strong>
+        <strong class="page-title">{{ (route.meta.title as string) || "Monik" }}</strong>
+        <router-link class="header-operations" to="/operations">Операции {{ running }}/{{ attn < 0 ? '?' : attn }}</router-link>
         <form class="global-search" @submit.prevent="$router.push({ path:'/machines', query:{ q } })"><input v-model="q" type="search" placeholder="Поиск машины" aria-label="Глобальный поиск"/></form>
-        <router-link to="/operations">Операции {{ running }}/{{ attn < 0 ? '?' : attn }}</router-link>
-        <span class="muted">{{ (me && (me.username as string)) || "" }}</span>
+        <span class="header-user muted">{{ (me && (me.username as string)) || "" }}</span>
         <button type="button" @click="$emit('logout')">Выйти</button>
       </header>
+      <p v-if="conn === 'paused'" class="connection-warning" role="status">Обновления приостановлены: восстанавливаем соединение с сервером. Данные могут быть устаревшими.</p>
       <p v-if="preferenceNotice" class="muted preference-notice" role="status">{{ preferenceNotice }}</p>
       <main id="main-content" class="main" tabindex="-1"><slot /></main>
     </div>

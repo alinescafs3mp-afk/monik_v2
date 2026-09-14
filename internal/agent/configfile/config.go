@@ -12,20 +12,21 @@ import (
 )
 
 type File struct {
-	SchemaVersion      int    `json:"schema_version"`
-	AgentID            string `json:"agent_id"`
-	DisplayName        string `json:"display_name"`
-	ControllerURL      string `json:"controller_url"`
-	ControllerID       string `json:"controller_id"`
-	CACertPEM          string `json:"ca_cert_pem"`
-	CredentialPath     string `json:"credential_path"`
-	StateDir           string `json:"state_dir"`
-	EndpointGeneration int64  `json:"endpoint_generation"`
-	AppliedRevision    int64  `json:"applied_revision"`
-	AppliedHash        string `json:"applied_hash"`
-	UpdateRootPath     string `json:"update_root_path,omitempty"`
-	Managed            bool   `json:"managed"`
-	BootstrapURL       string `json:"bootstrap_url"`
+	PendingRegistration bool   `json:"pending_registration,omitempty"`
+	SchemaVersion       int    `json:"schema_version"`
+	AgentID             string `json:"agent_id"`
+	DisplayName         string `json:"display_name"`
+	ControllerURL       string `json:"controller_url"`
+	ControllerID        string `json:"controller_id"`
+	CACertPEM           string `json:"ca_cert_pem"`
+	CredentialPath      string `json:"credential_path"`
+	StateDir            string `json:"state_dir"`
+	EndpointGeneration  int64  `json:"endpoint_generation"`
+	AppliedRevision     int64  `json:"applied_revision"`
+	AppliedHash         string `json:"applied_hash"`
+	UpdateRootPath      string `json:"update_root_path,omitempty"`
+	Managed             bool   `json:"managed"`
+	BootstrapURL        string `json:"bootstrap_url"`
 }
 
 type State struct {

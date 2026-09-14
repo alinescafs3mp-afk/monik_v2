@@ -1,0 +1,16 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import ts from 'typescript';
+const source=await readFile(new URL('../src/serviceGroups.ts',import.meta.url),'utf8');
+const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+const {groupServices}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+test('service groups use stable identity not duplicate display names',()=>{const gs=groupServices([{id:'a',agent_id:'1'},{id:'b',agent_id:'2'}],[{id:'1',display_name:'Server'},{id:'2',display_name:'Server'}]);assert.equal(gs.length,2);assert.equal(gs[0].services.length,1);assert.equal(gs[1].services.length,1);});
+test('service filter finds whole machine by name and individual response',()=>{const services=[{id:'a',agent_id:'1',summary:'HTTP 503'},{id:'b',agent_id:'1',summary:'HTTP 200'}];const agents=[{id:'1',display_name:'Node'}];assert.equal(groupServices(services,agents,'node')[0].services.length,2);assert.equal(groupServices(services,agents,'503')[0].services[0].id,'a');assert.equal(groupServices(services,agents,'missing').length,0);});
+test('orphan metadata never drops a service while inventories reconcile',()=>{const result=groupServices([{id:'a',agent_id:'unknown',agent_state:'stale'}],[]);assert.equal(result.length,1);assert.equal(result[0].name,'unknown');assert.equal(result[0].state,'stale');});
+test('groups never mutate original inventory or mix pinning with monitoring',()=>{const s=[{id:'s',agent_id:'a',pinned:false}];const copy=JSON.stringify(s);assert.equal(groupServices(s,[{id:'a',pinned:false}]).length,1);assert.equal(JSON.stringify(s),copy);});
+// Source contract checks complement, but do not replace, actual browser tests.
+test('configure action in machine uses explicit event instead of same-route-only link',async()=>{const s=await readFile(new URL('../src/pages/Machine.vue',import.meta.url),'utf8');assert.ok(s.includes('@configure="configureService"'));assert.ok(s.includes('focusEditor()'));assert.ok(s.includes('Promise.allSettled'));});
+test('editor exposes repeated open and accessible focus target',async()=>{const s=await readFile(new URL('../src/components/CheckEditor.vue',import.meta.url),'utf8');assert.ok(s.includes('defineExpose({openService,focusEditor})'));assert.ok(s.includes('id="check-editor"'));assert.ok(s.includes('<h3 tabindex="-1">'));});
+test('header places title and operations before user/logout with no always-live badge',async()=>{const s=await readFile(new URL('../src/components/AppShell.vue',import.meta.url),'utf8');const template=s.slice(s.indexOf('<template>'));assert.ok(template.indexOf('page-title')<template.indexOf('header-operations'));assert.ok(template.indexOf('header-operations')<template.indexOf('header-user'));assert.ok(!template.includes('Живые обновления'));assert.ok(template.includes('connection-warning'));});
+test('overview uses unread count while retaining real health',async()=>{const s=await readFile(new URL('../src/pages/Overview.vue',import.meta.url),'utf8');assert.ok(s.includes('unread_incidents'));assert.ok(s.includes('c.has_problem'));assert.ok(!s.includes('Весь парк:'));});

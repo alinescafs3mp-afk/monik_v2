@@ -1,3 +1,20 @@
+# Audit5 update: first-contact and everyday usability
+
+Date: 2026-09-14. Baseline 37dc234. This section supersedes earlier claims that owner renaming, grouped services, visible request-editor opening and owner-approved candidate announcements are wholly absent. Their bounded implementation now exists. It does not erase any existing release blocker.
+
+## Next most useful work, in order
+
+1. **Finish the native installer before mass deployment.** Linux must actually create/validate the dedicated service identity and assign only the protected Monik state to it. Windows must enforce the intended identity and ACLs rather than ignore a LocalService option. Never recurse through unrelated directories/symlinks or make every credential world-readable. Prove that `setup -> install -> reboot -> pending signal -> approval -> metrics` works without login. A waiting loop in a foreground binary is not this native evidence.
+2. **Make public registration operator-controlled.** Add a bounded acceptance window or explicit mode switch and destination/network policy, queue saturation visibility, archived rejection handling, and NAT-aware quotas. Keep approval tied to the full local proof. Never introduce a single permanent shared fleet secret or implicit approval by hostname. Provide pending/offline/rejected/first-report status and explain differences.
+3. **Add a deploy-readiness panel.** Separate foreground tested, installed, account/paths writable, managed service running, controller trusted, update trust enrolled, independent recovery proven. Show exact component versions and last real report. A single green "installed" field must not cover untested boot/recovery.
+4. **Improve reversible presentation controls.** Add bulk overview pinning with target preview, per-user saved group expansion, unread-only Problems filter matching Overview, and an explicit unacknowledge action as a new audit event if needed. Never erase original acknowledgement history or redefine a failed service as healthy.
+5. **Support safe metadata changes.** Name-value CAS exists; add monotonic metadata revision for stronger cross-tab conflicts, searchable former names and scoped notes/tags if required. Preserve stable IDs and historical identity. Do not turn rename into remote OS hostname changes.
+6. **Prove the editor journey visually.** Test direct and repeated links, history request failure, long service lists, dirty draft switch/cancel, keyboard focus and narrow displays. A source assertion that a ref exists is not a passed click in a browser.
+
+**Still P0:** independently recoverable service-host replacement, immutable signed releases and queued-byte identity, genuine cohort/batch pause/resume, protected full-controller backup/restore with newer-agent reconciliation and single-writer cutover. **Still P1 before general release:** long-term measured history, effective custom rules/maintenance, secret availability after offline restart, complete per-check trust, performance/load and native acceptance. The previous roadmap is retained below; read it through the actual implemented subset above.
+
+---
+
 # Monik release completion plan after audit 4
 
 Date: 2026-09-14. This section supersedes earlier statements that custom request editing, per-check intervals, typed response expectations or local health suggestions are wholly absent. Those bounded features are implemented in Audit 4. The following roadmap items are **not** newly implemented by mentioning them.

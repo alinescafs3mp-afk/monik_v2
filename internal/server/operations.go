@@ -231,6 +231,17 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 			return err
 		}
 		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit", "saved", "", false, nil)
+	case "enrollment.approve", "enrollment.reject":
+		if s.Role != "owner" {
+			return fmt.Errorf("owner approval required")
+		}
+		id, _ := req.Params["agent_id"].(string)
+		fp, _ := req.Params["fingerprint"].(string)
+		if err := a.Store.DecideCandidate(id, fp, s.Username, req.Action == "enrollment.approve"); err != nil {
+			return err
+		}
+		_ = a.Store.AppendEvent("agent", "agent", id, 0, map[string]any{"event": req.Action})
+		return a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_decision", "Registration decision saved; fresh agent telemetry is still required", "", false, map[string]any{"agent_id": id})
 	case "incident.acknowledge":
 		id, _ := req.Params["incident_id"].(string)
 		if err := a.Store.AckIncident(id, s.Username); err != nil {
@@ -316,7 +327,11 @@ func (a *App) applyPreference(req protocol.SubmitOperation) error {
 	case "agent.rename":
 		id, _ := req.Params["agent_id"].(string)
 		name, _ := req.Params["display_name"].(string)
-		return a.Store.UpdateAgentFlags(id, map[string]any{"display_name": name})
+		var expected *string
+		if old, ok := req.Params["expected_name"].(string); ok {
+			expected = &old
+		}
+		return a.Store.RenameAgent(id, name, expected)
 	case "agent.pin":
 		id, _ := req.Params["agent_id"].(string)
 		pinned, ok := req.Params["pinned"].(bool)

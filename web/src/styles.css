@@ -207,3 +207,30 @@ h2 { margin: .25rem 0 .6rem; } h3 { margin: 0; } h4 { margin: 1rem 0 .4rem; }
 .overview-selection { min-width: 135px; max-width: 210px; }
 .overview-selection input { width: 1.1rem; height: 1.1rem; }
 .overview-selection small { display: block; margin-top: .3rem; }
+
+/* Audit 5: compact, left-aligned header and owner-requested overview layout. */
+.app-topbar { justify-content: flex-start; }
+.app-topbar .page-title { margin-right: .6rem; }
+.header-operations { white-space: nowrap; }
+.app-topbar .header-user { margin-left: auto; overflow-wrap: anywhere; }
+.overview-counts { justify-content: flex-start; gap: 1.5rem; }
+.host-ident .card-main { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; }
+.host-ident .card-main h3 { margin: 0; display: block; }
+.host-ident .card-main small { display: block; }
+.connection-warning { padding: .7rem 1.2rem; color: var(--warn); border-left: 3px solid var(--warn); }
+.service-groups { display: grid; gap: .65rem; }
+.service-group { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); overflow: hidden; }
+.service-group-header { width: 100%; border: 0; border-radius: 0; display: flex; align-items: center; text-align: left; gap: .8rem; padding: .85rem; }
+.service-group-header .group-machine { display:flex; flex-direction:column; min-width:0; flex:1; }
+.service-group-header strong { overflow-wrap:anywhere; }
+.service-group-body { padding: .5rem .85rem; }
+.service-group-body td { overflow-wrap:anywhere; }
+.service-group-body td:nth-child(1) { min-width:120px; }
+.inline-rename { margin-top:.35rem; }
+.inline-rename form { display:flex; flex-wrap:wrap; gap:.3rem; max-width:26rem; }
+.inline-rename input { width:100%; }
+.inline-rename small { display:block; margin-top:.25rem; }
+.pending-agents { border-color:var(--warn); }
+.pending-agent { padding: .8rem 0; border-top:1px solid var(--line); }
+.pending-agent code { overflow-wrap:anywhere; }
+@media(max-width:600px) { .app-topbar .page-title { margin-right:0; } .app-topbar .header-user { font-size:.8rem; } .overview-counts { gap:.7rem; } .service-group-header { flex-wrap:wrap; } }

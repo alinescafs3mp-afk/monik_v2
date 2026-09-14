@@ -22,6 +22,8 @@ type Def struct {
 }
 
 var Registry = map[string]Def{
+	"enrollment.approve":       {ID: "enrollment.approve", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_owner_approval"},
+	"enrollment.reject":        {ID: "enrollment.reject", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_owner_rejection"},
 	"preference.save":          {ID: "preference.save", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 	"profile.apply":            {ID: "profile.apply", Scope: ScopeAgents, Risk: "config", RequiresCapability: "monitoring_configuration", DurableOperation: true, IdempotencyRequired: true, AuthoritativeCompletion: "applied_revision_hash"},
 	"rule.save":                {ID: "rule.save", Scope: ScopeServer, Risk: "config", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit_effective_rule"},

@@ -55,6 +55,8 @@ func (a *App) routes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/v1/agent/identity", a.handleControllerIdentity)
 	mux.HandleFunc("POST /api/v1/agent/enroll", a.handleEnroll)
+	mux.HandleFunc("POST /api/v1/agent/announce", a.handleAnnounce)
+	mux.HandleFunc("GET /api/v1/enrollment/pending", a.needAuth(a.handlePendingAgents))
 	mux.HandleFunc("POST /api/v1/agent/report", a.handleReport)
 	mux.HandleFunc("GET /api/v1/agent/tuf/{name}", a.handleTUF)
 	mux.HandleFunc("GET /api/v1/agent/artifacts/{name...}", a.handleArtifact)
@@ -209,6 +211,12 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 			attention++
 		}
 	}
+	unread := 0
+	for _, inc := range incs {
+		if inc["acked_at"] == "" {
+			unread++
+		}
+	}
 	reporting, total := 0, 0
 	cards := make([]map[string]any, 0, len(agents))
 	for _, ag := range agents {
@@ -259,7 +267,7 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 		card["services"] = services
 		cards = append(cards, card)
 	}
-	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
+	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "unread_incidents": unread, "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
 }
 
 func display(ag *storage.AgentRow) string {

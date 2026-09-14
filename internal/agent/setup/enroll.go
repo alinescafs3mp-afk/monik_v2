@@ -29,6 +29,9 @@ type enrollmentIntent struct {
 }
 
 func Enroll(p *Profile) (*configfile.State, error) {
+	if p != nil && p.AutoDiscover {
+		return PrepareDiscovery(p)
+	}
 	if p == nil {
 		return nil, fmt.Errorf("enrollment profile required")
 	}
@@ -48,6 +51,11 @@ func Enroll(p *Profile) (*configfile.State, error) {
 	if err := os.MkdirAll(p.StateDir, 0700); err != nil {
 		return nil, err
 	}
+	unlock, err := acquireSetupLock(filepath.Join(p.StateDir, "setup.lock"))
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	configPath := p.ConfigPath
 	if configPath == "" {
 		configPath = filepath.Join(p.StateDir, "agent.json")
@@ -55,6 +63,11 @@ func Enroll(p *Profile) (*configfile.State, error) {
 	// Re-running setup must not overwrite a working enrollment or reset its URL.
 	if _, err := os.Stat(configPath); err == nil {
 		return nil, fmt.Errorf("agent configuration already exists; use the existing enrollment or explicit recovery")
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if _, err := os.Stat(filepath.Join(p.StateDir, "discovery.credential")); err == nil {
+		return nil, fmt.Errorf("state directory already belongs to automatic registration; use its existing configuration or explicit recovery")
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}

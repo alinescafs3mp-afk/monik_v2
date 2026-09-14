@@ -24,8 +24,8 @@ async function pin(c: any) {
 </script>
 <template>
   <div class="overview">
-    <header class="bar"><div><h2>Состояние машин</h2><p class="muted">Выбранные машины в строках. Нажмите на машину, чтобы открыть графики и подробности.</p></div><button :disabled="refreshing" @click="refresh">{{ refreshing ? 'Обновляем…' : 'Обновить' }}</button></header>
-    <div class="bar overview-counts"><span>Весь парк: на связи <b>{{ data?.agents_reporting ?? '…' }}/{{ data?.agents_total ?? '…' }}</b></span><span>Сервисов <b>{{ data?.services ?? '…' }}</b></span><router-link to="/problems">Инцидентов {{ data?.open_incidents ?? '…' }}</router-link><router-link to="/operations">Требуют внимания {{ data?.operations_attention ?? '…' }}</router-link></div>
+    <header class="bar"><div><h2>Состояние машин</h2></div><button :disabled="refreshing" @click="refresh">{{ refreshing ? 'Обновляем…' : 'Обновить' }}</button></header>
+    <div class="bar overview-counts"><span>На связи <b>{{ data?.agents_reporting ?? '…' }}/{{ data?.agents_total ?? '…' }}</b></span><span>Сервисов <b>{{ data?.services ?? '…' }}</b></span><router-link to="/problems" title="Открытые непрочитанные инциденты; прочитанные остаются в истории">Инцидентов {{ data?.unread_incidents ?? '…' }}</router-link><router-link to="/operations">Требуют внимания {{ data?.operations_attention ?? '…' }}</router-link></div>
     <div class="bar overview-tools"><div class="row"><input v-model="query" type="search" placeholder="Машина, сервис или HTTP-код" aria-label="Поиск в обзоре"/><label><input v-model="problemsOnly" type="checkbox"/> Только проблемы</label><router-link to="/machines">Выбрать машины для обзора</router-link></div><div class="row" role="group" aria-label="Вид обзора"><button :aria-pressed="layout==='rows'" @click="chooseLayout('rows')">Строки</button><button :aria-pressed="layout==='cards'" @click="chooseLayout('cards')">Карточки</button></div></div>
     <p v-if="error" role="alert" class="panel err">{{ error }}. Показанные ранее данные могут быть устаревшими.</p>
     <div v-if="loading" class="skeleton" aria-label="Загрузка машин"/>

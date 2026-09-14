@@ -10,9 +10,11 @@ import (
 	goruntime "runtime"
 	"syscall"
 
+	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	agruntime "github.com/alinescafs3mp-afk/monik_v2/internal/agent/runtime"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/setup"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/install"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/servicehost"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/version"
 )
@@ -84,7 +86,11 @@ func cmdSetup(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Printf("enrolled agent_id=%s controller=%s config=%s\n", st.File.AgentID, st.File.ControllerURL, filepath.Join(st.File.StateDir, "agent.json"))
+	if st.File.PendingRegistration {
+		cred, _ := configfile.ReadCredential(st.File.CredentialPath)
+		fmt.Printf("discovery configured; owner approval required. fingerprint=%s\n", protocol.RegistrationFingerprint(st.File.AgentID, cred))
+	}
+	fmt.Printf("configured agent_id=%s controller=%s config=%s\n", st.File.AgentID, st.File.ControllerURL, filepath.Join(st.File.StateDir, "agent.json"))
 	fmt.Println("foreground mode is unmanaged: remote update/restart unavailable until `monik-agent service install`")
 	return 0
 }
@@ -93,13 +99,20 @@ func cmdRun(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	cfg := fs.String("config", setup.DefaultConfigPath(), "absolute config path")
 	_ = fs.Parse(args)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := setup.WaitForApproval(ctx, *cfg, os.Stdout); err != nil {
+		if ctx.Err() != nil {
+			return 0
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	ag, err := agruntime.Open(*cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	fmt.Printf("monik-agent %s session=%s controller=%s\n", version.Version, ag.Session, ag.State.File.ControllerURL)
 	if err := ag.Run(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -200,6 +213,15 @@ func cmdDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	cfg := fs.String("config", setup.DefaultConfigPath(), "config")
 	_ = fs.Parse(args)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := setup.WaitForApproval(ctx, *cfg, os.Stdout); err != nil {
+		if ctx.Err() != nil {
+			return 0
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	ag, err := agruntime.Open(*cfg)
 	if err != nil {
 		fmt.Println("config:", err)
@@ -232,6 +254,15 @@ func cmdController(args []string) int {
 	}
 	switch args[0] {
 	case "show":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := setup.WaitForApproval(ctx, *cfg, os.Stdout); err != nil {
+			if ctx.Err() != nil {
+				return 0
+			}
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 		ag, err := agruntime.Open(*cfg)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)

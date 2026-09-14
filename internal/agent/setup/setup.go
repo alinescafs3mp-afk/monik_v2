@@ -16,6 +16,7 @@ import (
 )
 
 type Profile struct {
+	AutoDiscover   bool   `json:"auto_discover" yaml:"auto_discover"`
 	ControllerURL  string `json:"controller_url" yaml:"controller_url"`
 	CACertPEM      string `json:"ca_cert_pem" yaml:"ca_cert_pem"`
 	EnrollmentCode string `json:"enrollment_code" yaml:"enrollment_code"`

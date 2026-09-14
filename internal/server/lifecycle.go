@@ -15,6 +15,31 @@ import (
 
 func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 	switch req.Action {
+	case "agent.rename":
+		id, idOK := req.Params["agent_id"].(string)
+		name, nameOK := req.Params["display_name"].(string)
+		if !idOK || id == "" || !nameOK || len(strings.TrimSpace(name)) == 0 || len(name) > 255 {
+			return fmt.Errorf("agent_id and a nonempty display_name up to 255 bytes required")
+		}
+		for _, ch := range name {
+			if ch < 32 || ch == 127 {
+				return fmt.Errorf("machine name cannot contain control characters")
+			}
+		}
+		if old, exists := req.Params["expected_name"]; exists {
+			if _, ok := old.(string); !ok {
+				return fmt.Errorf("expected_name must be a string")
+			}
+		}
+		req.Params["display_name"] = strings.TrimSpace(name)
+		return nil
+	case "enrollment.approve", "enrollment.reject":
+		id, _ := req.Params["agent_id"].(string)
+		fp, _ := req.Params["fingerprint"].(string)
+		if id == "" || len(id) > 128 || len(fp) != 64 {
+			return fmt.Errorf("agent_id and full registration fingerprint required")
+		}
+		return nil
 	case "check.apply":
 		for key := range req.Params {
 			if key != "check" && key != "base_revision" {

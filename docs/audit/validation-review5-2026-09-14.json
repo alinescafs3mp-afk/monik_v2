@@ -1,0 +1,33 @@
+{
+  "baseline_commit": "37dc23405606b24a82a629533311c19dae577a2a",
+  "baseline_tree": "a3e00db6ddefa2fb2c2751e022d6a1cd1b2be7a9",
+  "scope": "source + bounded local tests; no production",
+  "go": {
+    "version": "1.27.0",
+    "top_level_tests": 158,
+    "pass_events": 216,
+    "tested_packages": 18,
+    "race": "PASS",
+    "vet": "PASS"
+  },
+  "node": {
+    "version": "22.16.0",
+    "tests": 47,
+    "result": "PASS"
+  },
+  "tsc": "PASS (not vue-tsc)",
+  "ui_build": "PASS",
+  "linux_amd64": "4 command builds PASS, native service NOT RUN",
+  "windows_amd64": "4 cross-builds PASS, native service NOT RUN",
+  "before_fix_regressions": 2,
+  "browser": {
+    "syntax": "PASS",
+    "execution": "PASS on integrating host",
+    "passed_scenarios": 14,
+    "auditor_error": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "host_notes": "wait for history-backed charts after inventory-first publish; header layout asserted"
+  },
+  "native_boot_recovery": "NOT RUN",
+  "full_v3_capacity_soak": "NOT RUN",
+  "signed_production_artifacts": "NOT SUPPLIED"
+}

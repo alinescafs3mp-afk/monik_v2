@@ -466,7 +466,7 @@ func (s *Store) OpenIncidents() ([]map[string]any, error) {
 }
 
 func (s *Store) AckIncident(id, actor string) error {
-	result, err := s.db().Exec(`UPDATE incidents SET acked_at=?, acked_by=? WHERE id=?`, s.now().UTC().Format(dbTimeFormat), actor, id)
+	result, err := s.db().Exec(`UPDATE incidents SET acked_at=COALESCE(acked_at,?), acked_by=COALESCE(acked_by,?) WHERE id=?`, s.now().UTC().Format(dbTimeFormat), actor, id)
 	if err != nil {
 		return err
 	}

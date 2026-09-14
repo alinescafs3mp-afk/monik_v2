@@ -1,20 +1,17 @@
-# Monik implementation status: Audit 4 source
+# Monik implementation status: Audit5 source
 
-Baseline `4f85de31f837dbdfeb77e9f562726de5f00b9d28`, 2026-09-14. **PRE-RELEASE**. Read `docs/AUDIT_REVIEW_4_2026-09-14.md` and `docs/GROK_AUDIT4_HANDOFF.md`. Historical audit documents describe earlier source only. This source has not been deployed/pushed by the audit.
+Reviewed base `37dc23405606b24a82a629533311c19dae577a2a`. **PRE-RELEASE.** Code and bounded tests are not native fleet acceptance. See `docs/AUDIT_REVIEW_5_2026-09-14.md`, `docs/AUTO_ENROLLMENT_RU.md`, and `docs/RELEASE_COMPLETION_PLAN.md`.
 
-| Area | Current status |
+| Area | Current state |
 |---|---|
-| Dashboard/history | Prior dense rows, pins, collapse, labeled axes, six ranges, incident search and bounded JSON export retained |
-| Custom checks | Typed HTTP(S) definition editor, GET/HEAD/OPTIONS and consented POST, bounded body/headers/secrets, expectations and per-check interval/timeout implemented |
-| Compatibility | Request v1 capability checked before custom operations; legacy empty additions preserve config hashes; explicit downgrade limits |
-| Trial | Durable bounded async agent-local execution, result feedback and interruption handling; no saved definition or automatic repeat |
-| Auto-advice | Finite local GET candidates, explicit health vocabulary, adverse readiness priority, catch-all control, retained evidence, no existing-check rewrite |
-| Crypto/storage | Corrupt/missing keys fail closed, malformed crypto inputs return errors, SQLite FULL configured; native disk/power-loss evidence absent |
-| Worker update | Probation race corrected and repeated unit test passed; complete immutable release/batch/native recovery still open |
-| Service-host update | Not implemented safely; explicit rejection retained; mandatory release blocker |
-| Rebind/restore | Prior bounded rebind retained; native disconnected-time/cancel/retire/full-controller restore acceptance incomplete |
-| Rules/maintenance/retry/resume | Corresponding existing fail-closed guards remain. Do not claim these product requirements finished |
-| Long history/fleet | Long-term aggregate retention, full rule/vantage history and measured fleet capacity remain incomplete |
-| Visual/native validation | Synthetic browser fixture PASS 11/11 after integration; native Windows/systemd boot, 24h soak and full v3 battery NOT RUN |
+| Overview/header | Requested alignment/noise removal, platform under name and unread-only incident count implemented; health/pins unchanged |
+| Services/editor | Machine-group disclosures, search, explicit selected-editor opening/scroll/focus, history-error isolation; synthetic browser 14/14 PASS on this host |
+| Rename | UI, API validation/name-value CAS, stored label survives telemetry; bounded tests pass |
+| Agent arrival | Trusted profile and quarantined outbound worker loop; owner-only recent-auth approve/reject; real local HTTPS test passes |
+| Native installation | Existing installer account/ownership/ACL gaps remain; new beacons require an actually running service or foreground process |
+| Previous features | Audit4 custom checks, periodic scheduler, structured response advice, history/axes/export/operations retained |
+| Updated verification | 158 top-level Go tests, 216 pass events, 18 packages; 47 Node tests; vet/tsc/UI and Linux/Windows builds pass |
+| Visual/native scope | Synthetic browser 14/14 PASS on this host; Windows cross-build not SCM evidence; systemd/SCM boot/recovery and full fleet NOT RUN |
+| Mandatory unresolved | Independent service-host update recovery, immutable releases/cohorts, full protected restore, long aggregates, effective rules/maintenance |
 
-Production URLs/identity are unchanged. Initial fallback default is configuration only, never a reason to rebind an existing machine. No Telegram, remote shell, host reboot or app/container remediation introduced.
+Do not reset the actual deployment URL or re-enroll current machines. Server first for new announcement routes, then compatible agent. Pending agents cannot be downgraded to a worker unaware of quarantine. Telegram, remote shell and host reboot remain out of scope. Publishing this source is not production deployment.

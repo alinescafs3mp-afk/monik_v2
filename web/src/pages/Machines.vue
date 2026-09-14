@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router';
 import { usePolling } from '../composables/usePolling';
 import { get, submitOp } from '../api';
 import { stateLabel } from '../format';
+import MachineNameEditor from '../components/MachineNameEditor.vue';
+import PendingAgents from '../components/PendingAgents.vue';
 const emit=defineEmits<{toast:[string,string?]}>();
 const route=useRoute();
 type Machine={id:string;display_name:string;os:string;arch:string;state:string;reason:string;worker_version:string;managed_ready:boolean;last_live_at?:string;pinned:boolean;archived:boolean};
@@ -31,6 +33,7 @@ async function pin(row:Machine,event:Event){
 </script>
 <template>
   <section>
+    <PendingAgents @changed="refresh"/>
     <p class="panel">Отметьте <strong>«Показывать в обзоре»</strong> у нужных машин. Выбор сохраняется на сервере и действует во всех браузерах. Снятие галочки не останавливает мониторинг.</p>
     <p v-if="error" class="panel err" role="alert">{{ error }} <button @click="refresh">Повторить чтение</button></p>
     <p v-if="loading" role="status">Загружаем машины…</p>
@@ -38,7 +41,7 @@ async function pin(row:Machine,event:Event){
     <p v-else-if="!filtered.length && !error" class="panel">Нет машин, соответствующих поиску.</p>
     <div v-if="rows.length" class="table-wrap">
       <table class="machines-table"><thead><tr><th scope="col">Показывать в обзоре</th><th scope="col">Имя</th><th scope="col">ОС</th><th scope="col">Состояние</th><th scope="col">Версия</th><th scope="col">Управляемый</th><th scope="col">Последний live</th></tr></thead>
-        <tbody><tr v-for="r in filtered" :key="r.id"><td class="overview-selection"><input type="checkbox" :checked="r.pinned" :disabled="pending.includes(r.id)||r.archived" :aria-label="`Показывать в обзоре: ${r.display_name}`" @change="pin(r,$event)"/><small v-if="feedback[r.id]" role="status">{{ feedback[r.id] }}</small><small v-if="r.archived">Машина в архиве</small></td><td><router-link :to="'/machines/'+encodeURIComponent(r.id)">{{ r.display_name }}</router-link></td><td>{{ r.os }}/{{ r.arch }}</td><td><span class="dot" :class="r.state"/> {{ stateLabel(r.state) }} <small class="muted">{{ r.reason }}</small></td><td>{{ r.worker_version }}</td><td>{{ r.managed_ready?'да':'нет' }}</td><td>{{ r.last_live_at?new Date(r.last_live_at).toLocaleString():'Нет данных' }}</td></tr></tbody>
+        <tbody><tr v-for="r in filtered" :key="r.id"><td class="overview-selection"><input type="checkbox" :checked="r.pinned" :disabled="pending.includes(r.id)||r.archived" :aria-label="`Показывать в обзоре: ${r.display_name}`" @change="pin(r,$event)"/><small v-if="feedback[r.id]" role="status">{{ feedback[r.id] }}</small><small v-if="r.archived">Машина в архиве</small></td><td><router-link :to="'/machines/'+encodeURIComponent(r.id)">{{ r.display_name }}</router-link><MachineNameEditor :id="r.id" :name="r.display_name" @saved="refresh"/></td><td>{{ r.os }}/{{ r.arch }}</td><td><span class="dot" :class="r.state"/> {{ stateLabel(r.state) }} <small class="muted">{{ r.reason }}</small></td><td>{{ r.worker_version }}</td><td>{{ r.managed_ready?'да':'нет' }}</td><td>{{ r.last_live_at?new Date(r.last_live_at).toLocaleString():'Нет данных' }}</td></tr></tbody>
       </table>
     </div>
   </section>

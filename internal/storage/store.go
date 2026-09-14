@@ -346,7 +346,7 @@ func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *proto
 		versions["managed"], id)
 	_, err := s.db().Exec(`UPDATE agents SET `+liveSQL+`, session_id=?, last_seq=?, capabilities=?, addresses=?,
 		hostname=COALESCE(NULLIF(?,''),hostname), os=COALESCE(NULLIF(?,''),os), arch=COALESCE(NULLIF(?,''),arch),
-		display_name=COALESCE(NULLIF(?,''),display_name),
+		display_name=COALESCE(NULLIF(display_name,''),NULLIF(?,''),''),
 		worker_version=COALESCE(NULLIF(?,''),worker_version), worker_digest=COALESCE(NULLIF(?,''),worker_digest),
 		service_host_version=COALESCE(NULLIF(?,''),service_host_version), service_host_digest=COALESCE(NULLIF(?,''),service_host_digest),
 		managed_ready=CASE WHEN ?= '1' THEN 1 ELSE 0 END
@@ -851,4 +851,27 @@ func (s *Store) DiscoveryForAgent(id string) (*protocol.DiscoveryDelta, error) {
 		return nil, err
 	}
 	return &d, nil
+}
+
+// RenameAgent compares the displayed value, not hostname identity. Telemetry must
+// never overwrite this owner label. Empty legacy labels fall back to hostname/id.
+func (s *Store) RenameAgent(id, name string, expected *string) error {
+	query := `UPDATE agents SET display_name=? WHERE id=?`
+	args := []any{name, id}
+	if expected != nil {
+		query += ` AND COALESCE(NULLIF(display_name,''),NULLIF(hostname,''),id)=?`
+		args = append(args, *expected)
+	}
+	result, err := s.db().Exec(query, args...)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("machine not found or name changed; refresh before saving: %w", ErrConflict)
+	}
+	return nil
 }

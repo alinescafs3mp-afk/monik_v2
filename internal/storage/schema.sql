@@ -422,3 +422,22 @@ CREATE TABLE IF NOT EXISTS service_discovery (
 );
 
 CREATE TABLE IF NOT EXISTS agent_discovery(agent_id TEXT PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,payload TEXT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS agent_candidates (
+ id TEXT PRIMARY KEY,
+ credential_hash TEXT NOT NULL,
+ fingerprint TEXT NOT NULL,
+ hostname TEXT NOT NULL,
+ display_name TEXT NOT NULL,
+ os TEXT NOT NULL,
+ arch TEXT NOT NULL,
+ worker_version TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('pending','approved','rejected')),
+ source_ip TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ last_seen_at TEXT NOT NULL,
+ expires_at TEXT NOT NULL,
+ decided_by TEXT,
+ decided_at TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_candidates_expiry ON agent_candidates(expires_at);

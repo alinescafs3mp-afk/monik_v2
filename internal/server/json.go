@@ -25,3 +25,15 @@ func parseJSONLimit(r *http.Request, v any, max int64) error {
 	return json.Unmarshal(b, v)
 }
 func parseJSON(r *http.Request, v any) error { return parseJSONLimit(r, v, 8<<20) }
+
+// Strict decoding is used on the unauthenticated registration boundary so a
+// future/unknown field cannot be silently interpreted as accepted authority.
+func parseJSONStrictLimit(r *http.Request, v any, max int64) error {
+	var raw json.RawMessage
+	if err := parseJSONLimit(r, &raw, max); err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(v)
+}

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import {computed,onBeforeUnmount,ref,watch} from 'vue';
+import {computed,nextTick,onBeforeUnmount,ref,watch} from 'vue';
 import {useRoute,onBeforeRouteLeave} from 'vue-router';
 import {get,submitOp} from '../api';
 import {loadCheck,buildCheck,applyPreset,serviceHint,requestPreview,checkOperationFeedback,type CheckForm} from '../checkDraft';
 const props=defineProps<{detail:any;readonly?:boolean}>();
 const emit=defineEmits<{toast:[string,string?];refresh:[]}>();const route=useRoute();
+const root=ref<HTMLElement|null>(null);
 const selected=ref(''),f=ref<CheckForm>(loadCheck()),dirty=ref(false),pending=ref(''),error=ref(''),status=ref(''),operation=ref<any>(null),secretList=ref<any[]>([]),baseRevision=ref(0),draftID=ref('');
 let timer:ReturnType<typeof setTimeout>|undefined,disposed=false,watchGeneration=0;
 const services=computed<any[]>(()=>props.detail?.services||[]);
@@ -20,7 +21,19 @@ async function loadSecrets(){try{const r:any=await get('/api/v1/secrets');secret
 function reset(id=selected.value){const d=props.detail?.desired_config?.checks?.find((c:any)=>c.service_id===id)||{};const s=services.value.find(s=>s.id===id)||{};selected.value=id;f.value=loadCheck(d,s);draftID.value=d.id||crypto.randomUUID();baseRevision.value=props.detail.agent.desired_revision;dirty.value=false;status.value='';error.value='';}
 function choose(event:Event){const id=(event.target as HTMLSelectElement).value;if(dirty.value&&!confirm('Отменить несохранённые изменения запроса?')){(event.target as HTMLSelectElement).value=selected.value;return;}reset(id);}
 watch(()=>[props.detail?.agent?.id,services.value.length],()=>{if(!selected.value&&services.value.length){reset(services.value.some(s=>s.id===route.query.service)?String(route.query.service):services.value[0].id);void loadSecrets();}},{immediate:true});
-watch(()=>route.query.service,id=>{if(id&&services.value.some(s=>s.id===id)&&(!dirty.value||confirm('Отменить несохранённые изменения?')))reset(String(id));});
+function focusEditor(){root.value?.scrollIntoView({block:'start',behavior:'auto'});root.value?.querySelector<HTMLElement>('h3')?.focus({preventScroll:true});}
+function openService(id:string):boolean{
+ if(!services.value.some(s=>s.id===id)){error.value='Этот сервис не найден в текущем инвентаре.';return false;}
+ if(pending.value&&id!==selected.value){error.value='Сначала дождитесь результата текущей проверки.';focusEditor();return false;}
+ if(id!==selected.value){if(dirty.value&&!confirm('Отменить несохранённые изменения запроса?'))return false;reset(id);}
+ return true;
+}
+defineExpose({openService,focusEditor});
+watch(()=>[route.query.service,services.value.length],async()=>{
+ const id=String(route.query.service||'');
+ if(id&&services.value.some(s=>s.id===id)&&openService(id)){await nextTick();focusEditor();}
+},{immediate:true,flush:'post'});
+watch(()=>props.detail?.agent?.desired_revision,()=>{if(selected.value&&!dirty.value&&!pending.value)reset();});
 function preset(value:string){f.value=applyPreset(f.value,value);dirty.value=true;}
 function useSuggestion(s:any){if(dirty.value&&!confirm('Заменить несохранённый черновик рекомендацией?'))return;f.value=loadCheck({...s.definition,id:f.value.id,service_id:selected.value,paused:f.value.paused,ignored:f.value.ignored},service.value);dirty.value=true;status.value='Рекомендация загружена в черновик. Пробный запрос и сохранение выполняются отдельно.';}
 function secretChange(){f.value.secretHeader=secrets.value.find(s=>s.id===f.value.secretID)?.header||'';dirty.value=true;}
@@ -40,8 +53,8 @@ onBeforeRouteLeave(()=>!dirty.value||confirm('Покинуть страницу 
 onBeforeUnmount(()=>{window.removeEventListener('beforeunload',beforeUnload);disposed=true;++watchGeneration;clearTimeout(timer);});
 </script>
 <template>
-<section class="panel check-editor">
- <h3>Кастомный запрос к сервису</h3>
+<section ref="root" id="check-editor" class="panel check-editor">
+ <h3 tabindex="-1">Кастомный запрос к сервису</h3>
  <p>Один шаблон используется и для пробного запроса, и для периодического мониторинга. Запрос выполняется на агенте, не в браузере и не на контроллере.</p>
  <p v-if="!supported" class="data-warning" role="status">Сначала обновите агент до версии с http_custom_v1 и дождитесь его отчёта. Иначе прежний агент может не понять новые поля.</p>
  <label>Сервис <select :value="selected" :disabled="!!pending" @change="choose"><option value="">Выберите сервис</option><option v-for="s in services" :value="s.id" :key="s.id">{{s.display_name||s.url}}</option></select></label>

@@ -1,21 +1,22 @@
-# Acceptance ledger: audit 4
+# Acceptance ledger: Audit5
 
-Exact reviewed base: `4f85de31f837dbdfeb77e9f562726de5f00b9d28` (tree `fdec03382ddab5f3ddcfe8984e9dc57a1d2788d7`), 2026-09-14.
-Integrated on this host from that exact tree. The auditor's local browser was blocked; this integration re-ran the expanded fixture.
+Exact baseline `37dc23405606b24a82a629533311c19dae577a2a` / tree `a3e00db6ddefa2fb2c2751e022d6a1cd1b2be7a9`. This table describes the accompanying code, not historical integration claims.
 
-| Check | Result / scope |
+| Check | Result |
 |---|---|
-| Baseline tree | Matched `fdec03382ddab5f3ddcfe8984e9dc57a1d2788d7`; `verify_package.py` 41 files PASS; `preflight.py` PASS |
-| Baseline local race | Auditor: FAILED existing TestReviewBrokenCandidateRestoresPreviousWorker before the patch |
-| Before-fix crypto | Auditor: three targeted failures before the patch |
-| Final Go race | PASS: `go test -race -count=1 ./...` (18 tested packages) after UI rebuild |
-| Go vet / modules | PASS / go mod verify PASS |
-| Frontend | 39 Node tests PASS (38 from the patch plus queued-trial evidence); tsc --noEmit PASS; Vue/Vite production build PASS |
-| Linux builds | After commit: matching dist SHA recorded in deploy notes |
-| Windows builds | Cross-compile only; native execution NOT RUN |
-| Browser scenario | PASS synthetic 11/11 on compiled Vue + Go fixture (Chromium, `--no-sandbox`, loopback HTTPS). Integration extras: CheckEditor `aria-label`; queued `check.trial` evidence no longer looks like a completed agent result |
-| Native systemd/SCM, power loss, capacity, 24h, complete v3 | NOT RUN |
-| Self-updating supervisor / full protected restore / aggregates | Not fully implemented, not accepted; fail-closed retained |
-| Owner deployment | DEPLOY AFTER COMMIT (server first, then worker; confirm `http_custom_v1`) |
+| Before-fix regression reproduction | 2 targeted failures on baseline, both fixed |
+| Go race | PASS: 158 top-level tests, 216 test/subtest events, 18 packages |
+| Go vet | PASS |
+| Node UI tests | PASS: 47; includes behavior tests and explicitly identified source contracts |
+| TypeScript / Vue build | PASS / PASS; no vue-tsc claim |
+| Linux amd64 commands | All four built |
+| Windows amd64 commands | All four cross-built, native execution NOT RUN |
+| Native agent arrival HTTP test | Actual isolated TLS + SQLite + setup flow + owner operation + first report; PASS |
+| Browser syntax | PASS |
+| Current browser execution | PASS: 14/14 Playwright scenarios on this host against the synthetic loopback fixture (grouping, repeated configure, rename through telemetry, history-failure isolation, header layout, custom POST trial pending). Auditor environment was blocked before login. |
+| systemd/SCM native install/boot/recovery | NOT RUN; existing provisioning gaps recorded |
+| Independent supervisor recovery/full restore/long aggregates | NOT COMPLETE |
+| Full v3 battery/50-agent load/24h soak | NOT RUN |
+| Owner production | Not accessed by the audit package. Integration deploys the matching commit onto the existing LAN controller/worker without re-enrollment. |
 
-Go 1.27.1 and Node 22.23.2, locked dependencies, no new packages. Fixture telemetry is not a real fleet. Native Windows SCM/boot and 24h soak remain NOT RUN. Telegram stays deferred.
+Go 1.27.1, Node 22.16.0 with existing locked dependency snapshot. The auditor tree is `5aa042f64ec638e4effb07093fa9c7ce39e9ffe9`; this host additionally waits for history-backed charts and asserts the compact header. Git patch/tree reproduction is checked separately in that archive's `PACKAGE_MANIFEST.json`.
