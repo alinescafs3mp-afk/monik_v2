@@ -23,7 +23,11 @@ func (s *Store) expireAndBlockJobs() error {
 			}
 			items = append(items, j)
 		}
+		err = rows.Err()
 		rows.Close()
+		if err != nil {
+			return err
+		}
 		now := s.now().Format(dbTimeFormat)
 		for _, j := range items {
 			status, reason := "", ""
@@ -45,15 +49,12 @@ func (s *Store) expireAndBlockJobs() error {
 			}
 			ops[j.op] = true
 		}
+		for id := range ops {
+			if err := s.refreshOperationTx(tx, id); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	for id := range ops {
-		if err := s.refreshOperation(id); err != nil {
-			return err
-		}
-	}
-	return nil
+	return err
 }

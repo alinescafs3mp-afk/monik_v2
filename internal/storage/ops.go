@@ -15,53 +15,15 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 )
 
-func (s *Store) LookupIdempotency(actor, key, reqHash string) (*protocol.Operation, error) {
-	var id, action, status, params, created, summary, parent, storedHash string
-	var rev int64
-	var deadline sql.NullString
-	err := s.db().QueryRow(`SELECT id,action,status,revision,params,created_at,deadline,summary,parent_id,request_hash
-		FROM operations WHERE actor_id=? AND client_request_key=?`, actor, key).
-		Scan(&id, &action, &status, &rev, &params, &created, &deadline, &summary, &parent, &storedHash)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	if storedHash != reqHash {
-		return nil, ErrIdempotencyConflict
-	}
-	op := loadOp(id, action, status, key, actor, params, created, deadline.String, summary, parent, rev)
-	op.Targets, _ = s.Targets(id)
-	if op.Action == "secret.replace" {
-		op.Params = map[string]any{"redacted": true}
-		for i := range op.Targets {
-			op.Targets[i].Evidence = nil
-		}
-	}
-	return op, nil
-}
-
-func loadOp(id, action, status, key, actor, params, created, deadline, summary, parent string, rev int64) *protocol.Operation {
-	op := &protocol.Operation{
-		ID: id, Action: action, Status: protocol.OperationStatus(status),
-		Revision: rev, ClientRequestKey: key, Actor: actor, Summary: summary, ParentID: parent,
-	}
-	_ = json.Unmarshal([]byte(params), &op.Params)
-	op.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
-	if deadline != "" {
-		t, _ := time.Parse(time.RFC3339Nano, deadline)
-		op.Deadline = &t
-	}
-	return op
-}
-
 func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 	if op.Action == "secret.replace" && op.Params != nil {
 		delete(op.Params, "value")
 		op.Params["redacted"] = true
 	}
-	params, _ := json.Marshal(op.Params)
+	params, err := json.Marshal(op.Params)
+	if err != nil {
+		return err
+	}
 	var dl any
 	if op.Deadline != nil {
 		dl = op.Deadline.UTC().Format(dbTimeFormat)
@@ -74,7 +36,10 @@ func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 			return err
 		}
 		for _, t := range op.Targets {
-			ev, _ := json.Marshal(t.Evidence)
+			ev, err := json.Marshal(t.Evidence)
+			if err != nil {
+				return err
+			}
 			jobID := idgen.New()
 			_, err = tx.Exec(`INSERT INTO operation_targets(operation_id,agent_id,status,stage,message,error_code,retryable,evidence,job_id,updated_at)
 				VALUES(?,?,?,?,?,?,?,?,?,?)`, op.ID, t.AgentID, string(t.Status), t.Stage, t.Message, t.ErrorCode, boolInt(t.Retryable), string(ev), jobID, s.now().UTC().Format(dbTimeFormat))
@@ -94,7 +59,10 @@ func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 				} else {
 					env.Deadline = op.CreatedAt.Add(protocol.OneShotExpiry)
 				}
-				b, _ := json.Marshal(env)
+				b, err := json.Marshal(env)
+				if err != nil {
+					return err
+				}
 				_, err = tx.Exec(`INSERT INTO agent_jobs(job_id,operation_id,agent_id,action,envelope,status,created_at,deadline)
 					VALUES(?,?,?,?,?,?,?,?)`, jobID, op.ID, t.AgentID, op.Action, string(b), string(t.Status),
 					op.CreatedAt.UTC().Format(dbTimeFormat), env.Deadline.UTC().Format(dbTimeFormat))
@@ -103,145 +71,99 @@ func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 				}
 			}
 		}
-		return nil
+		return s.syncOperationAttentionTx(tx, op.ID, op.Status, op.Targets)
 	})
 }
 
-func (s *Store) Operation(id string) (*protocol.Operation, error) {
-	var action, status, key, actor, params, created, summary, parent string
-	var rev int64
-	var deadline sql.NullString
-	err := s.db().QueryRow(`SELECT action,status,revision,client_request_key,actor_id,params,created_at,deadline,summary,parent_id FROM operations WHERE id=?`, id).
-		Scan(&action, &status, &rev, &key, &actor, &params, &created, &deadline, &summary, &parent)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	op := loadOp(id, action, status, key, actor, params, created, deadline.String, summary, parent, rev)
-	op.Targets, _ = s.Targets(id)
-	if op.Action == "secret.replace" {
-		op.Params = map[string]any{"redacted": true}
-		for i := range op.Targets {
-			op.Targets[i].Evidence = nil
-		}
-	}
-	return op, nil
-}
-
-func (s *Store) Operations(limit int) ([]*protocol.Operation, error) {
-	if err := s.expireAndBlockJobs(); err != nil {
-		return nil, err
-	}
-	if limit <= 0 {
-		limit = 100
-	}
-	rows, err := s.db().Query(`SELECT id,action,status,revision,client_request_key,actor_id,params,created_at,deadline,summary,parent_id FROM operations ORDER BY created_at DESC LIMIT ?`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []*protocol.Operation
-	for rows.Next() {
-		var id, action, status, key, actor, params, created, summary, parent string
-		var rev int64
-		var deadline sql.NullString
-		if err := rows.Scan(&id, &action, &status, &rev, &key, &actor, &params, &created, &deadline, &summary, &parent); err != nil {
-			return nil, err
-		}
-		op := loadOp(id, action, status, key, actor, params, created, deadline.String, summary, parent, rev)
-		op.Targets, _ = s.Targets(id)
-		if op.Action == "secret.replace" {
-			op.Params = map[string]any{"redacted": true}
-			for i := range op.Targets {
-				op.Targets[i].Evidence = nil
-			}
-		}
-		out = append(out, op)
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) Targets(opID string) ([]protocol.TargetResult, error) {
-	rows, err := s.db().Query(`SELECT agent_id,status,stage,message,error_code,retryable,evidence FROM operation_targets WHERE operation_id=?`, opID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []protocol.TargetResult
-	for rows.Next() {
-		var t protocol.TargetResult
-		var retry int
-		var ev string
-		if err := rows.Scan(&t.AgentID, &t.Status, &t.Stage, &t.Message, &t.ErrorCode, &retry, &ev); err != nil {
-			return nil, err
-		}
-		t.Retryable = retry == 1
-		_ = json.Unmarshal([]byte(ev), &t.Evidence)
-		out = append(out, t)
-	}
-	return out, rows.Err()
-}
-
 func (s *Store) UpdateTarget(opID, agentID string, st protocol.TargetStatus, stage, msg, code string, retry bool, evidence map[string]any) error {
-	ev, _ := json.Marshal(evidence)
-	_, err := s.db().Exec(`UPDATE operation_targets SET status=?, stage=?, message=?, error_code=?, retryable=?, evidence=?, updated_at=?
-		WHERE operation_id=? AND agent_id=?`, string(st), stage, msg, code, boolInt(retry), string(ev), s.now().UTC().Format(dbTimeFormat), opID, agentID)
+	return s.WithTx(func(tx *sql.Tx) error {
+		if err := s.updateTargetTx(tx, opID, agentID, st, stage, msg, code, retry, evidence); err != nil {
+			return err
+		}
+		return s.refreshOperationTx(tx, opID)
+	})
+}
+func (s *Store) updateTargetTx(tx *sql.Tx, opID, agentID string, st protocol.TargetStatus, stage, msg, code string, retry bool, evidence map[string]any) error {
+	ev, err := json.Marshal(evidence)
 	if err != nil {
 		return err
 	}
-	return s.refreshOperation(opID)
+	result, err := tx.Exec(`UPDATE operation_targets SET status=?,stage=?,message=?,error_code=?,retryable=?,evidence=?,updated_at=? WHERE operation_id=? AND agent_id=?`, string(st), stage, msg, code, boolInt(retry), string(ev), s.now().Format(dbTimeFormat), opID, agentID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// RefreshOperationTransaction is for callers publishing target evidence inside
+// an existing Store.WithTx transaction. Never commit the target without its
+// aggregate/attention/event update, and never start a nested transaction here.
+func (s *Store) RefreshOperationTransaction(tx *sql.Tx, opID string) error {
+	return s.refreshOperationTx(tx, opID)
 }
 
 func (s *Store) refreshOperation(opID string) error {
-	rows, err := s.db().Query(`SELECT status FROM operation_targets WHERE operation_id=?`, opID)
+	return s.WithTx(func(tx *sql.Tx) error { return s.refreshOperationTx(tx, opID) })
+}
+func (s *Store) refreshOperationTx(tx *sql.Tx, opID string) error {
+	targets, err := targetsWith(tx, opID)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	var statuses []string
-	for rows.Next() {
-		var st string
-		_ = rows.Scan(&st)
-		statuses = append(statuses, st)
+	running, fail, wait, attn, cancelled := 0, 0, 0, 0, 0
+	for _, t := range targets {
+		switch t.Status {
+		case protocol.TargetQueued, protocol.TargetAccepted, protocol.TargetRunning, protocol.TargetAwaitingConfirmation:
+			running++
+		case protocol.TargetWaitingOffline:
+			wait++
+		case protocol.TargetFailed, protocol.TargetRejected, protocol.TargetExpired, protocol.TargetUnknownResult, protocol.TargetRolledBack:
+			fail++
+		case protocol.TargetUnsupported:
+			attn++
+		case protocol.TargetCancelledBeforeExec:
+			cancelled++
+		case protocol.TargetSucceeded:
+		default:
+			return fmt.Errorf("invalid target status")
+		}
 	}
 	agg := protocol.OpCompleted
-	if len(statuses) == 0 {
-		agg = protocol.OpCompleted
-	} else {
-		running, fail, wait, attn, cancelled := 0, 0, 0, 0, 0
-		for _, st := range statuses {
-			switch protocol.TargetStatus(st) {
-			case protocol.TargetQueued, protocol.TargetAccepted, protocol.TargetRunning, protocol.TargetAwaitingConfirmation:
-				running++
-			case protocol.TargetWaitingOffline:
-				wait++
-			case protocol.TargetFailed, protocol.TargetRejected, protocol.TargetExpired, protocol.TargetUnknownResult, protocol.TargetRolledBack:
-				fail++
-			case protocol.TargetUnsupported:
-				attn++
-			case protocol.TargetCancelledBeforeExec:
-				cancelled++
-			}
-		}
-		switch {
-		case running > 0:
-			agg = protocol.OpRunning
-		case wait > 0:
-			agg = protocol.OpAttentionRequired
-		case fail > 0 && running == 0:
-			agg = protocol.OpCompletedWithErrs
-		case cancelled == len(statuses):
-			agg = protocol.OpCancelled
-		case attn > 0 || cancelled > 0:
-			agg = protocol.OpAttentionRequired
-		default:
-			agg = protocol.OpCompleted
-		}
+	switch {
+	case running > 0:
+		agg = protocol.OpRunning
+	case wait > 0:
+		agg = protocol.OpAttentionRequired
+	case fail > 0:
+		agg = protocol.OpCompletedWithErrs
+	case len(targets) > 0 && cancelled == len(targets):
+		agg = protocol.OpCancelled
+	case attn > 0 || cancelled > 0:
+		agg = protocol.OpAttentionRequired
 	}
-	_, err = s.db().Exec(`UPDATE operations SET status=?, revision=revision+1 WHERE id=?`, string(agg), opID)
-	_ = s.AppendEvent("operation", "operation", opID, 0, map[string]any{"status": agg})
+	result, err := tx.Exec(`UPDATE operations SET status=?, revision=revision+1 WHERE id=?`, string(agg), opID)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrNotFound
+	}
+	if err = s.syncOperationAttentionTx(tx, opID, agg, targets); err != nil {
+		return err
+	}
+	payload, _ := json.Marshal(map[string]any{"status": agg})
+	_, err = tx.Exec(`INSERT INTO event_log(ts,type,entity,entity_id,revision,payload) VALUES(?,'operation','operation',?,0,?)`, s.now().Format(dbTimeFormat), opID, string(payload))
 	return err
 }
 
@@ -253,7 +175,7 @@ func (s *Store) PendingJobs(agentID string, limit int) ([]protocol.JobEnvelope, 
 		limit = 8
 	}
 	now := s.now().UTC().Format(dbTimeFormat)
-	rows, err := s.db().Query(`SELECT envelope FROM agent_jobs WHERE agent_id=? AND status IN ('queued','waiting_offline','delivered') AND deadline>? ORDER BY created_at LIMIT ?`,
+	rows, err := s.db().Query(`SELECT job_id,operation_id,action,envelope FROM agent_jobs WHERE agent_id=? AND status IN ('queued','waiting_offline','delivered') AND deadline>? ORDER BY created_at LIMIT ?`,
 		agentID, now, limit)
 	if err != nil {
 		return nil, err
@@ -261,12 +183,17 @@ func (s *Store) PendingJobs(agentID string, limit int) ([]protocol.JobEnvelope, 
 	defer rows.Close()
 	var out []protocol.JobEnvelope
 	for rows.Next() {
-		var raw string
-		if err := rows.Scan(&raw); err != nil {
+		var jobID, opID, action, raw string
+		if err := rows.Scan(&jobID, &opID, &action, &raw); err != nil {
 			return nil, err
 		}
 		var env protocol.JobEnvelope
-		_ = json.Unmarshal([]byte(raw), &env)
+		if err := json.Unmarshal([]byte(raw), &env); err != nil {
+			return nil, fmt.Errorf("invalid stored job envelope: %w", err)
+		}
+		if env.JobID != jobID || env.OperationID != opID || env.Action != action || env.SchemaVersion != protocol.SchemaVersion || env.Deadline.IsZero() {
+			return nil, fmt.Errorf("stored job envelope identity or schema mismatch")
+		}
 		out = append(out, env)
 	}
 	return out, rows.Err()
@@ -290,11 +217,13 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 	if err != nil {
 		return err
 	}
-	changed := false
 	err = s.WithTx(func(tx *sql.Tx) error {
 		var opID, status, previous, action, created, envelope string
 		if err := tx.QueryRow(`SELECT operation_id,status,COALESCE(result,''),action,created_at,envelope FROM agent_jobs WHERE job_id=? AND agent_id=?`, rec.JobID, agentID).Scan(&opID, &status, &previous, &action, &created, &envelope); err != nil {
-			return ErrNotFound
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
 		}
 		if rec.OperationID != "" && rec.OperationID != opID {
 			return ErrConflict
@@ -307,6 +236,21 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported,
 			protocol.TargetExpired, protocol.TargetCancelledBeforeExec, protocol.TargetRolledBack:
 			return ErrConflict
+		}
+		// Late progress is harmless but may not rewind a newer state.
+		rank := func(st protocol.TargetStatus) int {
+			switch st {
+			case protocol.TargetAccepted:
+				return 1
+			case protocol.TargetRunning:
+				return 2
+			case protocol.TargetAwaitingConfirmation:
+				return 3
+			}
+			return 0
+		}
+		if next, old := rank(rec.Status), rank(protocol.TargetStatus(status)); next > 0 && old > next {
+			return nil
 		}
 		if rec.Status == protocol.TargetSucceeded {
 			var job protocol.JobEnvelope
@@ -406,20 +350,12 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 				}
 			}
 		}
-		changed = err == nil
-		return err
+		if err != nil {
+			return err
+		}
+		return s.refreshOperationTx(tx, opID)
 	})
-	if err != nil {
-		return err
-	}
-	if !changed {
-		return nil
-	}
-	var opID string
-	if err := s.db().QueryRow(`SELECT operation_id FROM agent_jobs WHERE job_id=? AND agent_id=?`, rec.JobID, agentID).Scan(&opID); err != nil {
-		return err
-	}
-	return s.refreshOperation(opID)
+	return err
 }
 
 func (s *Store) CancelPending(opID string) error {
@@ -432,12 +368,12 @@ func (s *Store) CancelPending(opID string) error {
 			return err
 		}
 		_, err := tx.Exec(`UPDATE agent_jobs SET status='cancelled_before_execution' WHERE operation_id=? AND status IN ('queued','waiting_offline')`, opID)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.refreshOperationTx(tx, opID)
 	})
-	if err != nil {
-		return err
-	}
-	return s.refreshOperation(opID)
+	return err
 }
 
 func (s *Store) InsertIncident(inc map[string]any) error {

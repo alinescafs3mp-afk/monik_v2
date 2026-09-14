@@ -436,18 +436,24 @@ type EnrollResponse struct {
 }
 
 type Operation struct {
-	ID               string          `json:"operation_id"`
-	Action           string          `json:"action"`
-	Status           OperationStatus `json:"status"`
-	Revision         int64           `json:"revision"`
-	ClientRequestKey string          `json:"client_request_key"`
-	Actor            string          `json:"actor"`
-	CreatedAt        time.Time       `json:"created_at"`
-	Deadline         *time.Time      `json:"deadline,omitempty"`
-	Summary          string          `json:"summary"`
-	Params           map[string]any  `json:"params,omitempty"`
-	Targets          []TargetResult  `json:"targets"`
-	ParentID         string          `json:"parent_id,omitempty"`
+	AttentionRequired bool            `json:"attention_required"`
+	NeedsAttention    bool            `json:"needs_attention"`
+	AttentionRevision int64           `json:"attention_revision"`
+	Read              bool            `json:"read"`
+	ReadAt            *time.Time      `json:"read_at,omitempty"`
+	ReadBy            string          `json:"read_by,omitempty"`
+	ID                string          `json:"operation_id"`
+	Action            string          `json:"action"`
+	Status            OperationStatus `json:"status"`
+	Revision          int64           `json:"revision"`
+	ClientRequestKey  string          `json:"client_request_key"`
+	Actor             string          `json:"actor"`
+	CreatedAt         time.Time       `json:"created_at"`
+	Deadline          *time.Time      `json:"deadline,omitempty"`
+	Summary           string          `json:"summary"`
+	Params            map[string]any  `json:"params,omitempty"`
+	Targets           []TargetResult  `json:"targets"`
+	ParentID          string          `json:"parent_id,omitempty"`
 }
 
 type TargetResult struct {

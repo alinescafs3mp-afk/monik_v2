@@ -1,3 +1,19 @@
+# Monik completion plan after Audit 9
+
+Audit 9 baseline: `efae8069f27f3ba2f951273796dbd99668db364d`. The owner-requested operation read workflow is now implemented across storage/API/UI: single and selected batch acknowledgement, server persistence, audit, new-attention generations, untruncated counts and searchable pages. All current tests and limitations are in the Audit 9 report. Earlier requirements below remain authoritative where not superseded by an implemented, tested change.
+
+## Preserve the Audit 9 boundary
+
+A read operation keeps its real failure, target evidence and remote effects unchanged. Never satisfy an attention-clearing request by rewriting completed_with_errors to completed or deleting jobs. New substantive failures become unread. Successful progress, duplicate receipts and resolved waiting targets do not create repetitive notices. Read metadata must survive controller restart and reconcile writes by a temporarily older controller.
+
+Keep current target/job/aggregate/notice/event changes in one transaction. Complete other legacy server-effect/result publication boundaries using explicit unknown-result handling or a durable outbox before permitting blind retry. Publish queue corruption as a diagnostic, not an empty successful control exchange. Preserve literal search, bounded paging and full-journal counts; measure larger journals and compatible retention/dedup horizons rather than reinstating a silent 200-row cap.
+
+Do not expand into another platform while P0 lifecycle/restore tasks below remain. Preserve the optional fixed-target SSH gateway without turning the monitoring agent into a shell. Acknowledgement needs no SSH connection and adds no machine privileges.
+
+---
+
+## Prior completion plan retained
+
 # Monik: completion plan after Audit 8
 
 Authority: owner v3 requirements, later requested UX/custom-check/agent-arrival behavior and actual integrated code. Current integration baseline `3873c9c` (application `4e0ae20`); Audit 8 adds the source corrections documented in `AUDIT_REVIEW_8_2026-09-14.md`. This is a completion directive, not evidence that the remaining tasks are done.

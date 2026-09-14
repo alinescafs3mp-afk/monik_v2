@@ -208,15 +208,17 @@ func (s *Store) PromoteCredential(agentID, hash string) error {
 }
 
 func (s *Store) MarkTargetAndJob(opID, agentID string, st protocol.TargetStatus, stage, msg string, retry bool, evidence map[string]any) error {
-	if err := s.UpdateTarget(opID, agentID, st, stage, msg, "", retry, evidence); err != nil {
-		return err
-	}
-	jobID, err := s.JobIDFor(opID, agentID)
-	if err != nil {
-		return nil
-	}
-	_, err = s.db().Exec(`UPDATE agent_jobs SET status=? WHERE job_id=?`, string(st), jobID)
-	return err
+	return s.WithTx(func(tx *sql.Tx) error {
+		if err := s.updateTargetTx(tx, opID, agentID, st, stage, msg, "", retry, evidence); err != nil {
+			return err
+		}
+		// Server-only targets legitimately have no agent_jobs row. A database
+		// failure must still roll back their target and aggregate publication.
+		if _, err := tx.Exec(`UPDATE agent_jobs SET status=? WHERE operation_id=? AND agent_id=?`, string(st), opID, agentID); err != nil {
+			return err
+		}
+		return s.refreshOperationTx(tx, opID)
+	})
 }
 
 // Only already selected targets may update migration progress. Never upsert

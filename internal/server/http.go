@@ -48,6 +48,8 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/services", a.needAuth(a.handleServices))
 	mux.HandleFunc("GET /api/v1/services/{id}", a.needAuth(a.handleService))
 	mux.HandleFunc("GET /api/v1/incidents", a.needAuth(a.handleIncidents))
+	mux.HandleFunc("GET /api/v1/operations/summary", a.needAuth(a.handleOperationCounts))
+	mux.HandleFunc("POST /api/v1/operations/read", a.needAuth(a.handleOperationReads))
 	mux.HandleFunc("GET /api/v1/operations", a.needAuth(a.handleOperations))
 	mux.HandleFunc("GET /api/v1/operations/{id}", a.needAuth(a.handleOperation))
 	mux.HandleFunc("POST /api/v1/operations", a.needAuth(a.handleSubmitOp))
@@ -237,17 +239,12 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 		a.writeErr(w, 500, "db", "could not load incidents")
 		return
 	}
-	ops, err := a.Store.Operations(200)
+	operationCounts, err := a.Store.OperationCounts()
 	if err != nil {
-		a.writeErr(w, 500, "db", "could not load operations")
+		a.writeErr(w, 500, "db", "could not load operation counts")
 		return
 	}
-	attention := 0
-	for _, o := range ops {
-		if o.Status == protocol.OpAttentionRequired || o.Status == protocol.OpCompletedWithErrs {
-			attention++
-		}
-	}
+	attention := operationCounts.UnreadAttention
 	if err := a.annotateIncidents(incs, now); err != nil {
 		a.writeErr(w, 500, "maintenance", "could not determine maintenance status")
 		return
@@ -457,18 +454,36 @@ func (a *App) handleIncidents(w http.ResponseWriter, r *http.Request, s *storage
 }
 
 func (a *App) handleOperations(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	ops, err := a.Store.Operations(200)
-	if err != nil {
-		a.writeErr(w, 500, "db", err.Error())
+	q := r.URL.Query()
+	limit := 50
+	if q.Has("limit") {
+		n, err := strconv.Atoi(q.Get("limit"))
+		if err != nil || n < 1 || n > 200 {
+			a.writeErr(w, 400, "query", "invalid page limit")
+			return
+		}
+		limit = n
+	}
+	page, err := a.Store.QueryOperations(storage.OperationQuery{Filter: q.Get("filter"), Read: q.Get("read"), Search: q.Get("q"), Before: q.Get("before"), Limit: limit})
+	if errors.Is(err, storage.ErrInvalidOperationQuery) {
+		a.writeErr(w, 400, "query", "invalid operation filter or cursor")
 		return
 	}
-	a.writeJSON(w, 200, map[string]any{"operations": ops})
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not load operations")
+		return
+	}
+	a.writeJSON(w, 200, page)
 }
 
 func (a *App) handleOperation(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	op, err := a.Store.Operation(r.PathValue("id"))
-	if err != nil {
+	if errors.Is(err, storage.ErrNotFound) {
 		a.writeErr(w, 404, "not_found", "operation not found")
+		return
+	}
+	if err != nil {
+		a.writeErr(w, 500, "db", "could not read operation evidence")
 		return
 	}
 	a.writeJSON(w, 200, op)

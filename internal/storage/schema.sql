@@ -456,3 +456,16 @@ CREATE INDEX IF NOT EXISTS idx_event_retention ON event_log(ts);
 
 CREATE INDEX IF NOT EXISTS idx_receipt_retention ON ingest_receipts(received_at);
 CREATE INDEX IF NOT EXISTS idx_session_retention ON admin_sessions(expires_at);
+
+-- Acknowledgement follows the attention generation, not execution revisions.
+CREATE TABLE IF NOT EXISTS operation_attention (
+  operation_id TEXT PRIMARY KEY REFERENCES operations(id) ON DELETE CASCADE,
+  generation INTEGER NOT NULL DEFAULT 1,
+  fingerprint TEXT NOT NULL DEFAULT '',
+  required INTEGER NOT NULL DEFAULT 0 CHECK(required IN (0,1)),
+  acknowledged_generation INTEGER NOT NULL DEFAULT 0,
+  acked_at TEXT,
+  acked_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_operations_created_id ON operations(created_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS idx_operation_attention_required ON operation_attention(required,acknowledged_generation,generation);

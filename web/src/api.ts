@@ -102,3 +102,11 @@ export async function consoleTicket(path:string):Promise<{ticket:string}> {
   }throw e;
  }
 }
+
+// Read state is idempotent, version-bound server metadata, never an agent job.
+export async function markOperationsRead(targets: Array<{operation_id:string;attention_revision:number}>, read:boolean) {
+ const result=await post<{saved:boolean;count:number}>("/api/v1/operations/read",{targets,read});
+ if(result?.saved!==true)throw {error:"invalid_response",status:0,message:"Подтверждение сохранения не получено. Перечитайте операции."} satisfies ApiError;
+ window.dispatchEvent(new Event("monik:refresh"));
+ return result;
+}

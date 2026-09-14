@@ -66,7 +66,7 @@ input, select, textarea {
 .dot.stale, .dot.unknown { background: var(--unk); }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; }
 .toast {
   position: fixed; right: 1rem; bottom: 1rem; background: var(--panel);
   border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.9rem; max-width: 24rem; z-index: 20;
@@ -398,3 +398,14 @@ button:focus,a:focus,input:focus,select:focus,textarea:focus,summary:focus { out
 
 .tv-mode .app-topbar {justify-content:flex-start;}
 .tv-mode .nav svg {flex:0 0 auto;}
+
+/* Operation acknowledgement is visually separate from execution results. */
+.operation-filters,.operation-selection,.operation-pagination{gap:.65rem;flex-wrap:wrap;margin:.8rem 0;align-items:center}
+.operation-filters label{display:flex;gap:.45rem;align-items:center;min-width:0}
+.operation-table td{vertical-align:top;overflow-wrap:anywhere}
+.operation-needs-attention{box-shadow:inset 3px 0 0 #ef4444}
+.operations-page{min-width:0;max-width:100%}
+.operation-read-control{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;min-width:10rem;position:relative}
+.operation-read-control>small{flex-basis:100%}
+.read-badge{font-size:.85em;white-space:nowrap;color:var(--muted,#9aa9bd)}
+@media(max-width:600px){.operation-filters label{flex-wrap:wrap}.operation-filters input[type=search]{max-width:100%}.operation-selection button{min-height:42px}.operation-pagination{justify-content:space-between}.operation-table th,.operation-table td{padding:.6rem}}

@@ -39,6 +39,9 @@ type consoleState struct {
 	mu      sync.Mutex
 	tickets map[string]consoleTicket
 	active  map[string]func()
+	// sessions tracks in-flight consoleSession goroutines so Close can
+	// finish their final audit writes before the store is closed.
+	sessions sync.WaitGroup
 }
 
 func (c *consoleState) closeAll() {
@@ -51,6 +54,7 @@ func (c *consoleState) closeAll() {
 	for _, f := range fns {
 		f()
 	}
+	c.sessions.Wait()
 }
 func (a *App) consoleTarget(id string) (consoleTarget, error) {
 	var out consoleTarget
@@ -251,8 +255,14 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 		return
 	}
 	a.console.active[id] = closeConnection
+	a.console.sessions.Add(1)
 	a.console.mu.Unlock()
-	defer func() { a.console.mu.Lock(); delete(a.console.active, id); a.console.mu.Unlock() }()
+	defer func() {
+		a.console.mu.Lock()
+		delete(a.console.active, id)
+		a.console.mu.Unlock()
+		a.console.sessions.Done()
+	}()
 	var writeMu sync.Mutex
 	send := func(v any) error {
 		writeMu.Lock()

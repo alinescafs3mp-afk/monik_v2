@@ -17,6 +17,7 @@ import tempfile
 import time
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
+from operation_read_scenarios import exercise_operation_reads
 
 
 def run(binary: Path, output: Path) -> None:
@@ -441,6 +442,8 @@ def run(binary: Path, output: Path) -> None:
                     page.get_by_label("Режим экрана",exact=True).select_option("auto")
                     page.set_viewport_size({"width":1440,"height":1000})
                     results.append("TV 70% density, problem-first outline, aligned nonoverlapping navigation and explicit console readiness")
+                    page.goto(base + "/settings", wait_until="domcontentloaded")
+                    exercise_operation_reads(page, context, base, output, results)
                     page.goto(base + "/settings", wait_until="domcontentloaded")
                     old_cookies = context.cookies()
                     password_form = page.locator(".password-form")

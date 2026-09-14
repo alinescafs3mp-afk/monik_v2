@@ -1,0 +1,93 @@
+{
+  "date": "2026-09-14",
+  "repository": "alinescafs3mp-afk/monik_v2",
+  "baseline_commit": "efae8069f27f3ba2f951273796dbd99668db364d",
+  "baseline_tree": "0ef404f114c7b8d34ff60976d342d9c8d3540225",
+  "scope": "Corrective source audit and implemented operation-read workflow; not full release or production acceptance",
+  "toolchain": {
+    "go": "1.27.0",
+    "node": "22.16.0",
+    "dependencies": "baseline locked Go/npm packages; no new dependency"
+  },
+  "checks": {
+    "go_race": {
+      "result": "PASS",
+      "top_level": 232,
+      "pass_events": 300,
+      "tested_packages": 19,
+      "opt_in_native_skipped_in_full_run": 2
+    },
+    "frontend": {
+      "result": "PASS",
+      "tests": 88,
+      "scope": "Node helper/request tests; not browser execution"
+    },
+    "typescript": {
+      "result": "PASS",
+      "scope": "tsc --noEmit; no vue-tsc claim"
+    },
+    "vite": "PASS",
+    "go_vet": "PASS",
+    "go_mod_verify": "PASS",
+    "linux_amd64_build": {
+      "result": "PASS",
+      "commands": 4
+    },
+    "windows_amd64_build": {
+      "result": "PASS",
+      "commands": 4,
+      "scope": "cross-compilation only"
+    },
+    "native_linux": {
+      "result": "PASS",
+      "tests": 2,
+      "uid": 65534,
+      "scope": "compiled worker and supervisor, real CPU/RAM, process restart/respawn, 503 upload outage and spool drain; no native service install"
+    },
+    "ssh": {
+      "result": "PASS",
+      "tests": 8,
+      "scope": "existing encrypted SSH/PTY fixtures in race suite; not native shell/browser"
+    },
+    "new_regressions": {
+      "result": "CONFIRMED",
+      "baseline_failed": 4,
+      "details": [
+        "missing target success",
+        "corrupt operation silently valid",
+        "delayed receipt rewinds running",
+        "partial target/aggregate commit"
+      ]
+    },
+    "browser_syntax": "PASS",
+    "browser_execution": {
+      "result": "HOST_PASS",
+      "auditor": "BLOCKED_BEFORE_LOGIN ERR_BLOCKED_BY_ADMINISTRATOR",
+      "host": "28/28 Playwright 1.57.0 Chromium on disposable loopback fixture",
+      "new_scenarios_executed": 3
+    },
+    "host_extras": [
+      "console closeAll waits for sessions before Store.Close (TempDir WAL/SHM)",
+      "operations table-wrap/read-control contain absolute .sr so document scrollWidth stays at 390px"
+    ],
+    "native_systemd_SCM_boot": "NOT_RUN",
+    "physical_TV_Yandex": "NOT_RUN",
+    "full_fleet_and_24h_soak": "NOT_RUN",
+    "complete_release_battery": "NOT_RUN"
+  },
+  "publication": {
+    "result": "SOURCE_WRITE_BLOCKED",
+    "commit_created": false,
+    "ref_updated": false,
+    "last_checked_main": "efae8069f27f3ba2f951273796dbd99668db364d",
+    "explanation": "GitHub create_tree call was blocked by OpenAI before a commit/ref update; not a GitHub permission error or deployment."
+  },
+  "remaining_implementation": [
+    "independent service-host self-update/recovery",
+    "immutable releases and cohort retry/resume",
+    "protected full-controller backup/restore/reconciliation",
+    "long-term aggregates and measured retention capacity",
+    "native Windows account/ACL/service acceptance",
+    "viewer-only wallboard authorization"
+  ]
+}

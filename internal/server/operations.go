@@ -94,6 +94,9 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	} else if errors.Is(err, storage.ErrIdempotencyConflict) {
 		a.writeErr(w, 409, "idempotency_conflict", "same key used with a different request")
 		return
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		a.writeErr(w, 500, "idempotency_lookup", "could not verify the original operation; no new operation created")
+		return
 	}
 	targets, err := a.expandTargets(req)
 	if err != nil {
@@ -187,11 +190,19 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 				_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
 			}
 		}
-		loaded, _ := a.Store.Operation(op.ID)
+		loaded, loadErr := a.Store.Operation(op.ID)
+		if loadErr != nil {
+			a.writeErr(w, 500, "result_unavailable", "Operation was saved; read its result using the original client_request_key")
+			return
+		}
 		a.writeJSON(w, 202, loaded)
 		return
 	}
-	loaded, _ := a.Store.Operation(op.ID)
+	loaded, loadErr := a.Store.Operation(op.ID)
+	if loadErr != nil {
+		a.writeErr(w, 500, "result_unavailable", "Operation was saved; read its result using the original client_request_key")
+		return
+	}
 	code := 202
 	if def.Scope == actions.ScopeServer && (loaded.Status == protocol.OpCompleted || loaded.Status == protocol.OpCompletedWithErrs) {
 		code = 200
@@ -454,7 +465,7 @@ func (a *App) bumpDesired(op *protocol.Operation, req protocol.SubmitOperation) 
 				return err
 			}
 		}
-		return nil
+		return a.Store.RefreshOperationTransaction(tx, op.ID)
 	})
 }
 

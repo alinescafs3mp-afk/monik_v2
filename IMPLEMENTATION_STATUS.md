@@ -1,3 +1,15 @@
+# Implementation status after Audit 9
+
+**PRE-RELEASE.** Baseline `efae806`; this corrective source adds durable operation read/unread, versioned bulk acknowledgement, full-journal counters, filtered pagination and atomic target/job/result/notice publication. Read never means success or recovery. New failures re-open attention; ordinary progress and removal of known waiting reasons do not.
+
+All previous integrated TV, monitoring-selection, service-name, SSH and agent features are preserved. No agent permission or re-enrollment change is required. Server/UI must be built from matching source. Current measured evidence is in `docs/audit/validation-review9-2026-09-14.json`. Auditor browser execution was blocked before login; host Playwright 1.57.0 ran the full fixture including the new operation-read scenarios.
+
+Independent supervisor self-update/recovery, full protected controller restore, immutable release/cohort orchestration, long aggregates and native Windows provisioning remain open. `operation.retry_selected` and `update.resume` remain guarded. Operation read/unread does not substitute for those features.
+
+---
+
+## Previous implementation context (historical)
+
 # Implementation status after Audit 8
 
 **PRE-RELEASE.** Integration base `3873c9c`, application base `4e0ae20`. Host extras vs auditor tree `64899f47` are recorded in `ACCEPTANCE_LEDGER.md`. Read `docs/AUDIT_REVIEW_8_2026-09-14.md`.

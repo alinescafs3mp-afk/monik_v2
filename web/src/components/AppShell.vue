@@ -59,15 +59,16 @@ const groups = [
 
 const tz = computed(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
 
+let opsLoading = false, opsRefreshAgain = false, disposed = false;
 async function refreshOps() {
+  if(disposed)return;
+  if(opsLoading){opsRefreshAgain=true;return;} opsLoading=true;
   try {
-    const data = await get<{ operations: Array<{ status: string }> }>("/api/v1/operations");
-    const ops = data.operations || [];
-    attn.value = ops.filter((o) => o.status === "attention_required" || o.status === "completed_with_errors").length;
-    running.value = ops.filter((o) => o.status === "queued" || o.status === "running").length;
-  } catch {
-    attn.value = -1;
-  }
+    const data = await get<{unread_attention:number;running:number}>("/api/v1/operations/summary");
+    if(!disposed){attn.value=data.unread_attention;running.value=data.running;}
+  } catch { if(!disposed){attn.value=-1;running.value=-1;} }
+  finally { opsLoading=false; if(opsRefreshAgain&&!disposed){opsRefreshAgain=false;void refreshOps();} }
+
 }
 
 function connectSSE() {
@@ -88,6 +89,7 @@ function connectSSE() {
 }
 
 onMounted(() => {
+  window.addEventListener("monik:refresh", refreshOps);
   if(media.addEventListener)media.addEventListener("change", resizeMenu);else media.addListener(resizeMenu);
   window.addEventListener("keydown", escapeMenu);
   void refreshOps();
@@ -97,6 +99,7 @@ onMounted(() => {
   }, 8000);
 });
 onUnmounted(() => {
+  disposed=true;window.removeEventListener("monik:refresh", refreshOps);
   if(media.removeEventListener)media.removeEventListener("change", resizeMenu);else media.removeListener(resizeMenu);
   window.removeEventListener("keydown", escapeMenu);
   es?.close();
@@ -120,7 +123,7 @@ onUnmounted(() => {
       <header class="bar app-topbar">
         <button id="sidebar-toggle" type="button" class="sidebar-toggle" :aria-expanded="isMobile ? mobileOpen : !collapsed" aria-controls="main-nav" :aria-label="(isMobile ? !mobileOpen : collapsed) ? 'Развернуть меню' : 'Свернуть меню'" title="Развернуть или свернуть меню" @click="toggleSidebar"><NavIcon name="menu"/><span class="sr">Меню</span></button>
         <strong class="page-title">{{ (route.meta.title as string) || "Monik" }}</strong>
-        <router-link class="header-operations" to="/operations">Операции {{ running }}/{{ attn < 0 ? '?' : attn }}</router-link>
+        <router-link class="header-operations" :class="{'err':attn>0}" :to="attn>0?'/operations?filter=attention':'/operations'" title="Выполняются / непрочитанные с проблемами">Операции {{ running<0?'?':running }}/{{ attn < 0 ? '?' : attn }}</router-link>
         <form class="global-search" @submit.prevent="$router.push({ path:'/machines', query:{ q } })"><input v-model="q" type="search" placeholder="Поиск машины" aria-label="Глобальный поиск"/></form>
         <DisplayControls/><span class="header-user muted">{{ (me && (me.username as string)) || "" }}</span>
         <button type="button" @click="$emit('logout')">Выйти</button>

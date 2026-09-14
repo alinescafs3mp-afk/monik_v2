@@ -62,6 +62,10 @@ func Open(path string, clk clock.Clock) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.initializeOperationAttention(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
