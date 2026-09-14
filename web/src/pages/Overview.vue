@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref } from "vue";
 import { get, submitOp } from "../api";
 import { usePolling } from "../composables/usePolling";
 import { bytes, number, stateLabel } from "../format";
-import { worstDisk, readPreference, savePreference, matchesMachine } from "../presentation";
+import { worstDisk, readPreference, savePreference, matchesMachine, overviewPriority, orderOverview } from "../presentation";
 import TVBoard from "../components/TVBoard.vue";
 import {useDisplay} from "../composables/useDisplay";
 const {mode}=useDisplay();
@@ -15,7 +15,8 @@ const now = ref(Date.now()); let fetchedAt = Date.now();
 const timer = window.setInterval(() => { now.value = Date.now(); }, 2000); onUnmounted(() => clearInterval(timer));
 const { loading, error, refreshing, updated, refresh } = usePolling(async () => { data.value = await get("/api/v1/overview"); fetchedAt = Date.now(); now.value = fetchedAt; });
 function fresh(c: any) { return c.metrics_fresh && (c.age_seconds || 0) + Math.max(0, now.value-fetchedAt)/1000 <= 15; }
-const cards = computed(() => (data.value?.cards || []).filter((c: any) => (!problemsOnly.value || c.has_problem || !fresh(c)) && c.pinned && matchesMachine(c, query.value)).sort((a: any,b: any) => Number(b.pinned)-Number(a.pinned) || a.name.localeCompare(b.name)));
+const cards = computed(() => orderOverview((data.value?.cards || []).filter((c:any)=>c.pinned && (!problemsOnly.value || overviewPriority(c,fresh(c))>0) && matchesMachine(c,query.value)), fresh));
+
 function breach(c: any, metric: string) { return fresh(c) && (c.breaches || []).some((b: any) => b.metric === metric); }
 function chooseLayout(value: string) { layout.value = value; if (!savePreference('monik:overview-layout', value)) emit('toast', 'Вид изменён. Браузер не разрешил сохранить выбор.'); }
 async function pin(c: any) {
@@ -36,7 +37,7 @@ async function pin(c: any) {
     <p v-else-if="data && !cards.length" class="panel">Нет выбранных машин, соответствующих фильтрам. <router-link to="/machines">Отметьте «Показывать в обзоре» во вкладке «Машины»</router-link>.</p>
     <TVBoard v-if="mode==='tv'" :cards="cards" :fresh="fresh"/>
     <div v-else :class="layout==='rows' ? 'host-rows' : 'cards host-cards'">
-      <article v-for="c in cards" :key="c.id" class="card host-card" :class="{ 'host-line':layout==='rows', 'has-problem': c.has_problem, 'measurements-stale':!fresh(c) }">
+      <article v-for="c in cards" :key="c.id" class="card host-card" :class="{ 'host-line':layout==='rows', 'has-problem': overviewPriority(c,fresh(c))>0, 'measurements-stale':!fresh(c) }">
         <div class="host-ident">
           <router-link class="card-main" :to="`/machines/${encodeURIComponent(c.id)}`"><h3 class="truncate" :title="c.name">{{ c.name }}</h3><small class="muted">{{ c.os }} / {{ c.arch }}</small></router-link>
           <span class="badge"><span class="dot" :class="fresh(c) ? c.state : (c.state==='ok' ? 'stale' : c.state)"/>{{ stateLabel(c.state==='ok' && !fresh(c) ? 'stale' : c.state) }}</span>
@@ -50,7 +51,7 @@ async function pin(c: any) {
           <div><dt>Средний ping</dt><dd>{{ number(c.ping?.mean_ms, ' мс', 1) }}</dd><small>Потери {{ number(c.ping?.loss_percent, '%') }} · {{ c.ping?.window_seconds || 60 }} с</small></div>
         </dl>
         <div class="host-service-cell"><router-link :to="`/machines/${encodeURIComponent(c.id)}#services`" class="service-heading">Выбрано сервисов {{ c.services?.length || 0 }}/{{c.services_total||0}}</router-link><p v-if="!c.services?.length" class="muted service-empty">Отметьте сервисы для обзора во вкладке «Сервисы».</p><small v-if="c.unselected_service_problems" class="err">Проблем вне выбранных: {{c.unselected_service_problems}}</small><ServiceList v-if="c.services?.length" :services="c.services || []" :limit="layout==='rows' ? 2 : 4" :compact="layout==='rows'"/><router-link v-if="c.services?.length > (layout==='rows'?2:4)" :to="`/machines/${encodeURIComponent(c.id)}#services`">Все сервисы →</router-link></div>
-        <div class="host-line-actions"><button :disabled="pending.includes(c.id)" :aria-label="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" :title="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" @click="pin(c)"><span aria-hidden="true">{{ pending.includes(c.id) ? '…' : c.pinned ? '★' : '☆' }}</span></button><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`" title="Графики и параметры">↗</router-link></div>
+        <div class="host-line-actions"><router-link :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`" title="Открыть SSH-консоль">⌘</router-link><button :disabled="pending.includes(c.id)" :aria-label="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" :title="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" @click="pin(c)"><span aria-hidden="true">{{ pending.includes(c.id) ? '…' : c.pinned ? '★' : '☆' }}</span></button><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`" title="Графики и параметры">↗</router-link></div>
       </article>
     </div>
     <p v-if="mode!=='tv'" class="muted"><small>{{ cards.length }} машин показано · {{ updated ? `Данные получены ${updated.toLocaleTimeString()}` : 'Ожидаем данные сервера' }}. Ошибки сервисов показаны первыми.</small></p>

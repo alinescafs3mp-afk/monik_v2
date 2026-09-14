@@ -23,3 +23,21 @@ func (s *Store) SetServicePinned(id string, pinned bool, expected *bool) error {
 		return err
 	})
 }
+
+// RenameService modifies only the owner label. Discovery never replaces it.
+func (s *Store) RenameService(id, name string, expected *string) error {
+	return s.WithTx(func(tx *sql.Tx) error {
+		var old string
+		if err := tx.QueryRow(`SELECT display_name FROM services WHERE id=?`, id).Scan(&old); err != nil {
+			if err == sql.ErrNoRows {
+				return ErrNotFound
+			}
+			return err
+		}
+		if expected != nil && old != *expected {
+			return ErrConflict
+		}
+		_, err := tx.Exec(`UPDATE services SET display_name=? WHERE id=?`, name, id)
+		return err
+	})
+}

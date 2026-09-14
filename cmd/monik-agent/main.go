@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	goruntime "runtime"
+	"strings"
 	"syscall"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
@@ -137,14 +138,20 @@ func cmdService(args []string) int {
 	case "plan":
 		fmt.Print(servicehost.PlanUnit(filepath.Join(filepath.Dir(self), "monik-service-host"), *cfg, "monik"))
 		fmt.Println("# install with existing authority, or run the printed elevated command")
-		fmt.Printf("sudo %s service install --config %q\n", self, *cfg)
+		fmt.Printf("sudo %s service install --config %s\n", shellQuote(self), shellQuote(*cfg))
 		return 0
 	case "install":
 		if os.Geteuid() != 0 {
-			fmt.Fprintf(os.Stderr, "installation requires elevation. exact command:\nsudo %s service install --config %q\n", self, *cfg)
+			fmt.Fprintf(os.Stderr, "installation requires elevation. exact command:\nsudo %s service install --config %s\n", shellQuote(self), shellQuote(*cfg))
 			return 1
 		}
 		opts := install.LinuxDefaults()
+		stored, err := configfile.Load(*cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		opts.StateDir = stored.File.StateDir
 		opts.ConfigPath = *cfg
 		opts.HostSrc = filepath.Join(filepath.Dir(self), "monik-service-host")
 		opts.WorkerSrc = self
@@ -156,11 +163,6 @@ func cmdService(args []string) int {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		st, err := agruntime.Open(*cfg)
-		if err == nil {
-			st.State.File.Managed = true
-			_ = st.State.Save()
-		}
 		fmt.Println("installed service host into", opts.Prefix, "unit", opts.UnitPath)
 		return 0
 	case "status":
@@ -171,8 +173,11 @@ func cmdService(args []string) int {
 			fmt.Fprintln(os.Stderr, "uninstall requires elevation")
 			return 1
 		}
-		_ = os.Remove("/etc/systemd/system/monik-agent.service")
-		fmt.Println("unit removed; credentials and data preserved")
+		if err := install.UninstallLinux(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println("service stopped and disabled; credentials and data preserved")
 		return 0
 	default:
 		return 2
@@ -213,21 +218,22 @@ func cmdDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	cfg := fs.String("config", setup.DefaultConfigPath(), "config")
 	_ = fs.Parse(args)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := setup.WaitForApproval(ctx, *cfg, os.Stdout); err != nil {
-		if ctx.Err() != nil {
-			return 0
-		}
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	ag, err := agruntime.Open(*cfg)
+	st, err := configfile.Load(*cfg)
 	if err != nil {
-		fmt.Println("config:", err)
+		fmt.Fprintln(os.Stderr, "config:", err)
 		return 1
 	}
-	fmt.Printf("agent_id=%s controller=%s managed=%v version=%s\n", ag.State.File.AgentID, ag.State.File.ControllerURL, ag.State.File.Managed, version.Version)
+	if st.File.PendingRegistration {
+		fmt.Printf("agent_id=%s pending_registration=true; run the agent service to announce and await owner approval\n", st.File.AgentID)
+		return 0
+	}
+	cred, err := configfile.ReadCredential(st.File.CredentialPath)
+	if err != nil || cred == "" {
+		fmt.Fprintln(os.Stderr, "credential missing or unreadable")
+		return 1
+	}
+	fmt.Printf("agent_id=%s controller=%s managed=%v version=%s state=%s\n", st.File.AgentID, st.File.ControllerURL, st.File.Managed, version.Version, st.File.StateDir)
+	fmt.Println("Local configuration readable. Network, native boot and update recovery require separate checks; no writes performed.")
 	return 0
 }
 
@@ -254,21 +260,12 @@ func cmdController(args []string) int {
 	}
 	switch args[0] {
 	case "show":
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
-		if err := setup.WaitForApproval(ctx, *cfg, os.Stdout); err != nil {
-			if ctx.Err() != nil {
-				return 0
-			}
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		ag, err := agruntime.Open(*cfg)
+		st, err := configfile.Load(*cfg)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		fmt.Printf("url=%s controller_id=%s generation=%d\n", ag.State.File.ControllerURL, ag.State.File.ControllerID, ag.State.File.EndpointGeneration)
+		fmt.Printf("url=%s controller_id=%s generation=%d pending=%v\n", st.File.ControllerURL, st.File.ControllerID, st.File.EndpointGeneration, st.File.PendingRegistration)
 		return 0
 	case "recover":
 		if *profile == "" {
@@ -281,3 +278,5 @@ func cmdController(args []string) int {
 		return 2
 	}
 }
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }

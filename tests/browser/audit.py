@@ -5,6 +5,7 @@ Run after npm run build and go build -o /tmp/monik-audit-server
 """
 import argparse
 import json
+import re
 import os
 from pathlib import Path
 import socket
@@ -195,7 +196,10 @@ def run(binary: Path, output: Path) -> None:
                     expect(group.locator(".service-group-body")).to_have_count(0)
                     group.locator(".service-group-header").click()
                     expect(group.locator(".service-group-body")).to_be_visible()
-                    group.locator("tr").filter(has=page.get_by_role("cell", name="API", exact=True)).get_by_role("link", name="Настроить запрос", exact=True).click()
+                    # ServiceNameEditor puts an aria-labelled rename control in
+                    # the same cell, so the cell's accessible name is no longer
+                    # exactly "API". Identify the row by that rename control.
+                    group.locator("tr").filter(has=page.get_by_role("button", name="Переименовать: API", exact=True)).get_by_role("link", name="Настроить запрос", exact=True).click()
                     editor = page.locator(".check-editor")
                     expect(editor).to_be_visible()
                     expect(editor.locator("select").first).to_have_value("audit-api")
@@ -404,6 +408,39 @@ def run(binary: Path, output: Path) -> None:
                     expect(page.get_by_label("Режим экрана",exact=True)).to_have_value("auto")
                     page.set_viewport_size({"width":1440,"height":1000})
                     results.append("two machines fit a 960x540 TV viewport without browser zoom; device density persists")
+                    page.goto(base + "/services", wait_until="domcontentloaded")
+                    page.locator(".service-group-header").filter(has_text="Audit host").click()
+                    page.get_by_role("button", name="Переименовать: API", exact=True).click()
+                    page.get_by_label("Новое имя сервиса", exact=True).fill("Friendly API")
+                    page.get_by_role("button", name="Сохранить имя", exact=True).click()
+                    expect(page.get_by_role("button", name="Переименовать: Friendly API", exact=True)).to_be_visible()
+                    page.reload(wait_until="domcontentloaded")
+                    page.locator(".service-group-header").filter(has_text="Audit host").click()
+                    expect(page.get_by_role("button", name="Переименовать: Friendly API", exact=True)).to_be_visible()
+                    results.append("service friendly name persists through reload independently of check settings")
+                    page.goto(base + "/?display=tv", wait_until="domcontentloaded")
+                    page.set_viewport_size({"width":960,"height":540})
+                    page.get_by_label("Плотность ТВ",exact=True).select_option("10")
+                    expect(page.locator(".tv-machine").first).to_contain_text("Audit host")
+                    expect(page.locator(".tv-machine").first).to_have_class(re.compile("has-problem"))
+                    page.get_by_role("button",name="Развернуть меню",exact=True).click()
+                    nav=page.locator("#main-nav")
+                    expect(nav).to_be_visible()
+                    boxes=nav.locator("a").evaluate_all("els=>els.map(e=>{let r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,bottom:r.bottom}})")
+                    assert len(boxes)>2, boxes
+                    assert max(b["right"] for b in boxes)<=961, boxes
+                    for i,a in enumerate(boxes):
+                        for b in boxes[i+1:]:
+                            assert not (min(a["right"],b["right"])-max(a["x"],b["x"])>1 and min(a["bottom"],b["bottom"])-max(a["y"],b["y"])>1), "TV menu links overlap"
+                    page.screenshot(path=str(output/"overview-tv-v8-nav.png"),full_page=True)
+                    page.get_by_role("button",name="Свернуть меню",exact=True).click()
+                    page.locator(".tv-machine").first.get_by_role("link",name="Консоль Audit host",exact=True).click()
+                    expect(page.get_by_role("heading",name="SSH-консоль",exact=True)).to_be_visible()
+                    expect(page.locator(".console-page")).to_contain_text("Консоль не настроена")
+                    assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth+1")
+                    page.get_by_label("Режим экрана",exact=True).select_option("auto")
+                    page.set_viewport_size({"width":1440,"height":1000})
+                    results.append("TV 70% density, problem-first outline, aligned nonoverlapping navigation and explicit console readiness")
                     page.goto(base + "/settings", wait_until="domcontentloaded")
                     old_cookies = context.cookies()
                     password_form = page.locator(".password-form")

@@ -59,6 +59,25 @@ func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 		return nil
 	case "rule.save", "maintenance.set", "maintenance.cancel", "enrollment.window.set", "incident.unacknowledge":
 		return validateMonitoringSyntax(req)
+	case "service.rename":
+		id, ok := req.Params["service_id"].(string)
+		name, nameOK := req.Params["display_name"].(string)
+		old, oldOK := req.Params["expected_name"].(string)
+		if !ok || id == "" || len(id) > 128 || !nameOK || !oldOK || len(old) > 2048 || len(strings.TrimSpace(name)) == 0 || len(name) > 255 {
+			return fmt.Errorf("service_id, expected_name and a name up to 255 UTF-8 bytes required")
+		}
+		for _, c := range name {
+			if c < 32 || c == 127 {
+				return fmt.Errorf("name cannot contain control characters")
+			}
+		}
+		for k := range req.Params {
+			if k != "service_id" && k != "display_name" && k != "expected_name" {
+				return fmt.Errorf("unknown rename parameter")
+			}
+		}
+		req.Params["display_name"] = strings.TrimSpace(name)
+		return nil
 	case "agent.rename":
 		id, idOK := req.Params["agent_id"].(string)
 		name, nameOK := req.Params["display_name"].(string)

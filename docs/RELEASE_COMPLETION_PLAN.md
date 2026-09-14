@@ -1,6 +1,6 @@
-# Monik: completion plan after Audit 7
+# Monik: completion plan after Audit 8
 
-Authority: owner v3 requirements, later requested UX/custom-check/agent-arrival behavior and actual integrated code. Current baseline `5d17aaa`; Audit 7 adds the service-selection, wallboard and session slice documented in `AUDIT_REVIEW_7_2026-09-14.md`. This is a completion directive, not evidence that the remaining tasks are done.
+Authority: owner v3 requirements, later requested UX/custom-check/agent-arrival behavior and actual integrated code. Current integration baseline `3873c9c` (application `4e0ae20`); Audit 8 adds the source corrections documented in `AUDIT_REVIEW_8_2026-09-14.md`. This is a completion directive, not evidence that the remaining tasks are done.
 
 ## What is no longer an empty control
 
@@ -14,11 +14,11 @@ Do not conflate service `pinned` with periodic monitoring. Disabled checks suppr
 
 ## P0 / gate 1: install once, genuinely recover later
 
-Review `internal/install`, `internal/servicehost`, agent setup, CLI and packages. Provision and validate an appropriate Linux identity and directory ownership. Use deliberate Windows restricted identities/ACLs. Paths in the installer and protected data directory must agree; compiling a unit containing User=monik does not create that account.
+Review `internal/install`, `internal/servicehost`, agent setup, CLI and packages. Audit 8 now provisions/checks the Linux identity and confines private state ownership/publication. Prove it on actual systemd and finish interruption rollback; process evidence alone does not accept installation. Use deliberate Windows restricted identities/ACLs. Paths in the installer and protected data directory must agree; compiling a unit containing User=monik does not create that account.
 
 Implement independent native recovery for updating the service-host itself. An immediately crashing new supervisor must not be the only component able to roll back. Preserve signed current/previous slots, version/digest/journal identity, compatible worker state and spool. Local IPC needs request correlation, bounded input, concurrency and deadline handling, particularly Windows file-based request/reply transport.
 
-Evidence: real systemd and SCM, before-login boot, stop/restart, killed worker/supervisor, invalid entrypoint, full disk, denied write, interrupted activation and re-upgrade after rollback. All credentials remain protected. No remote shell, host reboot or unrelated application control.
+Evidence: real systemd and SCM, before-login boot, stop/restart, killed worker/supervisor, invalid entrypoint, full disk, denied write, interrupted activation and re-upgrade after rollback. All credentials remain protected. No shell through the agent, automatic host reboot or unrelated application control. The owner explicitly requested a separate manual SSH console in Audit 8; its fixed-target/authentication boundary must remain independent.
 
 ## P0 / gate 2: immutable signed releases and durable rollout
 
@@ -64,6 +64,15 @@ The new admission window is a public exposure reduction, not DoS protection. Con
 
 ## Release evidence required
 
-Return a coherent main commit, rebuilt native release artifacts with actual version/commit metadata, checksums/signatures and a matrix separating build, foreground, install, boot, update, service-host recovery and restore. Native Windows, systemd power loss, complete v3 battery, 50-agent capacity and 24h soak remain NOT RUN in Audit 6. A green helper suite is not a complete release.
+Return a coherent main commit, rebuilt native release artifacts with actual version/commit metadata, checksums/signatures and a matrix separating build, foreground, install, boot, update, service-host recovery and restore. Native Windows, systemd power loss, complete v3 battery, 50-agent capacity and 24h soak remain NOT RUN in Audit 8. A green helper suite is not a complete release.
 
 Telegram and mandatory third-party services stay deferred. Do not add Redis/Kafka/an LLM/plugin marketplace to solve a small fixed-scope problem. The goal remains: install once, know what is happening, control safely, inspect honest history and recover without losing the fleet.
+
+
+## Audit 8 boundaries and next most valuable work
+
+The owner-approved SSH gateway is an exception to the earlier no-console product scope, not permission to turn the monitoring agent into a command runner. Keep fixed local target mapping, independently checked host keys, recent owner auth, per-session tickets, WSS origin validation, bounded output and session closure. Add native SSH shell and actual xterm/browser tests before treating the echo fixture as end-to-end acceptance. Restricted viewer credentials are important before deploying a shared TV.
+
+Preserve red priority for problematic host metrics or failing selected services only, stable ties and separate unselected-problem indicators. Extend rule sources without hardcoding safety temperatures. Check actual TV CSS viewport/zoom, long translated labels, 200% ordinary zoom and narrow layouts with visible axes and usable remote/keyboard focus.
+
+Finish first-host systemd installation, before-login boot and independent recovery tests before more feature work. Audit 8 fixes premature supervisor return and demonstrates non-root compiled process restart/spool recovery, but not OS boot or power-cut durability. Windows restricted identities/ACLs and local request correlation remain open. Full protected backup/restore and immutable release publication remain P0. Do not disable guards to make remote deployment appear ready.

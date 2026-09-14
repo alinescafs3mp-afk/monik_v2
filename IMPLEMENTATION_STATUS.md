@@ -1,18 +1,19 @@
-# Monik implementation status: Audit 7 source
+# Implementation status after Audit 8
 
-Base `5d17aaab6b3f4259820b089c28a7f4367e065372`, tree `1c2aaf9da364c541471bb45b9ec43bf3329a65d6`. **PRE-RELEASE; source package, not deployment.** Current evidence is in `docs/audit/validation-review7-2026-09-14.json`; audit in `docs/AUDIT_REVIEW_7_2026-09-14.md`; operator guide in `docs/V7_SCREEN_AND_MONITORING_RU.md`. Historical audit ledgers remain in Git history.
+**PRE-RELEASE.** Integration base `3873c9c`, application base `4e0ae20`. Host extras vs auditor tree `64899f47` are recorded in `ACCEPTANCE_LEDGER.md`. Read `docs/AUDIT_REVIEW_8_2026-09-14.md`.
 
-| Area | Implemented / remaining boundary |
+| Area | State |
 |---|---|
-| Service selection | Independent persistent overview pins and periodic-check controls; per-machine bulk pause/enable; original-socket discovery suppression on new workers |
-| Discovery default | New primary checks paused; opt-in automatic monitoring with capability gate; limited initial identification remains active; existing checks preserved |
-| TV/mobile | Explicit full-width TV rows, three densities, bounded paging and optional cycling; narrow controls/containers; physical Yandex/TV and remote-control acceptance NOT RUN |
-| Login | Eye and native-manager autocomplete; opt-in 30-day server-backed persistent session, ordinary 12-hour session; logout/other-session revocation/expiry tests |
-| Monitoring truth | Hidden/unpinned monitored failures still count; inventory-only/paused/progress not fabricated failures; history and all v6 rules/maintenance preserved |
-| Storage | Cleanup time-budget yielding and interleaved bounded tables; native disk-loss/performance and long-term aggregates NOT ACCEPTED |
-| Existing functionality | Grouped services, names, overview layout, chart axes, custom request/trial, admission, rules, maintenance, incident lifecycle, history/export retained |
-| Native lifecycle | User/ACL provisioning and independent service-host self-update recovery remain incomplete, not merely untested |
-| Release and recovery | Immutable multi-release publication, durable cohorts/resume, full protected backup/restore/reconciliation and long retention remain mandatory blockers |
-| Browser | Host Chromium PASS 22/22 on the expanded scenario; auditor environment stayed BLOCKED_BEFORE_LOGIN. Previous 19/19 is baseline evidence only |
+| Dense TV / responsive UI | New 10px TV default, aligned menu, bounded pagination; helpers/build tested; physical TV/browser visual acceptance NOT RUN. |
+| Selected-scope priority | Red row/card and top ordering for host metric breaches/selected failed services; stable ties; other failures retain separate indicator. |
+| Service names | CAS-backed owner labels in grouped and machine views; original endpoint/check identity retained. |
+| SSH console | Optional protected fixed-target gateway, credentials per session, verified host keys, recent owner session, bounded WSS/PTY; eight SSH fixture tests pass; no agent shell. Native shell/browser NOT ACCEPTED. |
+| Linux installer | Dedicated identity/private ownership/active worker slot/native tool/path checks implemented. Native systemd/boot NOT RUN; no complete transaction rollback. |
+| Actual Linux processes | Compiled non-root worker and supervisor tested for telemetry, restart, child respawn, shutdown and spool recovery. |
+| Windows | Cross-build passes; restricted account/ACL/SCM and recovery NOT ACCEPTED. |
+| Existing monitoring/UI | Selective monitoring, pinning, custom requests, grouping, history, rules, maintenance, admission and session controls retained. |
+| Service-host self-update | Independent replacement/recovery remains guarded and incomplete. |
+| Release lifecycle | Immutable publication, cohort retry/resume and native crash recovery remain open. |
+| Recovery/history | Full protected restore/reconciliation and long-term aggregates/capacity remain open. |
 
-Server/UI first, then updated workers. Do not change identities, secrets, queues or the selected controller endpoint. New unknown registrations still need the existing admission window and approval. Telegram and general remote commands remain excluded. TV mode does not create a viewer-only security boundary.
+Existing registrations and the selected controller URL are preserved. Do not change the actual deployment to an old compiled address. Telegram remains deferred. Only the separately authorized SSH console changes the prior no-console scope; it does not grant OS authority to agents.

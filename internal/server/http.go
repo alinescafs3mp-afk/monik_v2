@@ -21,6 +21,9 @@ import (
 )
 
 func (a *App) routes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/agents/{id}/console", a.needAuth(a.handleConsoleInfo))
+	mux.HandleFunc("POST /api/v1/agents/{id}/console-ticket", a.needAuth(a.handleConsoleTicket))
+	mux.HandleFunc("GET /api/v1/agents/{id}/console-stream", a.needAuth(a.handleConsoleSocket))
 	mux.HandleFunc("GET /health", a.serveUI)
 	mux.HandleFunc("GET /api/v1/setup/status", a.handleSetupStatus)
 	mux.HandleFunc("POST /api/v1/setup", a.handleSetup)

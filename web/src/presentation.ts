@@ -18,3 +18,18 @@ export function matchesMachine(machine: any, query: string): boolean {
   const text = [machine.name, machine.hostname, machine.id, machine.os, ...(machine.services || []).flatMap((s: any) => [s.display_name, s.url, s.summary])].join(' ').toLocaleLowerCase();
   return query.trim().toLocaleLowerCase().split(/\s+/).every(term => text.includes(term));
 }
+
+/** Actual problems in the displayed scope. Acknowledgement never changes health. */
+export function overviewPriority(machine: any, metricsFresh: boolean): number {
+  if (machine?.state === 'revoked' || machine?.state === 'archived') return 0;
+  const failed = ['app_fail','http_error','transport_fail','critical','warning'];
+  const metricProblem = metricsFresh && (machine?.breaches || []).length > 0;
+  const selectedProblem = (machine?.services || []).some((s:any) => s.pinned !== false && s.state !== 'paused' && failed.includes(s.state));
+  if (metricProblem || selectedProblem) return 2;
+  if (['unreachable','stale'].includes(machine?.state) || (!metricsFresh && machine?.state === 'ok')) return 1;
+  return 0;
+}
+export function orderOverview<T extends {name?:string;id?:string}>(machines:T[], isFresh:(m:T)=>boolean):T[] {
+  return [...machines].sort((a,b)=>overviewPriority(b,isFresh(b))-overviewPriority(a,isFresh(a))
+    || String(a.name||a.id).localeCompare(String(b.name||b.id)) || String(a.id).localeCompare(String(b.id)));
+}

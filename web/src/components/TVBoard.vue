@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,onUnmounted,onUpdated,ref,watch} from 'vue';
 import {bytes,number,stateLabel} from '../format';
-import {worstDisk,orderedServices} from '../presentation';
+import {worstDisk,orderedServices,overviewPriority} from '../presentation';
 import {boardCapacity,pageSlice,serviceFresh} from '../display';
 const props=defineProps<{cards:any[];fresh:(c:any)=>boolean}>();
 const board=ref<HTMLElement|null>(null),size=ref(4),page=ref(0),autoplay=ref(false),hovered=ref(false),now=ref(Date.now());
 const screen=computed(()=>pageSlice(props.cards,page.value,size.value));
+let largestRow=0,lastWidth=0,lastFont="";
 let frame=0,observer:ResizeObserver|null=null,timer=0,lastPage=Date.now();
 function measure(){
  if(frame)return;frame=requestAnimationFrame(()=>{
   frame=0;const el=board.value;if(!el)return;
-  const row=el.querySelector('.tv-machine');const rowHeight=row?.getBoundingClientRect().height||84;
+  const font=getComputedStyle(document.documentElement).fontSize;
+  if(lastWidth!==window.innerWidth||lastFont!==font){largestRow=0;lastWidth=window.innerWidth;lastFont=font;}
+  const heights=Array.from(el.querySelectorAll('.tv-machine')).map(row=>row.getBoundingClientRect().height);
+  largestRow=Math.max(largestRow,...heights);const rowHeight=largestRow||84;
   const head=el.querySelector('.tv-columns')?.getBoundingClientRect().height||24;
   size.value=boardCapacity(window.innerHeight,el.getBoundingClientRect().top+head,rowHeight+4);
  });
@@ -19,6 +23,9 @@ function state(s:any){return s.fresh&&!serviceFresh(s,now.value)?'stale':s.state
 function outcome(s:any){return s.fresh&&!serviceFresh(s,now.value)?'Нет свежих данных':s.summary;}
 function turn(delta:number){page.value=Math.max(0,Math.min(screen.value.pages-1,screen.value.page+delta));lastPage=Date.now();}
 watch(()=>props.cards.map(c=>c.id).join('|'),()=>{page.value=Math.min(page.value,screen.value.pages-1);});
+watch(()=>props.cards.filter(c=>overviewPriority(c,props.fresh(c))>0).map(c=>c.id).join('|'),(value,old)=>{
+ const previous=new Set((old||'').split('|'));if(value.split('|').some(id=>id&&!previous.has(id))){page.value=0;lastPage=Date.now();}
+});
 watch(autoplay,()=>lastPage=Date.now());
 onMounted(()=>{
  window.addEventListener('resize',measure);
@@ -34,8 +41,8 @@ onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconne
 </script>
 <template><section ref="board" class="tv-board" aria-label="Экран мониторинга" @mouseenter="hovered=true" @mouseleave="hovered=false">
  <div class="tv-columns" aria-hidden="true"><span>Машина</span><span>CPU</span><span>RAM</span><span>DISK</span><span>Ping</span><span>Выбранные сервисы</span></div>
- <article v-for="c in screen.rows" :key="c.id" class="tv-machine" :class="{'measurements-stale':!fresh(c),'has-problem':c.has_problem}">
-  <div class="tv-identity"><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :title="c.name"><strong>{{c.name}}</strong></router-link><small>{{c.os}} / {{c.arch}}</small><span class="badge"><span class="dot" :class="fresh(c)?c.state:'stale'"/>{{stateLabel(!fresh(c)&&c.state==='ok'?'stale':c.state)}}</span><small v-if="c.maintenance_active">Обслуживание</small></div>
+ <article v-for="c in screen.rows" :key="c.id" class="tv-machine" :class="{'measurements-stale':!fresh(c),'has-problem':overviewPriority(c,fresh(c))>0}">
+  <div class="tv-identity"><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :title="c.name"><strong>{{c.name}}</strong></router-link><small>{{c.os}} / {{c.arch}} · <router-link :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`">Консоль</router-link></small><span class="badge"><span class="dot" :class="fresh(c)?c.state:'stale'"/>{{stateLabel(!fresh(c)&&c.state==='ok'?'stale':c.state)}}</span><small v-if="c.maintenance_active">Обслуживание</small></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='cpu')}"><span class="sr">CPU </span><strong>{{number(c.cpu,'%',0)}}</strong></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='ram')}"><span class="sr">RAM </span><strong>{{c.ram_total>0?number(c.ram_used/c.ram_total*100,'%',0):'Нет данных'}}</strong><small>{{bytes(c.ram_used)}} / {{bytes(c.ram_total)}}</small></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='disk')}"><span class="sr">DISK </span><strong>{{number(worstDisk(c.disks)?.used_percent,'%',0)}}</strong><small :title="worstDisk(c.disks)?.mount">{{worstDisk(c.disks)?.mount||'Нет данных'}}</small></div>

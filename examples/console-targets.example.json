@@ -1,0 +1,10 @@
+{
+  "targets": {
+    "EXACT_EXISTING_MONIK_AGENT_ID": {
+      "host": "203.0.113.10",
+      "port": 22,
+      "username": "operator",
+      "host_key_sha256": "SHA256:REPLACE_WITH_INDEPENDENTLY_VERIFIED_FINGERPRINT"
+    }
+  }
+}

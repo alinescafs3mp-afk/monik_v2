@@ -38,6 +38,7 @@ type Config struct {
 
 type App struct {
 	controlMu sync.Mutex
+	console   consoleState
 	Cfg       Config
 	Store     *storage.Store
 	TLS       *tlsutil.Bundle
@@ -111,7 +112,7 @@ func Open(cfg Config) (*App, error) {
 	return a, nil
 }
 
-func (a *App) Close() error { return a.Store.Close() }
+func (a *App) Close() error { a.console.closeAll(); return a.Store.Close() }
 
 func (a *App) ControllerID() string {
 	return a.Store.MustSetting("controller_id", "")
@@ -240,6 +241,7 @@ func (a *App) Run(ctx context.Context) error {
 	a.Log.Info("monik-server listening", "addr", a.Cfg.Listen, "version", version.Version, "advertised", a.Cfg.AdvertisedURL)
 	go func() {
 		<-ctx.Done()
+		a.console.closeAll()
 		shctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		_ = a.HTTP.Shutdown(shctx)

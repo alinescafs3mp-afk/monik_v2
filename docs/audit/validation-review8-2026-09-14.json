@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-14",
+  "upstream_base_commit": "3873c9ce567aaef9385c98a897d9d542f9ada52f",
+  "application_base_commit": "4e0ae20aeefb95663a5a1618facc42f80b36dee8",
+  "upstream_base_tree": "e13136929ff7d2562ab668a2ab409dee8f9f53c5",
+  "go": {
+    "command": "go test -race -count=1 -json ./...",
+    "status": "PASS",
+    "top_level_passed": 211,
+    "pass_events": 276,
+    "tested_packages": 19,
+    "opt_in_native_tests_skipped_in_standard_suite": 2
+  },
+  "native_compiled_linux": {
+    "status": "PASS",
+    "tests": 2,
+    "uid": 1000,
+    "uid_note": "TestAudit8Native uses Credential Uid 65534 only when euid==0; this host ran as uid 1000",
+    "scope": [
+      "real CPU/RAM",
+      "clean process stop/restart",
+      "supervisor respawns killed worker",
+      "HTTP503 ingestion interruption and spool drain",
+      "identity and controller URL preserved"
+    ],
+    "exclusions": [
+      "systemd install",
+      "OS reboot",
+      "SCM",
+      "power loss",
+      "native SSH shell"
+    ]
+  },
+  "ssh_fixture": {
+    "status": "PASS",
+    "tests": 8,
+    "scope": "Real encrypted SSH/PTY protocol and bidirectional echo fixture; not native shell or browser"
+  },
+  "frontend": {
+    "tests": 78,
+    "status": "PASS",
+    "typecheck": "tsc --noEmit PASS; vue-tsc NOT RUN",
+    "production_build": "PASS"
+  },
+  "builds": {
+    "linux_amd64": [
+      "server",
+      "agent",
+      "service-host",
+      "release"
+    ],
+    "windows_amd64": [
+      "server",
+      "agent",
+      "service-host",
+      "release"
+    ],
+    "status": "PASS",
+    "native_windows": "NOT RUN"
+  },
+  "go_vet": "PASS",
+  "go_mod_verify": "PASS",
+  "browser": {
+    "status": "HOST_PASS",
+    "auditor_status": "BLOCKED_BEFORE_LOGIN",
+    "auditor_reason": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "host": "Playwright 1.57.0 Chromium; 24/24 including rename, 10px TV density, nonoverlapping nav, console disabled-until-configured",
+    "scope": "compiled Go API + built Vue; synthetic loopback fixture",
+    "passed": 24,
+    "errors": []
+  },
+  "host_extras": [
+    "linux_test.go Chmod 0644 after WriteFile because host umask 0077",
+    "browser audit.py row locator uses rename control after ServiceNameEditor shares the service cell"
+  ],
+  "not_run": [
+    "physical Yandex TV",
+    "native Windows",
+    "OS boot/power-cut recovery",
+    "50-agent load",
+    "24h soak",
+    "complete v3 acceptance"
+  ],
+  "production": "host deploys after this commit per standing owner instruction; audit package itself did not access production",
+  "publication": {
+    "status": "HOST_INTEGRATING",
+    "reason": "package source applied on 3873c9c plus host extras; commit follows host verification"
+  }
+}

@@ -69,6 +69,9 @@ func (h *Host) Run(ctx context.Context) error {
 		return err
 	}
 	defer ln.Close()
+	// Run may be the service process's last call. Finish worker teardown before
+	// returning, rather than racing a cleanup goroutine against main's exit.
+	defer func() { h.updateMu.Lock(); h.stopWorker(); h.updateMu.Unlock() }()
 	if err := h.startWorker(); err != nil {
 		return err
 	}
@@ -77,9 +80,6 @@ func (h *Host) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
-		h.updateMu.Lock()
-		h.stopWorker()
-		h.updateMu.Unlock()
 	}()
 	for {
 		c, err := ln.Accept()
@@ -478,6 +478,10 @@ func PlanUnitState(bin, cfg, state, user string) string {
 	if runtime.GOOS == "windows" {
 		agent += ".exe"
 	}
+	return PlanManagedUnit(bin, agent, cfg, state, user)
+}
+
+func PlanManagedUnit(bin, agent, cfg, state, user string) string {
 	if state == "" {
 		state = "/var/lib/monik-agent"
 	}
@@ -493,6 +497,9 @@ Restart=on-failure
 RestartSec=5
 User=%s
 NoNewPrivileges=true
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target

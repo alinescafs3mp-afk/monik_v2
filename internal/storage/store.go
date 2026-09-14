@@ -468,10 +468,15 @@ func (s *Store) LatestHost(agentID string) (*protocol.HostMetrics, time.Time, er
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	var h protocol.HostMetrics
-	_ = json.Unmarshal([]byte(payload), &h)
-	t, _ := time.Parse(time.RFC3339Nano, obs)
-	return &h, t, nil
+	var h *protocol.HostMetrics
+	if e := json.Unmarshal([]byte(payload), &h); e != nil || h == nil {
+		return nil, time.Time{}, fmt.Errorf("stored host measurement is invalid")
+	}
+	stamp, e := time.Parse(time.RFC3339Nano, obs)
+	if e != nil {
+		return nil, time.Time{}, fmt.Errorf("stored measurement timestamp is invalid")
+	}
+	return h, stamp, nil
 }
 
 func (s *Store) HostAt(agentID string, at time.Time) (*protocol.HostMetrics, time.Time, error) {
@@ -484,10 +489,15 @@ func (s *Store) HostAt(agentID string, at time.Time) (*protocol.HostMetrics, tim
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	var h protocol.HostMetrics
-	_ = json.Unmarshal([]byte(payload), &h)
-	t, _ := time.Parse(time.RFC3339Nano, obs)
-	return &h, t, nil
+	var h *protocol.HostMetrics
+	if e := json.Unmarshal([]byte(payload), &h); e != nil || h == nil {
+		return nil, time.Time{}, fmt.Errorf("stored host measurement is invalid")
+	}
+	stamp, e := time.Parse(time.RFC3339Nano, obs)
+	if e != nil {
+		return nil, time.Time{}, fmt.Errorf("stored measurement timestamp is invalid")
+	}
+	return h, stamp, nil
 }
 
 func (s *Store) HostSeries(agentID string, from, to time.Time) ([]map[string]any, error) {

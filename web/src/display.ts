@@ -1,6 +1,6 @@
 export type DisplayMode = 'auto' | 'compact' | 'tv';
 export function displayMode(value: unknown): DisplayMode { return value === 'tv' || value === 'compact' ? value : 'auto'; }
-export function tvDensity(value: unknown): string { return ['12','14','16'].includes(String(value)) ? String(value) : '14'; }
+export function tvDensity(value: unknown): string { return ['10','12','14'].includes(String(value)) ? String(value) : '10'; }
 export function boardCapacity(height: number, top: number, rowHeight: number): number {
  if (![height,top,rowHeight].every(Number.isFinite) || rowHeight <= 0) return 1;
  return Math.max(1, Math.min(30, Math.floor((height - top - 56) / rowHeight)));

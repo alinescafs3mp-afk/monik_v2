@@ -5,7 +5,7 @@ import ts from 'typescript';
 async function load(name){const text=await readFile(new URL('../src/'+name+'.ts',import.meta.url),'utf8');return import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(text,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));}
 const display=await load('display'), selection=await load('serviceSelection');
 test('TV and compact mode are explicit, unknown values cannot inject CSS',()=>{for(const s of ['x',';color:red',null,undefined])assert.equal(display.displayMode(s),'auto');assert.equal(display.displayMode('tv'),'tv');assert.equal(display.displayMode('compact'),'compact');});
-test('TV density is bounded to tested values',()=>{assert.equal(display.tvDensity('12'),'12');assert.equal(display.tvDensity(16),'16');for(const x of ['1','300',NaN])assert.equal(display.tvDensity(x),'14');});
+test('TV density is bounded to tested values',()=>{assert.equal(display.tvDensity('12'),'12');assert.equal(display.tvDensity(10),'10');for(const x of ['1','300',NaN])assert.equal(display.tvDensity(x),'10');});
 test('960x540 CSS screen fits several TV rows without zoom',()=>{assert.ok(display.boardCapacity(540,130,86)>=4);assert.ok(display.boardCapacity(1080,150,86)>=10);});
 test('TV capacity handles unavailable sizes and always permits navigation',()=>{assert.equal(display.boardCapacity(0,50,86),1);assert.equal(display.boardCapacity(Infinity,50,86),1);assert.equal(display.boardCapacity(1080,50,0),1);});
 test('page slice handles data shrink and empty fleet',()=>{assert.deepEqual(display.pageSlice([],8,3),{rows:[],page:0,pages:1});assert.deepEqual(display.pageSlice([1,2,3,4,5],9,2),{rows:[5],page:2,pages:3});});

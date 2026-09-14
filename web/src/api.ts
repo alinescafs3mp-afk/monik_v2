@@ -91,3 +91,14 @@ export async function submitOp(action: string, params: Record<string, unknown> =
     return { key, op, unknown:false };
   } catch (e) { if((e as ApiError).error!=="action_cancelled")announceError(e as ApiError); throw e; } finally {if(activeSignature)activeSubmissions.delete(activeSignature);}
 }
+
+// Ticket creation has no remote effect. Only a definite recent-auth rejection
+// may be retried; never persist the SSH password/private key in pending jobs.
+export async function consoleTicket(path:string):Promise<{ticket:string}> {
+ try{return await post(path,{});}catch(e){
+  if((e as ApiError).error==='recent_auth_required'&&reauthHandler){
+   if(!await reauthHandler('Открыть SSH-консоль'))throw {message:'Подключение отменено.'};
+   return await post(path,{});
+  }throw e;
+ }
+}

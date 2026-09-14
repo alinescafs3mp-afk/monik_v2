@@ -248,7 +248,7 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 			"code": code, "expires_at": exp.Format(time.RFC3339), "advertised_url": a.Cfg.AdvertisedURL,
 			"ca_cert_pem": string(a.CACertPEM()),
 		})
-	case "preference.save", "agent.rename", "agent.pin", "service.pin", "service.hide", "agent.archive":
+	case "preference.save", "agent.rename", "service.rename", "agent.pin", "service.pin", "service.hide", "agent.archive":
 		if err := a.applyPreference(req); err != nil {
 			return err
 		}
@@ -339,6 +339,11 @@ func (a *App) applyPreference(req protocol.SubmitOperation) error {
 		}
 		_, err = a.Store.DB.Exec(`INSERT INTO dashboard_preferences(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body,revision=revision+1`, "owner", string(b))
 		return err
+	case "service.rename":
+		id, _ := req.Params["service_id"].(string)
+		name, _ := req.Params["display_name"].(string)
+		expected, _ := req.Params["expected_name"].(string)
+		return a.Store.RenameService(id, name, &expected)
 	case "agent.rename":
 		id, _ := req.Params["agent_id"].(string)
 		name, _ := req.Params["display_name"].(string)

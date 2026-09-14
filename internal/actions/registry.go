@@ -63,6 +63,7 @@ var Registry = map[string]Def{
 	"service.hide":             {ID: "service.hide", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 	"service.pause":            {ID: "service.pause", Scope: ScopeAgents, Risk: "config", RequiresCapability: "monitoring_configuration", DurableOperation: true, IdempotencyRequired: true, AuthoritativeCompletion: "applied_revision_hash"},
 	"service.ignore":           {ID: "service.ignore", Scope: ScopeAgents, Risk: "config", RequiresCapability: "monitoring_configuration", DurableOperation: true, IdempotencyRequired: true, AuthoritativeCompletion: "applied_revision_hash"},
+	"service.rename":           {ID: "service.rename", Scope: ScopeServer, Risk: "reversible", IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 	"agent.rename":             {ID: "agent.rename", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 	"agent.pin":                {ID: "agent.pin", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 }

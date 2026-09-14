@@ -8,6 +8,7 @@ export const router = createRouter({
     { path: "/", component: () => import("./pages/Overview.vue"), meta: { title: "Обзор" } },
     { path: "/machines", component: () => import("./pages/Machines.vue"), meta: { title: "Машины" } },
     { path: "/machines/:id", component: () => import("./pages/Machine.vue"), meta: { title: "Машина" } },
+    { path: "/machines/:id/console", component: () => import("./pages/Console.vue"), meta: {title: "Консоль машины"} },
     { path: "/services", component: () => import("./pages/Services.vue"), meta: { title: "Сервисы" } },
     { path: "/problems", component: () => import("./pages/Problems.vue"), meta: { title: "Проблемы и история" } },
     { path: "/agents", component: () => import("./pages/Agents.vue"), meta: { title: "Агенты" } },
