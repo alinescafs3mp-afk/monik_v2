@@ -76,6 +76,18 @@ func Open(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	keyPath := filepath.Join(cfg.DataDir, "secret-master.key")
+	if _, e := os.Stat(keyPath); os.IsNotExist(e) {
+		var count int
+		if e := st.DB.QueryRow("SELECT COUNT(*) FROM check_secrets").Scan(&count); e != nil {
+			st.Close()
+			return nil, e
+		}
+		if count > 0 {
+			st.Close()
+			return nil, fmt.Errorf("secret-master.key is missing while encrypted secrets exist; restore the original key")
+		}
+	}
 	master, err := secure.LoadOrCreateKey(filepath.Join(cfg.DataDir, "secret-master.key"), 32)
 	if err != nil {
 		_ = st.Close()

@@ -1,0 +1,63 @@
+{
+  "date": "2026-09-14",
+  "baseline_commit": "4f85de31f837dbdfeb77e9f562726de5f00b9d28",
+  "toolchain": {
+    "go": "1.27.0",
+    "node": "22.16.0",
+    "dependencies": "reviewed locked snapshot; no version changes"
+  },
+  "go_race": {
+    "result": "PASS",
+    "top_level_tests": 144,
+    "pass_events_including_subtests": 202,
+    "tested_packages": 18
+  },
+  "frontend": {
+    "tests": 38,
+    "result": "PASS",
+    "tsc_no_emit": "PASS",
+    "vite_production": "PASS",
+    "vue_tsc": "NOT RUN"
+  },
+  "go_vet": "PASS",
+  "go_mod_verify": "PASS",
+  "builds": {
+    "linux_amd64": [
+      "server",
+      "agent",
+      "service-host",
+      "release"
+    ],
+    "windows_amd64_cross": [
+      "server",
+      "agent",
+      "service-host",
+      "release"
+    ],
+    "native_windows_execution": "NOT RUN"
+  },
+  "baseline_local_race": "FAIL: existing broken-candidate probation test; corrected and 30 repeated runs passed",
+  "new_before_fix_regressions": [
+    "invalid nonce panic",
+    "corrupt key overwritten",
+    "invalid password hash parameters panic"
+  ],
+  "probation_repetitions": 30,
+  "browser": {
+    "syntax": "PASS",
+    "walkthrough": "BLOCKED before login",
+    "error": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "scope": "isolated HTTPS loopback fixture; no bypass attempted"
+  },
+  "not_run": [
+    "native systemd/SCM boot",
+    "power-loss update recovery",
+    "50-agent capacity",
+    "24-hour soak",
+    "complete v3 battery",
+    "production deployment"
+  ],
+  "remote_write": "NOT ATTEMPTED; no new remote commit",
+  "schema": "additive request_version=1 + capability http_custom_v1; global schema remains 3",
+  "signed_audit_binary_release": false
+}

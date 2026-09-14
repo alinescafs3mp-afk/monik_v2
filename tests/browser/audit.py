@@ -166,6 +166,32 @@ def run(binary: Path, output: Path) -> None:
                     expect(page.locator("main")).to_contain_text("Инциденты, пересекающие выбранный интервал")
                     results.append("historical incident controls expose fixed time, state filters and shared ranges")
 
+                    page.goto(base + "/machines/audit-host?service=audit-api#services", wait_until="domcontentloaded")
+                    editor = page.locator(".check-editor")
+                    expect(editor.get_by_role("heading", name="Кастомный запрос к сервису")).to_be_visible()
+                    expect(editor.get_by_label("URL сервиса", exact=True)).to_have_value("http://127.0.0.1:28000")
+                    editor.get_by_label("Метод", exact=True).select_option("POST")
+                    editor.get_by_label("Путь и query", exact=True).fill("/rpc?mode=brief")
+                    editor.get_by_label("Интервал, с", exact=True).fill("30")
+                    editor.get_by_label("Таймаут, с", exact=True).fill("10")
+                    editor.get_by_label("Открытое тело запроса, до 16 КиБ", exact=True).fill('{"method":"health"}')
+                    editor.get_by_label("Открытые заголовки, JSON", exact=True).fill('{"Content-Type":"application/json"}')
+                    editor.get_by_role("button", name="Пробный запрос", exact=True).click()
+                    expect(editor.get_by_role("alert")).to_contain_text("Подтвердите")
+                    editor.get_by_role("checkbox", name="Я проверил", exact=False).check()
+                    with page.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/api/v1/operations")) as submitted:
+                        editor.get_by_role("button", name="Пробный запрос", exact=True).click()
+                    request = json.loads(submitted.value.request.post_data)
+                    assert request["action"] == "check.trial"
+                    assert request["params"]["path"] == "/rpc?mode=brief"
+                    assert request["params"]["body"] == '{"method":"health"}'
+                    assert request["params"]["interval_seconds"] == 30
+                    assert request["params"]["timeout_seconds"] == 10
+                    expect(editor.get_by_role("link", name="Открыть операцию", exact=True)).to_be_visible()
+                    assert editor.locator(".trial-result").count() == 0, "synthetic agent must not fabricate a completed trial"
+                    page.screenshot(path=str(output / "custom-request-editor.png"), full_page=True)
+                    results.append("custom POST requires consent and preserves body/path/headers/interval in actual API; result stays pending without agent evidence")
+                    page.on("dialog", lambda dialog: dialog.accept())
                     page.goto(base + "/updates", wait_until="domcontentloaded")
                     expect(page.locator("main")).to_contain_text("TUF root")
                     assert page.get_by_role("button", name="Обновить всех").count() == 0

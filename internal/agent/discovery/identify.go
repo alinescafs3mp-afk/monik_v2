@@ -22,12 +22,23 @@ func DialTargets(ls []Listener, locals []net.IP) []string {
 	}
 	for _, l := range ls {
 		port := strconv.Itoa(l.Port)
-		if netutil.HostIsWildcard(l.IP.String()) || l.IP.IsUnspecified() {
-			for _, d := range netutil.ExpandWildcard(port, locals) {
-				add(d)
+		if l.IP == nil || l.Port < 1 || l.Port > 65535 {
+			continue
+		}
+		if l.IP.IsUnspecified() {
+			// One canonical address in the listener's own family. Expanding v4 into
+			// every v6 interface produced duplicate services and false refusals.
+			if l.IP.To4() != nil {
+				add(net.JoinHostPort("127.0.0.1", port))
+			} else {
+				add(net.JoinHostPort("::1", port))
 			}
 			continue
 		}
+		if netutil.IsMetadata(l.IP) {
+			continue
+		}
+
 		add(netutil.FormatDial(l.IP, port))
 	}
 	return out

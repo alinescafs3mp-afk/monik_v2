@@ -52,7 +52,8 @@ func ParseURL(raw string) (*url.URL, error) {
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, err
+		// url.Error can embed raw credentials or query parameters.
+		return nil, fmt.Errorf("invalid URL syntax")
 	}
 	if u.User != nil {
 		return nil, fmt.Errorf("url userinfo is not allowed")

@@ -8,7 +8,9 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -35,12 +37,14 @@ func HashPassword(password string) (string, error) {
 }
 
 func VerifyPassword(encoded, password string) bool {
+	if len(encoded) > 512 {
+		return false
+	}
 	parts := splitDollar(encoded)
 	if len(parts) != 5 || parts[0] != "argon2id" {
 		return false
 	}
-	var v int
-	if _, err := fmt.Sscanf(parts[1], "v=%d", &v); err != nil || v != 19 {
+	if parts[1] != "v=19" || len(encoded) > 512 {
 		return false
 	}
 	var m, t uint32
@@ -48,12 +52,20 @@ func VerifyPassword(encoded, password string) bool {
 	if _, err := fmt.Sscanf(parts[2], "m=%d,t=%d,p=%d", &m, &t, &p); err != nil {
 		return false
 	}
+	// Reject corrupted/untrusted costs before allocation or the Argon2 call.
+	if m < 8*uint32(p) || m > 65536 || t < 1 || t > 4 || p < 1 || p > 4 {
+		return false
+	}
+	canonical := "m=" + strconv.FormatUint(uint64(m), 10) + ",t=" + strconv.FormatUint(uint64(t), 10) + ",p=" + strconv.FormatUint(uint64(p), 10)
+	if parts[2] != canonical {
+		return false
+	}
 	salt, err := hex.DecodeString(parts[3])
-	if err != nil {
+	if err != nil || len(salt) != 16 {
 		return false
 	}
 	want, err := hex.DecodeString(parts[4])
-	if err != nil {
+	if err != nil || len(want) != 32 {
 		return false
 	}
 	got := argon2.IDKey([]byte(password), salt, t, m, p, uint32(len(want)))
@@ -73,17 +85,56 @@ func splitDollar(s string) []string {
 }
 
 func LoadOrCreateKey(path string, n int) ([]byte, error) {
-	if b, err := os.ReadFile(path); err == nil && len(b) >= n {
-		return b[:n], nil
-	} else if err != nil && !os.IsNotExist(err) {
-		return nil, err
+	if n < 16 || n > 4096 {
+		return nil, fmt.Errorf("invalid key length")
+	}
+	read := func() ([]byte, error) {
+		fi, e := os.Lstat(path)
+		if e != nil {
+			return nil, e
+		}
+		if !fi.Mode().IsRegular() || fi.Size() != int64(n) {
+			return nil, fmt.Errorf("existing key has invalid type or length; restore the original key")
+		}
+		b, e := os.ReadFile(path)
+		if e != nil {
+			return nil, e
+		}
+		if len(b) != n {
+			return nil, fmt.Errorf("key length changed while reading")
+		}
+		return b, nil
+	}
+	if b, e := read(); e == nil {
+		return b, nil
+	} else if !os.IsNotExist(e) {
+		return nil, e
 	}
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return nil, err
+	if _, e := rand.Read(b); e != nil {
+		return nil, e
 	}
-	if err := os.WriteFile(path, b, 0o600); err != nil {
-		return nil, err
+	// Exclusive creation never truncates a concurrently created/existing key.
+	f, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if os.IsExist(e) {
+		return read()
+	}
+	if e != nil {
+		return nil, e
+	}
+	count, e := f.Write(b)
+	if e == nil && count != len(b) {
+		e = io.ErrShortWrite
+	}
+	if e == nil {
+		e = f.Sync()
+	}
+	ce := f.Close()
+	if e == nil {
+		e = ce
+	}
+	if e != nil {
+		return nil, e
 	}
 	return b, nil
 }
@@ -113,6 +164,9 @@ func Open(master, nonce, ciphertext []byte) ([]byte, error) {
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, err
+	}
+	if len(nonce) != gcm.NonceSize() || len(ciphertext) < gcm.Overhead() {
+		return nil, fmt.Errorf("invalid encrypted record")
 	}
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }

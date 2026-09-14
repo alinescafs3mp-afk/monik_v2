@@ -92,6 +92,10 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		a.writeErr(w, 400, "bad_targets", err.Error())
 		return
 	}
+	if err := a.validateCheckTargets(req, targets); err != nil {
+		a.writeErr(w, 409, "check_prerequisite", err.Error())
+		return
+	}
 	if def.Scope == actions.ScopeAgents && len(targets) == 0 {
 		a.writeErr(w, 400, "no_targets", "no agents in frozen target set")
 		return
@@ -419,8 +423,8 @@ func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) e
 		if err != nil {
 			return err
 		}
-		var d protocol.CheckDefinition
-		if err := json.Unmarshal(b, &d); err != nil {
+		d, err := protocol.DecodeCheck(b)
+		if err != nil {
 			return fmt.Errorf("invalid check fields: %w", err)
 		}
 		if d.ID == "" || d.ServiceID == "" {
@@ -463,8 +467,8 @@ func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) e
 	}
 	if chk, ok := req.Params["check"].(map[string]any); ok {
 		b, _ := json.Marshal(chk)
-		var d protocol.CheckDefinition
-		if json.Unmarshal(b, &d) == nil && d.ID != "" {
+		d, decodeErr := protocol.DecodeCheck(b)
+		if decodeErr == nil && d.ID != "" {
 			found := false
 			for i := range cfg.Checks {
 				if cfg.Checks[i].ID == d.ID || cfg.Checks[i].ServiceID == d.ServiceID {
@@ -515,7 +519,7 @@ func (a *App) replaceSecret(op *protocol.Operation, req protocol.SubmitOperation
 	if name == "" || header == "" || secretPlain == "" || agentID == "" {
 		return fmt.Errorf("name, header, value, agent_id required")
 	}
-	if strings.ContainsAny(header, "\r\n:") || strings.ContainsAny(secretPlain, "\r\n") {
+	if len(secretPlain) > protocol.MaxRequestBody || header != "Body" && (!protocol.HeaderNameAllowed(header, true) || strings.ContainsAny(secretPlain, "\r\n")) {
 		return fmt.Errorf("invalid header")
 	}
 	hl := strings.ToLower(header)

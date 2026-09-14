@@ -2,8 +2,6 @@ package protocol
 
 import (
 	"fmt"
-	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
-	"strings"
 )
 
 func ValidateAgentConfig(c AgentConfig) error {
@@ -30,40 +28,8 @@ func ValidateAgentConfig(c AgentConfig) error {
 			return fmt.Errorf("only one primary check per service is supported")
 		}
 		services[d.ServiceID] = true
-		if d.Method == "HEAD" && (d.ExpectJSONPath != "" || d.ExpectText != "") {
-			return fmt.Errorf("body expectations require GET")
-		}
-		for _, status := range d.ExpectedStatus {
-			if status < 100 || status > 599 {
-				return fmt.Errorf("invalid expected HTTP status")
-			}
-		}
-		if len(d.ExpectText) > 4096 || len(d.ExpectJSONPath) > 256 || len(d.ExpectJSONValue) > 4096 {
-			return fmt.Errorf("check expectation exceeds limit")
-		}
-		if d.Path != "" && (!strings.HasPrefix(d.Path, "/") || strings.ContainsAny(d.Path, "?#\r\n")) {
-			return fmt.Errorf("invalid check path")
-		}
-		if _, err := netutil.ParseURL(d.URL); err != nil {
-			return err
-		}
-		if d.Method != "" && d.Method != "GET" && d.Method != "HEAD" {
-			return fmt.Errorf("only GET/HEAD health checks are supported")
-		}
-		if strings.ContainsAny(d.HostHeader+d.TLSServerName, "\r\n") {
-			return fmt.Errorf("invalid host header/server name")
-		}
-		if d.TimeoutSeconds != 2 || d.IntervalSeconds != 5 {
-			return fmt.Errorf("this worker supports a two-second check timeout and five-second check interval only")
-		}
-		if (d.SecretID == "") != (d.SecretHeader == "") {
-			return fmt.Errorf("secret_id and secret_header must be set together")
-		}
-		if d.Kind != "" && d.Kind != "baseline_http" && len(d.ExpectedStatus) == 0 {
-			return fmt.Errorf("application checks require expected HTTP status codes")
-		}
-		if d.Kind != "" && d.Kind != "baseline_http" && d.Kind != "http_health" && d.Kind != "configured_http" {
-			return fmt.Errorf("unsupported check kind")
+		if err := ValidateCheck(d); err != nil {
+			return fmt.Errorf("check %s: %w", d.ID, err)
 		}
 	}
 	return nil

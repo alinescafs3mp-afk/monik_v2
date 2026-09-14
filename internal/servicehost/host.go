@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -114,7 +115,7 @@ func (h *Host) handle(c net.Conn) {
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(30 * time.Second))
 	var req Request
-	if err := json.NewDecoder(c).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(c, 64<<10)).Decode(&req); err != nil {
 		return
 	}
 	_ = json.NewEncoder(c).Encode(h.dispatch(req, true))
@@ -268,9 +269,22 @@ func (h *Host) activateUpdate(params map[string]string) Response {
 		if wait <= 0 {
 			wait = 2 * time.Second
 		}
-		time.Sleep(wait)
 		h.mu.Lock()
-		alive := h.alive
+		candidate, done := h.cmd, h.done
+		h.mu.Unlock()
+		timer := time.NewTimer(wait)
+		select {
+		case <-done:
+		case <-timer.C:
+		}
+		timer.Stop()
+		h.mu.Lock()
+		alive := h.alive && h.cmd == candidate
+		select {
+		case <-done:
+			alive = false
+		default:
+		}
 		h.mu.Unlock()
 		if !alive {
 			_ = update.Rollback(target, j.PrevPath)
@@ -374,11 +388,12 @@ func (h *Host) startWorker() error {
 	h.done = make(chan struct{})
 	go func(c *exec.Cmd, done chan struct{}) {
 		_ = c.Wait()
-		close(done)
 		h.mu.Lock()
 		if h.cmd == c {
 			h.alive = false
 		}
+		// A closed done channel now guarantees that alive has been cleared.
+		close(done)
 		h.mu.Unlock()
 	}(cmd, h.done)
 	return nil

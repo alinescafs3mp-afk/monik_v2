@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -14,7 +15,30 @@ import (
 
 func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 	switch req.Action {
+	case "check.apply":
+		for key := range req.Params {
+			if key != "check" && key != "base_revision" {
+				return fmt.Errorf("unknown check operation parameter")
+			}
+		}
+		raw, err := json.Marshal(req.Params["check"])
+		if err != nil {
+			return err
+		}
+		d, err := protocol.DecodeCheck(raw)
+		if err != nil {
+			return err
+		}
+		if d.ID == "" || d.ServiceID == "" {
+			return fmt.Errorf("check and service identity required")
+		}
+		return protocol.ValidateCheck(d)
 	case "check.trial":
+		for key := range req.Params {
+			if strings.HasPrefix(key, "_") {
+				return fmt.Errorf("reserved trial parameter")
+			}
+		}
 		_, err := checks.ParseTrial(req.Params)
 		return err
 	case "trust.stage":
@@ -48,12 +72,17 @@ func (a *App) handleCheckTrial(op *protocol.Operation, req protocol.SubmitOperat
 			continue
 		}
 		extra := map[string]any{
-			"url": def.URL, "method": def.Method, "kind": def.Kind, "trial": true,
+			"url": def.URL, "method": def.Method, "kind": def.Kind,
 			"service_id": def.ServiceID, "timeout_seconds": def.TimeoutSeconds,
 		}
 		if jobID, err := a.Store.JobIDFor(op.ID, t.AgentID); err == nil {
-			_ = a.Store.PatchJobParams(jobID, extra)
+			jobExtra := map[string]any{"trial": true}
+			for k, v := range extra {
+				jobExtra[k] = v
+			}
+			_ = a.Store.PatchJobParams(jobID, jobExtra)
 		}
+		// Queued evidence must not look like a completed agent trial.
 		_ = a.Store.UpdateTarget(op.ID, t.AgentID, t.Status, "trial.queued", "one-shot trial queued on the agent; definition is not saved", "", true, extra)
 	}
 	return nil

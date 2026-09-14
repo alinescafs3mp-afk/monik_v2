@@ -144,6 +144,7 @@ func TestCheckTrialRunsOnceAndDoesNotChangeConfig(t *testing.T) {
 	job := auditEnvelope("check.trial")
 	job.Params = map[string]any{"url": ts.URL, "method": "GET"}
 	a.handleJob(job)
+	waitAudit4Trial(t, a, job.JobID)
 	got := a.jobs["job"]
 	if got.Status != protocol.TargetSucceeded || got.Stage != "redacted_trial_result" {
 		t.Fatalf("%+v", got)

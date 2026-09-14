@@ -191,6 +191,11 @@ type ResponseFeedback struct {
 }
 
 type CheckObservation struct {
+	IntervalSeconds int    `json:"interval_seconds,omitempty"`
+	RequestVersion  int    `json:"request_version,omitempty"`
+	Purpose         string `json:"purpose,omitempty"`
+	FailureLayer    string `json:"failure_layer,omitempty"`
+
 	ServiceID  string             `json:"service_id"`
 	CheckID    string             `json:"check_id"`
 	ObservedAt time.Time          `json:"observed_at"`
@@ -223,6 +228,9 @@ type DiscoveryDelta struct {
 }
 
 type DiscoveredEndpoint struct {
+	Suggestions        []CheckSuggestion `json:"suggestions,omitempty"`
+	IdentificationNote string            `json:"identification_note,omitempty"`
+
 	ServiceID     string    `json:"service_id"`
 	DialTarget    string    `json:"dial_target"`
 	URL           string    `json:"url"`
@@ -338,6 +346,16 @@ type PingConfig struct {
 }
 
 type CheckDefinition struct {
+	RequestVersion int               `json:"request_version,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	Body           string            `json:"body,omitempty"`
+	BodySecretID   string            `json:"body_secret_id,omitempty"`
+	AllowPOST      bool              `json:"allow_post,omitempty"`
+	ExpectHealth   bool              `json:"expect_health,omitempty"`
+	ExpectJSONType string            `json:"expect_json_type,omitempty"`
+	Purpose        string            `json:"purpose,omitempty"`
+	Origin         string            `json:"origin,omitempty"`
+
 	ID              string `json:"id"`
 	ServiceID       string `json:"service_id"`
 	Kind            string `json:"kind"` // baseline_http, configured_http, server_remote
@@ -464,4 +482,16 @@ func DefaultAgentConfig() AgentConfig {
 			IntervalSeconds: 5, TimeoutSeconds: 1, WindowSeconds: 60,
 		},
 	}
+}
+
+// Suggestions are evidence, never permission to weaken or replace an owner check.
+type CheckSuggestion struct {
+	Definition   CheckDefinition `json:"definition"`
+	Confidence   string          `json:"confidence"`
+	Reason       string          `json:"reason"`
+	Transport    string          `json:"transport"`
+	HTTPStatus   *int            `json:"http_status,omitempty"`
+	Health       string          `json:"health,omitempty"`
+	ObservedAt   time.Time       `json:"observed_at"`
+	AutoEligible bool            `json:"auto_eligible"`
 }

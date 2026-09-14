@@ -46,7 +46,7 @@ func Open(path string, clk clock.Clock) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -538,6 +538,23 @@ func (s *Store) UpsertService(sv protocol.DiscoveredEndpoint, agentID string) er
 			last_seen_at=excluded.last_seen_at, last_discovered_at=excluded.last_discovered_at, source=excluded.source`,
 		sv.ServiceID, agentID, sv.URL, sv.URL, sv.DialTarget, sv.HostHeader, sv.TLSServerName, sv.ProcessName, sv.Source,
 		boolInt(sv.SpeaksHTTP), boolInt(sv.SpeaksTLS), now, now, now)
+	if err != nil {
+		return err
+	}
+	// Upsert can retain an existing canonical ID; query it instead of trusting a worker ID.
+	var id string
+	if err := s.db().QueryRow(`SELECT id FROM services WHERE agent_id=? AND dial_target=? AND host_header=?`, agentID, sv.DialTarget, sv.HostHeader).Scan(&id); err != nil {
+		return err
+	}
+	sv.ServiceID = id
+	for i := range sv.Suggestions {
+		sv.Suggestions[i].Definition.ServiceID = id
+	}
+	payload, err := json.Marshal(sv)
+	if err != nil {
+		return err
+	}
+	_, err = s.db().Exec(`INSERT INTO service_discovery(service_id,payload,updated_at) VALUES(?,?,?) ON CONFLICT(service_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, id, string(payload), now)
 	return err
 }
 
@@ -804,4 +821,34 @@ func (s *Store) WithTx(fn func(*sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Store) ServiceDiscovery(id string) (*protocol.DiscoveredEndpoint, error) {
+	var raw string
+	if err := s.db().QueryRow(`SELECT payload FROM service_discovery WHERE service_id=?`, id).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var ep protocol.DiscoveredEndpoint
+	if err := json.Unmarshal([]byte(raw), &ep); err != nil {
+		return nil, err
+	}
+	return &ep, nil
+}
+
+func (s *Store) DiscoveryForAgent(id string) (*protocol.DiscoveryDelta, error) {
+	var raw string
+	if err := s.db().QueryRow(`SELECT payload FROM agent_discovery WHERE agent_id=?`, id).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var d protocol.DiscoveryDelta
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		return nil, err
+	}
+	return &d, nil
 }

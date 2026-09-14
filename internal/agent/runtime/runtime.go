@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/checks"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/collectors"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/discovery"
@@ -55,7 +54,9 @@ type Agent struct {
 	discoveries        chan *protocol.DiscoveryDelta
 	observations       chan protocol.CheckObservation
 	discovering        atomic.Bool
-	checking           atomic.Bool
+	scheduler          checkScheduler
+	advisor            discovery.Advisor
+	trialRunning       atomic.Int32
 	forceDiscovery     bool
 	secrets            map[string]storedSecret
 	lastContact        time.Time
@@ -145,6 +146,15 @@ func Open(cfgPath string) (*Agent, error) {
 		if err := json.Unmarshal(b, &a.jobs); err != nil {
 			return nil, fmt.Errorf("job receipt journal corrupt: %w", err)
 		}
+		for id, rec := range a.jobs {
+			if rec.Stage == "trial_pending" {
+				rec.Status = protocol.TargetFailed
+				rec.Stage = "trial_interrupted"
+				rec.Message = "worker restarted during trial; actual outcome unknown; no automatic repeat"
+				rec.ErrorCode = "outcome_unknown"
+				a.jobs[id] = rec
+			}
+		}
 	}
 	a.reconcileIntents()
 	return a, nil
@@ -205,40 +215,11 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 		caps["ping"] = cap
 	}
 	locals, _ := netutil.LocalInterfaceIPs()
-	if !a.cfg.Paused && a.checking.CompareAndSwap(false, true) {
-		defs := append([]protocol.CheckDefinition(nil), a.cfg.Checks...)
-		revision := a.cfgRev
-		go func() {
-			defer a.checking.Store(false)
-			var wg sync.WaitGroup
-			sem := make(chan struct{}, 16)
-			for _, def := range defs {
-				if ctx.Err() != nil {
-					break
-				}
-				select {
-				case sem <- struct{}{}:
-				case <-ctx.Done():
-					return
-				}
-				wg.Add(1)
-				go func(d protocol.CheckDefinition) {
-					defer wg.Done()
-					defer func() { <-sem }()
-					cctx, cancel := context.WithTimeout(ctx, protocol.HTTPProbeTimeout)
-					defer cancel()
-					hdr, val := a.secretFor(d)
-					obs := checks.Run(cctx, d, locals, hdr, val)
-					obs.ConfigRev = revision
-					select {
-					case a.observations <- obs:
-					case <-ctx.Done():
-					}
-				}(def)
-			}
-			wg.Wait()
-		}()
+	if !a.cfg.Paused {
+		a.scheduleChecks(ctx, now, locals)
 	}
+	caps["http_custom_v1"] = protocol.Capability{Status: "supported", Reason: "bounded custom requests, typed assertions and per-check intervals"}
+	caps["health_advisor_v1"] = protocol.Capability{Status: "supported", Reason: "bounded local suggestions; no auth/TLS bypass or custom-check replacement"}
 	if discover && !a.cfg.Paused && a.discovering.CompareAndSwap(false, true) {
 		a.forceDiscovery = false
 		go func() {
@@ -248,7 +229,7 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 			if err != nil {
 				d = &protocol.DiscoveryDelta{StartedAt: time.Now().UTC(), EndedAt: time.Now().UTC(), PermissionGaps: []string{err.Error()}}
 			} else {
-				d = discovery.Identify(discovery.DialTargets(ls, locals), protocol.DiscoveryBudgetMin, 800*time.Millisecond)
+				d = discovery.InspectListeners(ctx, ls, locals, protocol.DiscoveryBudgetMin, &a.advisor)
 			}
 			select {
 			case a.discoveries <- d:
@@ -441,6 +422,7 @@ func (a *Agent) handleJob(job protocol.JobEnvelope) {
 				rec.Message = "waiting for a new discovery pass"
 				rec.ErrorCode = ""
 				a.forceDiscovery = true
+				a.advisor.Reset()
 			}
 		case "agent.diagnostics":
 			rec.Status = protocol.TargetSucceeded
@@ -448,6 +430,13 @@ func (a *Agent) handleJob(job protocol.JobEnvelope) {
 			rec.ErrorCode = ""
 			rec.Message = "redacted diagnostics collected"
 			rec.Evidence = map[string]any{"os": runtime.GOOS, "arch": runtime.GOARCH, "version": version.Version, "go": runtime.Version()}
+		case "check.trial":
+			if a.startTrialLocked(job, rec) {
+				return
+			}
+			rec.Status = protocol.TargetRejected
+			rec.Message = "trial concurrency limit reached; retry explicitly"
+			rec.ErrorCode = "busy"
 		case "profile.apply", "check.apply", "service.pause", "service.ignore":
 			expected, _ := job.Params["_expected_config_hash"].(string)
 			if job.ExpectedRevision != nil && *job.ExpectedRevision == a.cfgRev && expected == a.cfgHash {
@@ -462,7 +451,7 @@ func (a *Agent) handleJob(job protocol.JobEnvelope) {
 			}
 		case "secret.replace", "agent.restart", "update.rollout", "update.rollback",
 			"rebind.prepare", "rebind.arm", "rebind.activate", "rebind.retire",
-			"check.trial", "credential.rotate", "trust.stage", "trust.retire":
+			"credential.rotate", "trust.stage", "trust.retire":
 			rec = a.executeJob(job)
 		}
 	}

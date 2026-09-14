@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/actions"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
@@ -30,11 +31,12 @@ func contact(ag *storage.AgentRow, now time.Time) (string, string) {
 
 type serviceSummary struct {
 	*storage.ServiceRow
-	Observation *protocol.CheckObservation `json:"observation"`
-	AgentState  string                     `json:"agent_state"`
-	State       string                     `json:"state"`
-	Summary     string                     `json:"summary"`
-	Fresh       bool                       `json:"fresh"`
+	Observation *protocol.CheckObservation   `json:"observation"`
+	AgentState  string                       `json:"agent_state"`
+	State       string                       `json:"state"`
+	Summary     string                       `json:"summary"`
+	Discovery   *protocol.DiscoveredEndpoint `json:"discovery,omitempty"`
+	Fresh       bool                         `json:"fresh"`
 }
 
 func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary, error) {
@@ -44,6 +46,9 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 	}
 	out := make([]serviceSummary, 0, len(rows))
 	contacts := map[string]string{}
+	desiredChecks := map[string]protocol.CheckDefinition{}
+	appliedRev := map[string]int64{}
+	desiredRev := map[string]int64{}
 	for _, sv := range rows {
 		st, known := contacts[sv.AgentID]
 		if !known {
@@ -53,14 +58,25 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			}
 			st, _ = contact(ag, now)
 			contacts[sv.AgentID] = st
+			var cfg protocol.AgentConfig
+			_ = json.Unmarshal([]byte(ag.DesiredConfig), &cfg)
+			for _, d := range cfg.Checks {
+				desiredChecks[d.ServiceID] = d
+			}
+			appliedRev[sv.AgentID] = ag.AppliedRevision
+			desiredRev[sv.AgentID] = ag.DesiredRevision
 		}
 		obs, err := a.Store.LatestCheckObs(sv.ID)
 		if err != nil && err != storage.ErrNotFound {
 			return nil, err
 		}
 		item := serviceSummary{ServiceRow: sv, Observation: obs, AgentState: st, State: "unknown", Summary: "Нет измерений"}
+		item.Discovery, err = a.Store.ServiceDiscovery(sv.ID)
+		if err != nil {
+			return nil, err
+		}
 		if obs != nil {
-			item.Fresh = st == "ok" && now.Sub(obs.ObservedAt) <= protocol.StaleContact && !obs.ObservedAt.After(now.Add(5*time.Second))
+			item.Fresh = st == "ok" && now.Sub(obs.ObservedAt) <= protocol.CheckFreshness(obs.IntervalSeconds) && !obs.ObservedAt.After(now.Add(5*time.Second))
 			item.State = "responds"
 			item.Summary = "HTTP отвечает; здоровье приложения не настроено"
 			if obs.HTTPStatus != nil {
@@ -79,6 +95,9 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			case obs.Transport != "ok":
 				item.State = "transport_fail"
 				item.Summary = obs.Transport
+				if obs.AppReason != "" {
+					item.Summary += " · " + obs.AppReason
+				}
 				if obs.TLSReason != "" {
 					item.Summary += " · " + obs.TLSReason
 				}
@@ -98,7 +117,14 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 		if obs != nil && obs.Feedback != nil && obs.Feedback.Health != "" {
 			item.Summary += " · ответ: " + obs.Feedback.HealthSource + "=" + obs.Feedback.Health
 		}
-		if sv.Paused || sv.Ignored || obs != nil && obs.Quality == protocol.QualityPaused {
+		d := desiredChecks[sv.ID]
+		if obs != nil && (appliedRev[sv.AgentID] < desiredRev[sv.AgentID] || obs.ConfigRev < appliedRev[sv.AgentID]) {
+			item.Summary += " · ожидаем результат актуальной конфигурации"
+			if item.State == "ok" {
+				item.State = "pending"
+			}
+		}
+		if sv.Paused || sv.Ignored || d.Paused || d.Ignored || obs != nil && obs.Quality == protocol.QualityPaused {
 			item.State = "paused"
 			item.Summary = "Проверки приостановлены"
 			item.Fresh = false

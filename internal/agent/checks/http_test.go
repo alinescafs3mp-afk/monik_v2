@@ -81,7 +81,7 @@ func TestAuditOversizedAndBrokenBodiesAreNotSuccessful(t *testing.T) {
 }
 func TestAuditIPv6WithoutPortIsAValidDialTarget(t *testing.T) {
 	got := Run(context.Background(), protocol.CheckDefinition{ID: "c", ServiceID: "s", URL: "http://[::1]", Method: "POST"}, nil, "", "")
-	if got.DialTarget != "[::1]:80" || got.AppReason != "only GET/HEAD health probes are allowed" {
+	if got.DialTarget != "[::1]:80" || !strings.Contains(got.AppReason, "POST requires explicit") {
 		t.Fatalf("%+v", got)
 	}
 }

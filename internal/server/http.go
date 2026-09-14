@@ -322,10 +322,15 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 	}
 	st, reason := contact(ag, a.Clock.Now())
 	_, _, since, _ := a.Store.State("agent", id)
+	discovery, err := a.Store.DiscoveryForAgent(id)
+	if err != nil {
+		a.writeErr(w, 500, "db", "discovery lookup failed")
+		return
+	}
 	a.writeJSON(w, 200, map[string]any{
 		"agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
-		"desired_config": json.RawMessage(orJSON(ag.DesiredConfig)),
-		"age_seconds":    a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
+		"discovery": discovery, "desired_config": json.RawMessage(orJSON(ag.DesiredConfig)),
+		"age_seconds": a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
 	})
 }
 

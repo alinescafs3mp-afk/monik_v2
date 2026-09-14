@@ -131,9 +131,13 @@ func (a *Agent) jobTrial(job protocol.JobEnvelope, rec protocol.JobReceipt, now 
 	}
 	locals, _ := netutil.LocalInterfaceIPs()
 	hdr, val := a.secretForLocked(def)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(def.TimeoutSeconds)*time.Second)
 	defer cancel()
-	obs := checks.Run(ctx, def, locals, hdr, val)
+	body := ""
+	if def.BodySecretID != "" {
+		_, body = a.secretForLocked(protocol.CheckDefinition{SecretID: def.BodySecretID})
+	}
+	obs := checks.RunRequest(ctx, def, locals, hdr, val, body)
 	rec.Status = protocol.TargetSucceeded
 	rec.Stage = "redacted_trial_result"
 	rec.ErrorCode = ""
@@ -142,7 +146,7 @@ func (a *Agent) jobTrial(job protocol.JobEnvelope, rec protocol.JobReceipt, now 
 	rec.Evidence = map[string]any{
 		"trial": true, "vantage": "agent/local", "transport": obs.Transport,
 		"http_status": obs.HTTPStatus, "latency_ms": obs.LatencyMS,
-		"app_result": obs.AppResult, "app_reason": obs.AppReason, "quality": obs.Quality, "feedback": obs.Feedback,
+		"method": def.Method, "failure_layer": obs.FailureLayer, "purpose": obs.Purpose, "app_result": obs.AppResult, "app_reason": obs.AppReason, "quality": obs.Quality, "feedback": obs.Feedback,
 	}
 	return rec
 }

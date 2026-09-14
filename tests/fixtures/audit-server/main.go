@@ -76,7 +76,7 @@ func main() {
 	}
 	feed := func(seq int64) {
 		at := time.Now().UTC()
-		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "audit-host", SessionID: "fixture-live", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "audit-fixture", Host: host(at, int(seq))}
+		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "audit-host", SessionID: "fixture-live", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "audit-fixture", Capabilities: map[string]protocol.Capability{"http_custom_v1": {Status: "supported"}}, Host: host(at, int(seq))}
 		for _, sv := range services {
 			code := sv.code
 			rep.Checks = append(rep.Checks, protocol.CheckObservation{ServiceID: sv.id, CheckID: "check-" + sv.id, ObservedAt: at, Vantage: "agent/local", Transport: "ok", HTTPStatus: &code, LatencyMS: ptr(12), AppResult: sv.result, AppReason: sv.reason, Quality: protocol.QualityOK})

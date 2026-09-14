@@ -1,29 +1,54 @@
 package checks
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 )
 
-func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, headerName, headerVal string) (obs protocol.CheckObservation) {
+func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, headerName, headerVal string) protocol.CheckObservation {
+	return RunRequest(ctx, def, locals, headerName, headerVal, "")
+}
+
+// RunRequest accepts resolved secret values only in memory, never in the definition/result.
+func RunRequest(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, headerName, headerVal, bodySecret string) (obs protocol.CheckObservation) {
 	now := time.Now().UTC()
 	obs = protocol.CheckObservation{
 		ServiceID: def.ServiceID, CheckID: def.ID, ObservedAt: now, Vantage: "agent/local",
-		URL: def.URL, DialTarget: def.DialTarget, Quality: protocol.QualityOK, ConfigRev: 0,
+		URL: sanitizedURL(def.URL), DialTarget: def.DialTarget, Quality: protocol.QualityOK, ConfigRev: 0, IntervalSeconds: def.IntervalSeconds, RequestVersion: def.RequestVersion, Purpose: def.Purpose,
 	}
 	// Completion time and full bounded exchange duration, not request-start time/header RTT.
-	defer func() { obs.ObservedAt = time.Now().UTC() }()
+	defer func() {
+		obs.ObservedAt = time.Now().UTC()
+		switch {
+		case obs.Transport == "blocked":
+			obs.FailureLayer = "configuration"
+		case obs.Transport == "tls_error":
+			obs.FailureLayer = "tls"
+		case obs.Transport != "ok" && obs.Transport != "paused":
+			obs.FailureLayer = "connection"
+		case obs.AppResult == "fail":
+			obs.FailureLayer = "expectation"
+		case obs.HTTPStatus != nil && *obs.HTTPStatus >= 400:
+			obs.FailureLayer = "http"
+		}
+	}()
 	if def.Paused || def.Ignored {
 		obs.Quality = protocol.QualityPaused
 		obs.Transport = "paused"
@@ -48,6 +73,12 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 		}
 	}
 	obs.DialTarget = dial
+	if err := protocol.ValidateCheckRequest(def); err != nil {
+		obs.Quality = protocol.QualityError
+		obs.Transport = "blocked"
+		obs.AppReason = err.Error()
+		return obs
+	}
 	policy := netutil.DefaultPolicy()
 	if _, err := netutil.AllowedDial(dial, policy, locals); err != nil {
 		obs.Quality = protocol.QualityError
@@ -58,6 +89,9 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	timeout := time.Duration(def.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = protocol.HTTPProbeTimeout
+	}
+	if timeout > 30*time.Second {
+		timeout = 30 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -78,7 +112,7 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	if method == "" {
 		method = http.MethodGet // Bounded read enables generic JSON/text health feedback.
 	}
-	if method != http.MethodGet && method != http.MethodHead {
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions && !(method == http.MethodPost && def.AllowPOST && def.RequestVersion == 1) {
 		obs.Quality = protocol.QualityError
 		obs.Transport = "blocked"
 		obs.AppReason = "only GET/HEAD health probes are allowed"
@@ -92,19 +126,47 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	}
 	requestURL := *u
 	if def.Path != "" {
-		if !strings.HasPrefix(def.Path, "/") || strings.ContainsAny(def.Path, "?#\r\n") {
+		path, _ := url.ParseRequestURI(def.Path)
+		requestURL.Path = path.Path
+		requestURL.RawPath = path.RawPath
+		requestURL.RawQuery = path.RawQuery
+		requestURL.ForceQuery = path.ForceQuery
+	}
+	// Keep the actual path in observations; query values may contain private context.
+	observedURL := requestURL
+	observedURL.RawQuery = ""
+	observedURL.ForceQuery = false
+	obs.URL = observedURL.String()
+	bodyValue := def.Body
+	if def.BodySecretID != "" {
+		if bodySecret == "" {
 			obs.Quality = protocol.QualityError
 			obs.Transport = "blocked"
-			obs.AppReason = "check path must be an absolute path without query or fragment"
+			obs.AppReason = "configured request-body secret is unavailable"
 			return obs
 		}
-		requestURL.Path = def.Path
-		requestURL.RawPath = ""
+		bodyValue = bodySecret
 	}
-	req, err := http.NewRequestWithContext(ctx, method, requestURL.String(), nil)
-	if err != nil {
-		obs.Transport = "error"
+	if len(bodyValue) > protocol.MaxRequestBody {
+		obs.Transport = "blocked"
 		obs.Quality = protocol.QualityError
+		obs.AppReason = "request body exceeds 16 KiB"
+		return obs
+	}
+	req, err := http.NewRequestWithContext(ctx, method, requestURL.String(), strings.NewReader(bodyValue))
+	if err != nil {
+		obs.Transport = "blocked"
+		obs.Quality = protocol.QualityError
+		obs.AppReason = "request could not be constructed"
+		return obs
+	}
+	for k, v := range def.Headers {
+		req.Header.Set(k, v)
+	}
+	if headerName != "" && (!protocol.HeaderNameAllowed(headerName, true) || strings.ContainsAny(headerVal, "\r\n") || len(headerVal) > 8192) {
+		obs.Transport = "blocked"
+		obs.Quality = protocol.QualityError
+		obs.AppReason = "invalid resolved secret header"
 		return obs
 	}
 	if def.HostHeader != "" {
@@ -113,7 +175,13 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	if headerName != "" {
 		req.Header.Set(headerName, headerVal)
 	}
-	req.Header.Set("User-Agent", "monik-check/0.1")
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "monik-check/0.4")
+	}
+	if req.Header.Get("Cache-Control") == "" {
+		req.Header.Set("Cache-Control", "no-cache")
+	}
+	req.Header.Set("Accept-Encoding", "identity")
 	obs.Feedback = &protocol.ResponseFeedback{Method: method, BodyState: "unavailable"}
 	start := time.Now()
 	defer func() { lat := float64(time.Since(start).Microseconds()) / 1000; obs.LatencyMS = &lat }()
@@ -123,6 +191,13 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	if err != nil {
 		es := err.Error()
 		obs.Transport = classifyTransport(es)
+		if errors.Is(err, context.DeadlineExceeded) {
+			obs.Transport = "timeout"
+		}
+		if errors.Is(err, syscall.ECONNREFUSED) {
+			obs.Transport = "refused"
+		}
+		obs.AppReason = TransportExplanation(obs.Transport)
 		if def.InsecureTLS {
 			obs.TLSValid = boolPtr(false)
 		}
@@ -166,9 +241,9 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	}
 	if method == http.MethodHead && (code == 405 || code == 501) {
 		def.Method = http.MethodGet
-		return Run(ctx, def, locals, headerName, headerVal)
+		return RunRequest(ctx, def, locals, headerName, headerVal, bodySecret)
 	}
-	if readErr == nil && len(body) <= 64*1024 && method == http.MethodGet {
+	if readErr == nil && len(body) <= 64*1024 && method != http.MethodHead {
 		obs.Feedback.Health, obs.Feedback.HealthSource = healthToken(body, obs.Feedback.ContentType)
 	}
 	if def.Kind == "baseline_http" || def.Kind == "" {
@@ -198,13 +273,19 @@ func Run(ctx context.Context, def protocol.CheckDefinition, locals []net.IP, hea
 	}
 	if def.ExpectJSONPath != "" {
 		var v any
-		if json.Unmarshal(body, &v) != nil {
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		if decoder.Decode(&v) != nil || decoder.Decode(new(any)) != io.EOF {
 			obs.AppResult = "fail"
 			obs.AppReason = "response is not json"
-		} else if !jsonHas(v, def.ExpectJSONPath, def.ExpectJSONValue) {
+		} else if !matchJSON(v, def.ExpectJSONPath, def.ExpectJSONValue, def.ExpectJSONType) {
 			obs.AppResult = "fail"
 			obs.AppReason = "json field mismatch"
 		}
+	}
+	if def.ExpectHealth && (obs.Feedback == nil || !PositiveHealth(obs.Feedback.Health)) {
+		obs.AppResult = "fail"
+		obs.AppReason = "expected an unambiguous healthy response, received absent or negative health evidence"
 	}
 	if def.LatencyMS != nil && float64(time.Since(start).Microseconds())/1000 > float64(*def.LatencyMS) {
 		obs.AppResult = "fail"
@@ -228,25 +309,95 @@ func classifyTransport(es string) string {
 	}
 }
 
-func jsonHas(v any, path, expect string) bool {
+func jsonHas(v any, path, expect string) bool { return matchJSON(v, path, expect, "") }
+func lookupJSON(v any, path string) (any, bool) {
+	var parts []string
+	if strings.HasPrefix(path, "/") {
+		parts = strings.Split(path[1:], "/")
+		for i, p := range parts {
+			p = strings.ReplaceAll(p, "~1", "/")
+			parts[i] = strings.ReplaceAll(p, "~0", "~")
+		}
+	} else {
+		parts = strings.Split(path, ".")
+	}
 	cur := v
-	for _, p := range strings.Split(path, ".") {
-		if p == "" {
-			continue
+	for _, p := range parts {
+		if p == "" && !strings.HasPrefix(path, "/") {
+			return nil, false
 		}
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return false
-		}
-		cur, ok = m[p]
-		if !ok {
-			return false
+		switch x := cur.(type) {
+		case map[string]any:
+			var ok bool
+			cur, ok = x[p]
+			if !ok {
+				return nil, false
+			}
+		case []any:
+			n, e := strconv.Atoi(p)
+			if e != nil || n < 0 || n >= len(x) {
+				return nil, false
+			}
+			cur = x[n]
+		default:
+			return nil, false
 		}
 	}
-	if expect == "" {
+	return cur, true
+}
+func matchJSON(v any, path, expect, kind string) bool {
+	cur, exists := lookupJSON(v, path)
+	if !exists {
+		return false
+	}
+	switch kind {
+	case "exists":
+		return true
+	case "null":
+		return cur == nil
+	case "string":
+		s, ok := cur.(string)
+		return ok && s == expect
+	case "boolean":
+		b, ok := cur.(bool)
+		return ok && strconv.FormatBool(b) == expect
+	case "number":
+		n, ok := cur.(json.Number)
+		if !ok {
+			return false
+		}
+		if !boundedNumber(string(n)) || !boundedNumber(expect) {
+			return false
+		}
+		a, aok := new(big.Rat).SetString(string(n))
+		b, bok := new(big.Rat).SetString(expect)
+		return aok && bok && a.Cmp(b) == 0
+	default:
+		if expect == "" {
+			return true
+		}
+		return fmt.Sprint(cur) == expect
+	}
+}
+func PositiveHealth(s string) bool {
+	switch strings.ToLower(s) {
+	case "ok", "up", "healthy", "ready", "pass", "true":
 		return true
 	}
-	return fmt.Sprint(cur) == expect
+	return false
+}
+func NegativeHealth(s string) bool { return s != "" && !PositiveHealth(s) }
+func TransportExplanation(s string) string {
+	switch s {
+	case "refused":
+		return "connection refused before HTTP: verify listener, bind address, container port and service process"
+	case "timeout":
+		return "connection or response deadline exceeded; no conclusion about application health"
+	case "tls_error":
+		return "TLS validation/handshake failed; configure the correct scheme, server name or trusted certificate"
+	default:
+		return "connection failed before a complete HTTP response"
+	}
 }
 
 // Interpret a deliberately tiny vocabulary. Never copy arbitrary JSON messages/titles,
@@ -276,7 +427,7 @@ func healthToken(body []byte, contentType string) (string, string) {
 		for _, name := range []string{"status", "health", "state", "ready", "ok", "success"} {
 			if v := token(fields[name]); v != "" {
 				switch v {
-				case "false", "fail", "down", "unhealthy", "not_ready", "degraded", "warn":
+				case "false", "fail", "down", "unhealthy", "not_ready", "degraded", "warn", "starting":
 					return v, name
 				}
 				if result == "" {
@@ -286,9 +437,40 @@ func healthToken(body []byte, contentType string) (string, string) {
 		}
 		return result, source
 	} else if contentType == "text/plain" && len(body) <= 64 {
+		switch strings.TrimSpace(string(body)) {
+		case "Prometheus Server is Ready.":
+			return "ready", "text/prometheus"
+		case "Prometheus Server is Healthy.":
+			return "healthy", "text/prometheus"
+		}
 		if v := token(string(body)); v != "" {
 			return v, "text"
 		}
 	}
 	return "", ""
+}
+
+func boundedNumber(s string) bool {
+	if len(s) > 256 {
+		return false
+	}
+	if i := strings.IndexAny(s, "eE"); i >= 0 {
+		n, e := strconv.Atoi(s[i+1:])
+		if e != nil || n > 1000 || n < -1000 {
+			return false
+		}
+	}
+	return true
+}
+
+func sanitizedURL(raw string) string {
+	u, e := url.Parse(raw)
+	if e != nil {
+		return "invalid URL"
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String()
 }

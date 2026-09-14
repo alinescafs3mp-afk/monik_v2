@@ -1,7 +1,7 @@
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 PRAGMA busy_timeout=5000;
-PRAGMA synchronous=NORMAL;
+PRAGMA synchronous=FULL;
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
@@ -415,3 +415,10 @@ CREATE TABLE IF NOT EXISTS incident_streaks (
   good_count INTEGER NOT NULL,
   PRIMARY KEY(entity_type,entity_id,metric)
 );
+
+CREATE TABLE IF NOT EXISTS service_discovery (
+ service_id TEXT PRIMARY KEY REFERENCES services(id) ON DELETE CASCADE,
+ payload TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_discovery(agent_id TEXT PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,payload TEXT NOT NULL);

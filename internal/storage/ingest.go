@@ -30,6 +30,16 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 	if rep.Discovery != nil && len(rep.Discovery.Confirmed) > 256 {
 		return out, fmt.Errorf("discovery exceeds item budget")
 	}
+	if rep.Discovery != nil {
+		if len(rep.Discovery.Unresolved) > 256 {
+			return out, fmt.Errorf("unresolved inventory exceeds budget")
+		}
+		for _, ep := range rep.Discovery.Confirmed {
+			if err := protocol.ValidateSuggestions(ep); err != nil {
+				return out, err
+			}
+		}
+	}
 	if rep.ObservedAt.Before(s.now().Add(-protocol.RawRetention)) || rep.ObservedAt.After(s.now().Add(5*time.Minute)) {
 		return out, fmt.Errorf("observation outside accepted clock/retention window")
 	}
@@ -66,6 +76,9 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 		}
 		// Validate ownership before any inserts. Never trust IDs supplied by a worker.
 		for _, c := range rep.Checks {
+			if c.IntervalSeconds != 0 && (c.IntervalSeconds < 5 || c.IntervalSeconds > 3600 || c.IntervalSeconds%5 != 0) {
+				return fmt.Errorf("invalid check interval evidence")
+			}
 			var owner string
 			if err := tx.QueryRow(`SELECT agent_id FROM services WHERE id=?`, c.ServiceID).Scan(&owner); err != nil || owner != rep.AgentID {
 				return fmt.Errorf("service does not belong to reporting agent")
@@ -109,6 +122,13 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 		}
 		if out.Live {
 			if rep.Discovery != nil {
+				raw, err := json.Marshal(rep.Discovery)
+				if err != nil {
+					return err
+				}
+				if _, err = tx.Exec(`INSERT INTO agent_discovery(agent_id,payload) VALUES(?,?) ON CONFLICT(agent_id) DO UPDATE SET payload=excluded.payload`, rep.AgentID, string(raw)); err != nil {
+					return err
+				}
 				for _, ep := range rep.Discovery.Confirmed {
 					// The logical endpoint retains its server ID across rediscovery/PID changes.
 					var existing string

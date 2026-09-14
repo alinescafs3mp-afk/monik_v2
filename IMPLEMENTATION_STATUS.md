@@ -1,23 +1,20 @@
-# Implementation status after cumulative source audit 3
+# Monik implementation status: Audit 4 source
 
-Baseline: `2f63c0b59498beb9436c092554cfef10e1942489`. This source includes all audit 2 changes plus audit 3. Read `docs/AUDIT_REVIEW_3_2026-09-14.md`, `docs/RELEASE_COMPLETION_PLAN.md` and `ACCEPTANCE_LEDGER.md`.
+Baseline `4f85de31f837dbdfeb77e9f562726de5f00b9d28`, 2026-09-14. **PRE-RELEASE**. Read `docs/AUDIT_REVIEW_4_2026-09-14.md` and `docs/GROK_AUDIT4_HANDOFF.md`. Historical audit documents describe earlier source only. This source has not been deployed/pushed by the audit.
 
-**PRE-RELEASE. Not all owner v3 requirements are complete. No production deployment or remote write was performed in audit 3. Historical reports describe historical states, not this revision's acceptance.**
-
-| Area | Current implementation / remaining boundary |
+| Area | Current status |
 |---|---|
-| Overview/navigation | Dense rows, optional cards, persistent per-machine overview pin, collapsible sidebar and visible chart graduations preserved. Current visual acceptance NOT RUN. |
-| Machine history | Six ranges, extrema/gaps, raw point lookup, bounds/units/timezone. True raw JSON export now implemented with strict limits. Long-term aggregates incomplete. |
-| Problems history | Interval-overlap search, lifecycle/severity/metric/entity filters, stable pagination and fixed-history controls implemented. Not a bitemporal historical-status engine. |
-| Service feedback | Bounded HTTP metadata/known health fields preserved. No raw response bodies; self-reported health is not full app proof. |
-| Enrollment | Atomic code/identity/config binding and persisted-proof retry implemented. Selected URL retained; existing configuration protected. Server-first rollout needed for new client proof. Native concurrent installation/recovery NOT ACCEPTED. |
-| Telemetry/config | Existing atomic ingest/dedup preserved; desired revisions now also published transactionally into confirmation history. New spool records keyed by transport identity; current worker reads legacy and v2 queue. |
-| UI feedback/auth | Coalesced refresh, network versus authentication distinction, historical download links and no nonexistent-incident acknowledgement added. Recent-auth UX, native/browser acceptance pending. |
-| Worker updates | Prior target-link/signature/activation corrections retained; full immutable publication, cohort orchestration and native crash recovery remain open. |
-| Service-host updates | Explicitly unavailable until independent native replacement/recovery exists. Mandatory release blocker. |
-| Rebind/trust/credentials | Prior bounded state-machine corrections retained. Full offline time/cancel/expiry/restore/native evidence incomplete. |
-| Rules/maintenance/retry/resume | `rule.save`, `maintenance.set`, `operation.retry_selected`, `update.resume` remain explicitly unavailable. `history.export` is no longer on that list. |
-| Storage/backup/restore | Recent raw data and bounded export are implemented; large retention jobs, long aggregation and complete protected-controller restore are NOT ACCEPTED. |
-| Native fleet/load | Linux and Windows compile. Native SCM/systemd boot/recovery, full v3 battery, fleet-scale load and 24h soak NOT RUN here. |
+| Dashboard/history | Prior dense rows, pins, collapse, labeled axes, six ranges, incident search and bounded JSON export retained |
+| Custom checks | Typed HTTP(S) definition editor, GET/HEAD/OPTIONS and consented POST, bounded body/headers/secrets, expectations and per-check interval/timeout implemented |
+| Compatibility | Request v1 capability checked before custom operations; legacy empty additions preserve config hashes; explicit downgrade limits |
+| Trial | Durable bounded async agent-local execution, result feedback and interruption handling; no saved definition or automatic repeat |
+| Auto-advice | Finite local GET candidates, explicit health vocabulary, adverse readiness priority, catch-all control, retained evidence, no existing-check rewrite |
+| Crypto/storage | Corrupt/missing keys fail closed, malformed crypto inputs return errors, SQLite FULL configured; native disk/power-loss evidence absent |
+| Worker update | Probation race corrected and repeated unit test passed; complete immutable release/batch/native recovery still open |
+| Service-host update | Not implemented safely; explicit rejection retained; mandatory release blocker |
+| Rebind/restore | Prior bounded rebind retained; native disconnected-time/cancel/retire/full-controller restore acceptance incomplete |
+| Rules/maintenance/retry/resume | Corresponding existing fail-closed guards remain. Do not claim these product requirements finished |
+| Long history/fleet | Long-term aggregate retention, full rule/vantage history and measured fleet capacity remain incomplete |
+| Visual/native validation | Synthetic browser fixture PASS 11/11 after integration; native Windows/systemd boot, 24h soak and full v3 battery NOT RUN |
 
-Default initial URL remains `https://46.120.103.61:8777`; the actually selected/persisted controller address takes precedence. Never reset an existing deployment to a compiled default. Telegram and general remote OS commands remain out of scope.
+Production URLs/identity are unchanged. Initial fallback default is configuration only, never a reason to rebind an existing machine. No Telegram, remote shell, host reboot or app/container remediation introduced.

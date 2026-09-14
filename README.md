@@ -1,5 +1,7 @@
 # Monik v2
 
+> Latest source: **Audit 4, pre-release**. Custom check editor and bounded health advice: [audit](docs/AUDIT_REVIEW_4_2026-09-14.md), [operator guide](docs/CUSTOM_SERVICE_CHECKS_RU.md), [integration](docs/GROK_AUDIT4_HANDOFF.md). New server + capable worker required. Native lifecycle and full restore remain release blockers.
+
 Self-hosted host and local HTTP/HTTPS service monitor: one Go server with an embedded Vue 3 UI and SQLite, plus native Linux and Windows agents.
 
 Default bootstrap URL: `https://46.120.103.61:8777` (configuration value; existing persisted addresses always win).

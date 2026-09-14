@@ -1,3 +1,43 @@
+# Monik release completion plan after audit 4
+
+Date: 2026-09-14. This section supersedes earlier statements that custom request editing, per-check intervals, typed response expectations or local health suggestions are wholly absent. Those bounded features are implemented in Audit 4. The following roadmap items are **not** newly implemented by mentioning them.
+
+## First, preserve this pass
+
+Use the exact source/patch from `4f85de3`. Keep request_version/capability validation, strict server + worker checks, paused-state preservation, nonblocking trial, bounded scheduler, negative controls, and rule/transport distinction. Run the actual browser and native journeys in `GROK_AUDIT4_HANDOFF.md`. A recent green liveness endpoint is not permission to erase a failing readiness endpoint or existing owner check.
+
+## Priority 0: still mandatory, not displaced by more probing features
+
+Independent native recovery for service-host replacement remains unimplemented. Signed worker activation/probation corrections are not that recovery mechanism. Complete restricted OS identities, Windows ACLs and before-login boot; correlate and bound local supervisor commands/replies. Test killed worker/supervisor and entrypoint failure on real Linux and Windows.
+
+Publish immutable versioned release files, preserve queued-job exact metadata/bytes, stage imports atomically and maintain persisted canary/batch/pause/resume control. Prove crash recovery and rollback-safe state formats. Coordinate old/new custom-check profiles on downgrade.
+
+Complete a protected whole-controller backup/restore, key custody, version reconciliation with newer agents and one authoritative writer. Do not lose the encryption key, reuse an old job cursor as proof, regenerate trust on corruption or claim that a SQLite snapshot alone restores the platform. Measure FULL synchronous I/O on actual storage. Long-term aggregates, actual custom rule/maintenance evaluation and fleet-scale limits remain release work, not accepted features.
+
+## New high-value follow-through: easier setup without false health
+
+| Priority | Idea / code surface | Concrete implementation contract / acceptance |
+|---|---|---|
+| P1 | Separate readiness, liveness and optional functional check on one service | Extend identity from one primary definition to check IDs with explicit purpose/vantage. Separate timelines and roll-up policy. Never pick any passing check as the whole service healthy. Preserve existing primary IDs/history in migration. |
+| P1 | Manual TCP connect and narrow protocol adapters for unresolved listeners | TCP proves reachability only. gRPC standard health, Redis PING or other adapters require explicit typed protocol/authorization and native fixtures. Do not send arbitrary HTTP to known non-web software or introduce raw shell probes. |
+| P1 | Declarative local service health contract | Optional owner-authored manifest with exact listener/path/method/purpose/expected result/secret references. Prefer this over heuristic routes. Only the already discovered local destination; schema/version/size bounds; no execution fields; explicit approval for POST. An HTTP-provided manifest is untrusted evidence, not authority to expand destinations. |
+| P1 | Small versioned service-template registry | Templates for documented readiness APIs, with source URL, supported versions, cost class and expected semantics. Process/metadata hints select suggestions, not silent credentials or expensive calls. No LLM or cloud runtime dependency. |
+| P1 | Operator-controlled advisor policy | Per-agent/off/allowlisted-path budget, excluded services, backoff after 429/503 with bounded Retry-After, and explanation of skipped candidates. This pass has finite safe defaults and cache, not all these controls. |
+| P1 | Request diff and trusted recent-auth workflow | Display exact normalized method/URL/path/header names/body secret references and expected conditions before fleet changes. One shared reauthentication prompt for secrets/updates; preserve draft without storing passwords. |
+| P1 | Durable secret availability/invalidation | Persist only appropriately protected agent-scoped secrets where authorized, survive offline restart, rotate without stale cache use, preserve stable references, prevent secret values in export/evidence. Current cache is memory-only. |
+| P1 | Per-check CA and mTLS | Trusted scoped CA/client-secret references, cert expiry, same-origin isolation, native tests. Do not confuse controller CA with application-service trust; no global insecure fallback. |
+| P1 | Scheduler visibility | Record due/start/end/late/skipped/budget counts and active probes; expose per-service data age and config version. Meter per-agent rate/cost and distribute phase so many 30s checks do not spike together. Validate responsiveness under body timeouts, disk pressure and downloads. |
+| P1 | Diagnostic evidence on demand | Return structured bounded error layer/errno, HTTP status and whitelisted predicates. A privileged redacted short body excerpt would need explicit retention/secrecy rules; raw responses are deliberately absent today. |
+| P2 | Small protocol-aware cURL importer | Parse offline into the typed request editor and preview; never execute shell or substitutions, reject files/proxy/redirect/insecure/unbounded options, turn credentials into secret references. Useful convenience, not required for current manual editor. |
+
+Do not expand the runtime into an infrastructure automation center. No subnet crawling, unauthenticated admin bypass, browser-based inference tests, arbitrary POST health guessing or script-defined plugin execution. A predictable negative result is preferable to a fabricated green one.
+
+## Original broader release gates retained below
+
+The following prior plan is retained for completeness. Its older references to features being absent must be read with the implemented Audit 4 subset above. Historical numerical test counts are not current evidence. Work until each required gate has real implementation plus native/test evidence, not merely additional documentation.
+
+---
+
 # Monik: finish the product without expanding it into an orchestration platform
 
 Authority: the owner's approved v3 requirements, later UI requests, and the cumulative audit 3 source corrections. This is a completion directive for the local implementer, NOT evidence these tasks are already implemented. Do not remove explicit unsupported-action guards until the corresponding actual behavior and tests exist.

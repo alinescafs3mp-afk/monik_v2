@@ -123,7 +123,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = a.Store.AppendEvent("metrics", "agent", ag.ID, rep.Sequence, map[string]any{"seq": rep.Sequence, "live": true})
 		for _, c := range rep.Checks {
-			if a.Clock.Now().Sub(c.ObservedAt) <= protocol.StaleContact {
+			if a.Clock.Now().Sub(c.ObservedAt) <= protocol.CheckFreshness(c.IntervalSeconds) {
 				a.evalCheck(ag.ID, c)
 			}
 		}
@@ -222,12 +222,22 @@ func (a *App) ensureBaselineCheck(agentID string, ep protocol.DiscoveredEndpoint
 			return
 		}
 	}
-	cfg.Checks = append(cfg.Checks, protocol.CheckDefinition{
-		ID: idgen.New(), ServiceID: ep.ServiceID, Kind: "baseline_http",
-		URL: ep.URL, DialTarget: ep.DialTarget, Method: "GET",
-		HostHeader: ep.HostHeader, TLSServerName: ep.TLSServerName,
-		TimeoutSeconds: 2, IntervalSeconds: 5,
-	})
+	d := protocol.CheckDefinition{ID: idgen.New(), ServiceID: ep.ServiceID, Kind: "baseline_http", URL: ep.URL, DialTarget: ep.DialTarget, Method: "GET", HostHeader: ep.HostHeader, TLSServerName: ep.TLSServerName, TimeoutSeconds: 2, IntervalSeconds: 5}
+	// New inventory only. Never replace an existing custom or failing baseline check.
+	if supportsCustom(ag) {
+		for _, suggestion := range ep.Suggestions {
+			if suggestion.AutoEligible && suggestion.Confidence == "high" {
+				d = suggestion.Definition
+				d.ID = idgen.New()
+				d.ServiceID = ep.ServiceID
+				break
+			}
+		}
+	}
+	cfg.Checks = append(cfg.Checks, d)
+	if protocol.ValidateAgentConfig(cfg) != nil {
+		return
+	}
 	body, _ := json.Marshal(cfg)
 	hash := sha256.Sum256(body)
 	_ = a.Store.SetDesired(agentID, ag.DesiredRevision+1, hex.EncodeToString(hash[:]), string(body))
@@ -268,7 +278,7 @@ func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
 		st, reason = "http_error", "server error"
 	}
 	_ = a.Store.SetState("service", c.ServiceID, st, reason)
-	if err := a.Store.ObserveIncident("service", c.ServiceID, "http", c.ObservedAt, known, known && st != "ok", "warning", reason, storage.IncidentPolicy{MaxGap: protocol.StaleContact, Failures: 3, Successes: 2}); err != nil {
+	if err := a.Store.ObserveIncident("service", c.ServiceID, "http", c.ObservedAt, known, known && st != "ok", "warning", reason, storage.IncidentPolicy{MaxGap: protocol.CheckFreshness(c.IntervalSeconds), Failures: 3, Successes: 2}); err != nil {
 		a.Log.Error("service incident evaluation failed", "error", err)
 	}
 }
