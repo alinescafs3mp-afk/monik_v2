@@ -10,7 +10,14 @@ import (
 )
 
 func (s *Store) TouchRecentAuth(sessionID string, until time.Time) error {
-	_, err := s.db().Exec(`UPDATE admin_sessions SET recent_auth_until=? WHERE id=?`, until.UTC().Format(dbTimeFormat), sessionID)
+	result, err := s.db().Exec(`UPDATE admin_sessions SET recent_auth_until=? WHERE id=? AND expires_at>?`, until.UTC().Format(dbTimeFormat), sessionID, s.now().Format(dbTimeFormat))
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err == nil && n != 1 {
+		return ErrNotFound
+	}
 	return err
 }
 

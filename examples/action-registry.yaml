@@ -1,7 +1,7 @@
 example_only: true
 schema_version: 3
-notes: Intended typed action inventory; implementation must add concrete validation/tests.
-  No code expressions or arbitrary exec fields.
+notes: Historical example inventory with Audit 6 additions. The runtime registry in
+  internal/actions/registry.go is authoritative. No code expressions or arbitrary exec fields.
 actions:
 - id: preference.save
   scope: server
@@ -320,5 +320,38 @@ actions:
   durable_operation: false
   idempotency_required: true
   recent_authentication_required: false
+  cancellation: before_effect_only_with_receipts
+  errors: code_reason_retryability_and_correlation_id
+- id: maintenance.cancel
+  scope: server
+  risk: config
+  requires_capability: null
+  local_feedback: pending_within_100ms_target
+  authoritative_completion: committed_cancellation_interval
+  durable_operation: false
+  idempotency_required: true
+  recent_authentication_required: false
+  cancellation: before_effect_only_with_receipts
+  errors: code_reason_retryability_and_correlation_id
+- id: incident.unacknowledge
+  scope: server
+  risk: reversible
+  requires_capability: null
+  local_feedback: pending_within_100ms_target
+  authoritative_completion: commit_unread
+  durable_operation: false
+  idempotency_required: true
+  recent_authentication_required: false
+  cancellation: before_effect_only_with_receipts
+  errors: code_reason_retryability_and_correlation_id
+- id: enrollment.window.set
+  scope: server
+  risk: sensitive
+  requires_capability: null
+  local_feedback: pending_within_100ms_target
+  authoritative_completion: committed_admission_window
+  durable_operation: false
+  idempotency_required: true
+  recent_authentication_required: true
   cancellation: before_effect_only_with_receipts
   errors: code_reason_retryability_and_correlation_id

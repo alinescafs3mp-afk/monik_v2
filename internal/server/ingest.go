@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -117,7 +118,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		if err := a.Store.RecordMigrationStatus(ag.ID, rep.Migration, rep.EndpointGeneration); err != nil {
 			a.Log.Warn("migration status rejected", "agent_id", ag.ID)
 		}
-		if rep.Host != nil && a.Clock.Now().Sub(rep.ObservedAt) <= protocol.StaleContact {
+		if rep.Host != nil && !rep.ObservedAt.After(a.Clock.Now().Add(5*time.Second)) && a.Clock.Now().Sub(rep.ObservedAt) <= protocol.StaleContact {
 			_ = a.Store.SetState("agent", ag.ID, "ok", "")
 			a.evalHostIncidents(ag.ID, rep.Host, rep.ObservedAt)
 		}
@@ -244,28 +245,78 @@ func (a *App) ensureBaselineCheck(agentID string, ep protocol.DiscoveredEndpoint
 }
 
 func (a *App) evalHostIncidents(agentID string, h *protocol.HostMetrics, at time.Time) {
+	now := a.Clock.Now()
+	if h == nil || at.After(now.Add(5*time.Second)) || now.Sub(at) > protocol.StaleContact {
+		return
+	}
+	version, err := a.Store.HostRulesAt(at)
+	if err != nil {
+		a.Log.Error("host rules unavailable", "error", err)
+		return
+	}
+	current, err := a.Store.HostRulesAt(now)
+	if err != nil {
+		a.Log.Error("current host rules unavailable", "error", err)
+		return
+	}
+	if current.Revision != version.Revision {
+		return
+	} // Backlog cannot reopen a superseded rule incident.
+	maintenance, err := a.Store.InMaintenance("agent", agentID, at)
+	if err != nil {
+		a.Log.Error("maintenance lookup failed", "error", err)
+		return
+	}
 	breaches := map[string]rules.Breach{}
-	for _, b := range rules.EvaluateHost(h, rules.DefaultRules()) {
+	for _, b := range rules.EvaluateHost(h, rules.ThresholdRules(version.Rules)) {
 		breaches[b.Metric] = b
 	}
-	for _, rule := range rules.DefaultRules() {
-		known := false
+	for _, rule := range version.Rules {
+		value, known := 0.0, false
 		switch rule.Metric {
 		case "cpu":
-			known = h.CPUPercent != nil
+			if h.CPUPercent != nil {
+				value, known = *h.CPUPercent, true
+			}
 		case "ram":
-			known = h.RAMTotal > 0
+			if h.RAMTotal > 0 {
+				value, known = float64(h.RAMUsed)/float64(h.RAMTotal)*100, true
+			}
 		case "disk":
-			known = len(h.Disks) > 0
+			for _, d := range h.Disks {
+				known = true
+				if d.UsedPct > value {
+					value = d.UsedPct
+				}
+			}
 		}
 		b, failed := breaches[rule.Metric]
-		if err := a.Store.ObserveIncident("agent", agentID, rule.Metric, at, known, failed, b.Severity, b.Reason, storage.IncidentPolicy{PersistFor: rule.PersistFor, RecoverFor: rule.RecoverFor, MaxGap: protocol.StaleContact, Failures: 1, Successes: 1}); err != nil {
+		reason := fmt.Sprintf("%s %.1f%%; warning >= %.1f%%, critical >= %.1f%%; sustained %ds; rule revision %d", rule.Metric, value, rule.Warning, rule.Critical, rule.PersistSeconds, version.Revision)
+		p := storage.IncidentPolicy{PersistFor: time.Duration(rule.PersistSeconds) * time.Second, RecoverFor: time.Duration(rule.RecoverSeconds) * time.Second, MaxGap: protocol.StaleContact, Failures: 1, Successes: 1, RuleVersion: version.Revision, HoldRecovery: value > rule.Recovery, Maintenance: maintenance}
+		if err := a.Store.ObserveIncident("agent", agentID, rule.Metric, at, known, failed, b.Severity, reason, p); err != nil {
 			a.Log.Error("host incident evaluation failed", "error", err)
 		}
 	}
 }
 
 func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
+	now := a.Clock.Now()
+	if c.ObservedAt.After(now.Add(5*time.Second)) || now.Sub(c.ObservedAt) > protocol.CheckFreshness(c.IntervalSeconds) {
+		return
+	}
+	latest, e := a.Store.LatestCheckObs(c.ServiceID)
+	if e != nil && e != storage.ErrNotFound {
+		a.Log.Error("latest check lookup failed", "error", e)
+		return
+	}
+	if latest != nil && (latest.ObservedAt.After(c.ObservedAt) || latest.ConfigRev > c.ConfigRev) {
+		return
+	}
+	maintenance, e := a.Store.InMaintenance("service", c.ServiceID, c.ObservedAt)
+	if e != nil {
+		a.Log.Error("maintenance lookup failed", "error", e)
+		return
+	}
 	st, reason := "ok", ""
 	known := c.Quality == protocol.QualityOK
 	if !known {
@@ -274,11 +325,11 @@ func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
 		st, reason = "transport_fail", c.Transport
 	} else if c.AppResult == "fail" {
 		st, reason = "app_fail", c.AppReason
-	} else if c.HTTPStatus != nil && *c.HTTPStatus >= 500 {
+	} else if c.AppResult != "pass" && c.HTTPStatus != nil && *c.HTTPStatus >= 500 {
 		st, reason = "http_error", "server error"
 	}
 	_ = a.Store.SetState("service", c.ServiceID, st, reason)
-	if err := a.Store.ObserveIncident("service", c.ServiceID, "http", c.ObservedAt, known, known && st != "ok", "warning", reason, storage.IncidentPolicy{MaxGap: protocol.CheckFreshness(c.IntervalSeconds), Failures: 3, Successes: 2}); err != nil {
+	if err := a.Store.ObserveIncident("service", c.ServiceID, "http", c.ObservedAt, known, known && st != "ok", "warning", reason, storage.IncidentPolicy{MaxGap: protocol.CheckFreshness(c.IntervalSeconds), Failures: 3, Successes: 2, Maintenance: maintenance}); err != nil {
 		a.Log.Error("service incident evaluation failed", "error", err)
 	}
 }

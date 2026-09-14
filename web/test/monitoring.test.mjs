@@ -1,0 +1,10 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import ts from 'typescript';
+const text=await readFile(new URL('../src/monitoring.ts',import.meta.url),'utf8');const js=ts.transpileModule(text,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+const m=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const defaults=()=>['cpu','ram','disk'].map(metric=>({metric,warning:85,critical:95,recovery:80,persist_seconds:60,recover_seconds:30}));
+test('valid thresholds preserve all three concrete metrics',()=>{assert.equal(m.thresholdError(defaults()),'');});
+test('unknown duplicate and missing metrics cannot be saved',()=>{for(const v of [[],defaults().slice(1),[defaults()[0],defaults()[0],defaults()[2]]])assert.notEqual(m.thresholdError(v),'');});
+test('invalid or nonfinite thresholds cannot be saved',()=>{for(const v of [NaN,Infinity,-1,'90',100]){const r=defaults();r[0].warning=v;assert.notEqual(m.thresholdError(r),'');}});
+test('recovery must be below warning, durations bounded integers',()=>{for(const f of [r=>r[0].recovery=85,r=>r[0].persist_seconds=0,r=>r[0].recover_seconds=5.5,r=>r[0].recover_seconds=3601]){const r=defaults();f(r);assert.notEqual(m.thresholdError(r),'');}});
+test('maintenance is half-open and cancelled only at actual cancellation time',()=>{const w={start_at:'2026-09-14T12:00:00Z',end_at:'2026-09-14T13:00:00Z',cancelled_at:'2026-09-14T12:15:00Z'};assert.equal(m.maintenanceState(w,new Date('2026-09-14T11:59:59Z')),'Запланировано');assert.equal(m.maintenanceState(w,new Date('2026-09-14T12:00:00Z')),'Активно');assert.equal(m.maintenanceState(w,new Date('2026-09-14T12:15:00Z')),'Завершено вручную');assert.equal(m.maintenanceState({...w,cancelled_at:undefined},new Date(w.end_at)),'Завершено');});
+test('unread route validates values and defaults safely',()=>{assert.equal(m.acknowledgementFilter('unread'),'unread');assert.equal(m.acknowledgementFilter('read'),'read');for(const v of ['bad',null,undefined,''])assert.equal(m.acknowledgementFilter(v),'all');});

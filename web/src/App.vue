@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, onErrorCaptured, ref, watch } from "v
 import { useRoute, useRouter } from "vue-router";
 import { get, post, setCsrf, setStream, streamState } from "./api";
 import { isAuthenticationFailure } from "./refreshQueue";
+import RecentAuth from "./components/RecentAuth.vue";
 import AppShell from "./components/AppShell.vue";
 
 const route = useRoute();
@@ -78,6 +79,7 @@ defineExpose({ onToast });
 </script>
 
 <template>
+  <RecentAuth v-if="ready && !publicPage"/>
   <div v-if="!ready" class="main"><div class="skeleton" /></div>
   <router-view v-else-if="publicPage" @toast="onToast" />
   <AppShell v-else :me="me" :stream="streamState()" @logout="logout">

@@ -5,6 +5,9 @@ export const setCsrf = (v: string) => { state.csrf = v; };
 export const streamState = () => state.stream;
 export const setStream = (v: typeof state.stream) => { state.stream = v; };
 export function newKey() { return crypto.randomUUID(); }
+let reauthHandler: ((action:string)=>Promise<boolean>) | null=null;
+export function setReauthHandler(handler:typeof reauthHandler){reauthHandler=handler;}
+const activeSubmissions = new Set<string>();
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -45,11 +48,14 @@ function requireSuccessfulResult(op: Record<string, unknown>) {
   }
 }
 export async function submitOp(action: string, params: Record<string, unknown> = {}, targetIds: string[] = [], targetMode = "") {
+  let activeSignature="";
   try {
     // Persist metadata and a digest, never plaintext secret parameters.
     const body = JSON.stringify({ action, params, target_ids: [...targetIds].sort(), target_mode: targetMode });
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
     const signature = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,"0")).join("");
+    if(activeSubmissions.has(signature))throw {error:'action_busy',status:409,message:'Этот запрос уже выполняется. Дождитесь его результата.'};
+    activeSubmissions.add(signature); activeSignature=signature;
     const old = pendingRequests().find(p => p.signature === signature);
     const key = old?.key || newKey();
     if (old) {
@@ -61,7 +67,18 @@ export async function submitOp(action: string, params: Record<string, unknown> =
     persist([...pending, { key, signature, action, created: new Date().toISOString() }]);
     let op: Record<string, unknown>;
     try {
-      op = await post("/api/v1/operations", { action, client_request_key:key, params, target_ids:targetIds, target_mode:targetMode || undefined });
+      const request={ action, client_request_key:key, params, target_ids:targetIds, target_mode:targetMode || undefined };
+      try {op = await post("/api/v1/operations", request);}
+      catch(e){
+        const err=e as ApiError;
+        if(err.error!=='recent_auth_required' || ![401,403].includes(err.status) || !reauthHandler)throw e;
+        // This exact response proves no operation was accepted. Forget the
+        // pending marker while asking, then retry once using the SAME key.
+        forget(key);
+        if(!await reauthHandler(action))throw {error:'action_cancelled',status:400,message:'Действие отменено. Команда не выполнялась.'} satisfies ApiError;
+        persist([...pendingRequests(),{key,signature,action,created:new Date().toISOString()}]);
+        op=await post("/api/v1/operations",request);
+      }
     } catch (e) {
       const err = e as ApiError;
       if (err.status === 0 || err.status >= 500 && err.status !== 501) {
@@ -72,5 +89,5 @@ export async function submitOp(action: string, params: Record<string, unknown> =
     }
     forget(key); requireSuccessfulResult(op);
     return { key, op, unknown:false };
-  } catch (e) { announceError(e as ApiError); throw e; }
+  } catch (e) { if((e as ApiError).error!=="action_cancelled")announceError(e as ApiError); throw e; } finally {if(activeSignature)activeSubmissions.delete(activeSignature);}
 }

@@ -153,10 +153,23 @@ func (s *Store) CreateSession(user *User, ttl, recentAuth time.Duration) (rawTok
 	}
 	rau := now.Add(recentAuth)
 	sess.RecentAuthUntil = &rau
-	_, err = s.db().Exec(`INSERT INTO admin_sessions(id,user_id,token_hash,csrf,expires_at,created_at,last_seen_at,recent_auth_until)
-		VALUES(?,?,?,?,?,?,?,?)`, sess.ID, sess.UserID, sess.TokenHash, sess.CSRF,
-		sess.ExpiresAt.UTC().Format(dbTimeFormat), now.UTC().Format(dbTimeFormat), now.UTC().Format(dbTimeFormat), rau.UTC().Format(dbTimeFormat))
-	_, _ = s.db().Exec(`UPDATE admin_users SET last_login_at=? WHERE id=?`, now.UTC().Format(dbTimeFormat), user.ID)
+	err = s.WithTx(func(tx *sql.Tx) error {
+		// Password verification precedes this transaction. Recheck the exact hash
+		// to prevent an in-flight old login from surviving a password change.
+		var current string
+		if e := tx.QueryRow(`SELECT password_hash FROM admin_users WHERE id=?`, user.ID).Scan(&current); e != nil {
+			return e
+		}
+		if current != user.PasswordHash {
+			return ErrConflict
+		}
+		if _, e := tx.Exec(`INSERT INTO admin_sessions(id,user_id,token_hash,csrf,expires_at,created_at,last_seen_at,recent_auth_until)
+		VALUES(?,?,?,?,?,?,?,?)`, sess.ID, sess.UserID, sess.TokenHash, sess.CSRF, sess.ExpiresAt.UTC().Format(dbTimeFormat), now.UTC().Format(dbTimeFormat), now.UTC().Format(dbTimeFormat), rau.UTC().Format(dbTimeFormat)); e != nil {
+			return e
+		}
+		_, e := tx.Exec(`UPDATE admin_users SET last_login_at=? WHERE id=?`, now.UTC().Format(dbTimeFormat), user.ID)
+		return e
+	})
 	return rawToken, sess, err
 }
 
@@ -479,7 +492,7 @@ func (s *Store) HostAt(agentID string, at time.Time) (*protocol.HostMetrics, tim
 
 func (s *Store) HostSeries(agentID string, from, to time.Time) ([]map[string]any, error) {
 	rows, err := s.db().Query(`SELECT observed_at,cpu_pct,ram_used,ram_avail,ram_total,ping_mean_ms,ping_loss,payload
-		FROM host_samples WHERE agent_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at LIMIT 20001`,
+		FROM host_samples WHERE agent_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at,id LIMIT 20001`,
 		agentID, from.UTC().Format(dbTimeFormat), to.UTC().Format(dbTimeFormat))
 	if err != nil {
 		return nil, err
@@ -700,18 +713,39 @@ func (s *Store) Audit(actor, action, entity, detail string) {
 		s.now().UTC().Format(dbTimeFormat), actor, action, entity, detail)
 }
 
+// RetainRaw does bounded work. Catch-up can span many passes; retained bounds
+// and cleanup lag are diagnostic facts, not a promise that the target is met.
 func (s *Store) RetainRaw(maxAge time.Duration) error {
-	cut := s.now().Add(-maxAge).UTC().Format(dbTimeFormat)
-	_, err := s.db().Exec(`DELETE FROM host_samples WHERE observed_at<?`, cut)
-	if err != nil {
-		return err
+	if maxAge < time.Hour {
+		return fmt.Errorf("raw retention must be at least one hour")
 	}
-	_, err = s.db().Exec(`DELETE FROM service_observations WHERE observed_at<?`, cut)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, q := range []struct {
+		table, column string
+		cutoff        time.Time
+	}{
+		{"host_samples", "observed_at", s.now().Add(-maxAge)},
+		{"service_observations", "observed_at", s.now().Add(-maxAge)},
+		{"ingest_receipts", "received_at", s.now().Add(-2 * maxAge)},
+		{"event_log", "ts", s.now().Add(-24 * time.Hour)},
+		{"admin_sessions", "expires_at", s.now()},
+	} {
+		for batch := 0; batch < 10; batch++ {
+			result, err := s.DB.ExecContext(ctx, `DELETE FROM `+q.table+` WHERE rowid IN (SELECT rowid FROM `+q.table+` WHERE `+q.column+`<? ORDER BY `+q.column+` LIMIT 1000)`, q.cutoff.UTC().Format(dbTimeFormat))
+			if err != nil {
+				return fmt.Errorf("bounded %s cleanup: %w", q.table, err)
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if n < 1000 {
+				break
+			}
+		}
 	}
-	_, err = s.db().Exec(`DELETE FROM ingest_receipts WHERE received_at<?`, s.now().Add(-2*maxAge).UTC().Format(dbTimeFormat))
-	return err
+	return nil
 }
 
 func (s *Store) BackupTo(dst string) error {
@@ -749,7 +783,7 @@ func (s *Store) Backups() ([]map[string]any, error) {
 
 func (s *Store) LatestCheckObs(serviceID string) (*protocol.CheckObservation, error) {
 	var payload string
-	err := s.db().QueryRow(`SELECT payload FROM service_observations WHERE service_id=? ORDER BY observed_at DESC LIMIT 1`, serviceID).Scan(&payload)
+	err := s.db().QueryRow(`SELECT payload FROM service_observations WHERE service_id=? ORDER BY observed_at DESC,id DESC LIMIT 1`, serviceID).Scan(&payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -757,12 +791,17 @@ func (s *Store) LatestCheckObs(serviceID string) (*protocol.CheckObservation, er
 		return nil, err
 	}
 	var o protocol.CheckObservation
-	_ = json.Unmarshal([]byte(payload), &o)
+	if !strings.HasPrefix(strings.TrimSpace(payload), "{") {
+		return nil, fmt.Errorf("corrupt service observation: object required")
+	}
+	if err := json.Unmarshal([]byte(payload), &o); err != nil {
+		return nil, fmt.Errorf("corrupt service observation: %w", err)
+	}
 	return &o, nil
 }
 
 func (s *Store) CheckSeries(serviceID string, from, to time.Time) ([]protocol.CheckObservation, error) {
-	rows, err := s.db().Query(`SELECT payload FROM service_observations WHERE service_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at LIMIT 20001`,
+	rows, err := s.db().Query(`SELECT payload FROM service_observations WHERE service_id=? AND observed_at>=? AND observed_at<? ORDER BY observed_at,id LIMIT 20001`,
 		serviceID, from.UTC().Format(dbTimeFormat), to.UTC().Format(dbTimeFormat))
 	if err != nil {
 		return nil, err
@@ -775,7 +814,12 @@ func (s *Store) CheckSeries(serviceID string, from, to time.Time) ([]protocol.Ch
 			return nil, err
 		}
 		var o protocol.CheckObservation
-		_ = json.Unmarshal([]byte(payload), &o)
+		if !strings.HasPrefix(strings.TrimSpace(payload), "{") {
+			return nil, fmt.Errorf("corrupt service observation: object required")
+		}
+		if err := json.Unmarshal([]byte(payload), &o); err != nil {
+			return nil, fmt.Errorf("corrupt service observation: %w", err)
+		}
 		out = append(out, o)
 	}
 	return out, rows.Err()

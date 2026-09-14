@@ -20,6 +20,9 @@ func audit5Store(t *testing.T) (*Store, *clock.Fake) {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.Close() })
+	if _, e = s.SetAdmission(0, 60, "fixture-owner"); e != nil {
+		t.Fatal(e)
+	}
 	return s, clk
 }
 func announceReq(id string) protocol.Announcement {
@@ -102,6 +105,13 @@ func TestAudit5StaleRejectedAndExpiredCandidate(t *testing.T) {
 		t.Fatal(rows, e)
 	}
 	clk.Advance(8 * 24 * time.Hour)
+	p, e := s.AdmissionPolicy()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.SetAdmission(p.Revision, 60, "fixture-owner"); e != nil {
+		t.Fatal(e)
+	}
 	if state, created, e := s.Announce(r, "127.0.0.1"); e != nil || state != "pending" || !created {
 		t.Fatal(state, created, e)
 	}

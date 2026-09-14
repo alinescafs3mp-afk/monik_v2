@@ -69,6 +69,7 @@ func main() {
 		must(app.Store.UpsertService(protocol.DiscoveredEndpoint{ServiceID: sv.id, DialTarget: target, URL: "http://" + target, SpeaksHTTP: true, Source: "fixture"}, "audit-host"))
 		must(app.Store.UpdateServiceFlags(sv.id, map[string]any{"display_name": sv.name}))
 	}
+	must(app.Store.InsertIncident(map[string]any{"id": "fixture-incident", "entity_type": "service", "entity_id": "audit-broken", "metric": "http", "severity": "warning", "status": "confirmed", "reason": "Synthetic fixture incident for acknowledgement controls"}))
 	now := time.Now().UTC()
 	for i := 0; i < 1200; i++ {
 		at := now.Add(time.Duration(i-1200) * 5 * time.Second)

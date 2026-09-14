@@ -149,7 +149,7 @@ func AnnounceOnce(ctx context.Context, st *configfile.State) (string, error) {
 		return "", fmt.Errorf("announcement proof mismatch")
 	}
 	switch out.State {
-	case "pending", "rejected":
+	case "pending", "rejected", "admission_closed":
 		return out.State, nil
 	case "approved":
 		e := out.Enrollment

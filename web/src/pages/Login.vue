@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { post, setCsrf } from "../api";
 
-const router = useRouter();
+const router = useRouter(), route = useRoute();
 const username = ref("owner");
 const password = ref("");
 const err = ref("");
@@ -27,6 +27,7 @@ async function submit() {
 <template>
   <main class="main" style="max-width: 28rem; margin: 8vh auto">
     <h1>Вход в Monik</h1>
+    <p v-if="route.query.changed==='1'" role="status">Пароль изменён, браузерные сессии завершены. Войдите с новым паролем.</p>
     <form class="panel" @submit.prevent="submit">
       <label>Имя пользователя<br /><input v-model="username" autocomplete="username" required /></label>
       <p>

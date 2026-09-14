@@ -45,11 +45,27 @@ func TestReviewHistoryDatabaseErrorIsNotMissingData(t *testing.T) {
 }
 func TestReviewUnimplementedActionsDoNotClaimSuccess(t *testing.T) {
 	a, _ := testApp(t)
-	for _, action := range []string{"rule.save", "maintenance.set", "operation.retry_selected", "update.resume"} {
+	for _, action := range []string{"operation.retry_selected", "update.resume"} {
 		w := httptest.NewRecorder()
 		a.processSubmit(w, &storage.Session{Username: "owner"}, protocol.SubmitOperation{Action: action, ClientRequestKey: action, Params: map[string]any{}})
 		if w.Code != 501 {
 			t.Fatalf("%s %d", action, w.Code)
+		}
+	}
+}
+
+// Real implementations reject empty requests before journaling any parameters.
+func TestAudit6ImplementedPoliciesRejectEmptyRequests(t *testing.T) {
+	a, _ := testApp(t)
+	for _, action := range []string{"rule.save", "maintenance.set"} {
+		w := httptest.NewRecorder()
+		a.processSubmit(w, &storage.Session{Username: "owner", Role: "owner"}, protocol.SubmitOperation{Action: action, ClientRequestKey: action, Params: map[string]any{}})
+		if w.Code != 400 {
+			t.Fatal(action, w.Code, w.Body.String())
+		}
+		var n int
+		if e := a.Store.DB.QueryRow(`SELECT COUNT(*) FROM operations WHERE client_request_key=?`, action).Scan(&n); e != nil || n != 0 {
+			t.Fatal(n, e)
 		}
 	}
 }

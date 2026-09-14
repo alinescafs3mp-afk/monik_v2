@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import AdmissionPanel from "../components/AdmissionPanel.vue";
 import { get, submitOp } from "../api";
 const emit = defineEmits<{ toast: [string, string?] }>();
 const info = ref<Record<string, unknown> | null>(null);
@@ -50,8 +51,9 @@ async function copyYaml() {
 
 <template>
   <div>
+    <AdmissionPanel/>
     <p v-if="error" class="panel err" role="alert">{{error}}</p>
-    <section class="panel"><h2>Автоматическое появление машины</h2><p>Один доверенный профиль можно раздать своим машинам. Он не содержит кода регистрации или общего API-ключа. Каждый агент создаёт собственную идентичность и после запуска появляется в «Машинах» для подтверждения.</p>
+    <section class="panel"><h2>Автоматическое появление машины</h2><p>Один доверенный профиль можно раздать своим машинам. Он не содержит кода регистрации или общего API-ключа. Откройте приём выше. Каждый агент создаёт собственную идентичность и после запуска появляется в «Машинах» для подтверждения.</p>
     <button :disabled="!info" @click="downloadProfile">Скачать профиль автообнаружения</button><button :disabled="!info" @click="autoProfile=!autoProfile">Показать профиль</button><pre v-if="autoProfile">{{discoveryProfile()}}</pre>
     <p>Linux, установка от администратора с парой бинарников agent + service-host:</p><pre>sudo ./monik-agent setup --profile monik-discovery.json
 sudo ./monik-agent service install</pre>

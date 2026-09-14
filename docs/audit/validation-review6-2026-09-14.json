@@ -1,0 +1,94 @@
+{
+  "audit": "6",
+  "date": "2026-09-14",
+  "baseline_commit": "e771f35343b0c3f9aaba7db446d2ffd1afc3aa97",
+  "baseline_tree": "a4e92aa2286f3540982463768bd45752fe025d5c",
+  "toolchain": {
+    "go": "1.27.0",
+    "node": "22.16.0",
+    "dependencies": "baseline go.sum and web/package-lock.json, no dependency changes"
+  },
+  "checks": {
+    "go_race": {
+      "status": "PASS",
+      "command": "go test -race -count=1 -json ./...",
+      "top_level": 178,
+      "pass_events": 239,
+      "tested_packages": 18,
+      "failed_events": 0,
+      "log": "evidence/final-go.jsonl"
+    },
+    "go_vet": {
+      "status": "PASS",
+      "command": "go vet ./...",
+      "log": "evidence/final-vet.log"
+    },
+    "module_verify": {
+      "status": "PASS",
+      "command": "go mod verify",
+      "log": "evidence/final-modverify.log"
+    },
+    "frontend": {
+      "status": "PASS",
+      "command": "npm test",
+      "tests": 57,
+      "log": "evidence/final-ui-tests.log",
+      "scope": "Node behavior tests plus explicitly labeled source contracts"
+    },
+    "typescript": {
+      "status": "PASS",
+      "command": "tsc --noEmit",
+      "log": "evidence/final-types.log",
+      "vue_tsc": "NOT RUN"
+    },
+    "production_ui": {
+      "status": "PASS",
+      "command": "npm run build",
+      "log": "evidence/final-ui-build.log"
+    },
+    "builds": {
+      "status": "PASS",
+      "command": "make dist -o ui (matching UI built separately first)",
+      "commands": [
+        "monik-server",
+        "monik-agent",
+        "monik-service-host",
+        "monik-release"
+      ],
+      "platforms": [
+        "linux/amd64",
+        "windows/amd64"
+      ],
+      "log": "evidence/final-builds.log",
+      "signed_release": false,
+      "native_installation": "NOT RUN"
+    },
+    "browser": {
+      "status": "BLOCKED",
+      "error": "ERR_BLOCKED_BY_ADMINISTRATOR before login at isolated HTTPS loopback",
+      "results": "evidence/browser/results.json",
+      "log": "evidence/browser-attempt.log",
+      "production": false,
+      "fixture": "compiled Go API plus Vue; synthetic metrics",
+      "final_script_execution": "NOT RUN; extended after the blocked attempt; syntax checked"
+    },
+    "regressions_before_fix": {
+      "status": "CONFIRMED",
+      "count": 2,
+      "log": "evidence/regressions-before.log"
+    },
+    "native_systemd_scm_powerloss": "NOT RUN",
+    "fleet_capacity_24h_soak_full_v3": "NOT RUN",
+    "production_access": "NOT ACCESSED OR MODIFIED"
+  },
+  "not_release_ready": true,
+  "remaining_blockers": [
+    "independent service-host recovery",
+    "native installer accounts/ACL/boot",
+    "immutable release publication and durable cohorts/resume",
+    "complete protected controller restore/reconciliation",
+    "full migration edge acceptance",
+    "long-term aggregation and measured capacity"
+  ],
+  "note": "Git patch/source equality is recorded by packaging outside the source tree; historical SDK/browser evidence is not reused as current acceptance."
+}

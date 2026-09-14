@@ -441,3 +441,18 @@ CREATE TABLE IF NOT EXISTS agent_candidates (
  decided_at TEXT
 );
 CREATE INDEX IF NOT EXISTS agent_candidates_expiry ON agent_candidates(expires_at);
+
+-- Independent cancellation preserves the original maintenance interval.
+CREATE TABLE IF NOT EXISTS maintenance_cancellations (
+ window_id TEXT PRIMARY KEY REFERENCES maintenance_windows(id),
+ cancelled_at TEXT NOT NULL,
+ cancelled_by TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_maintenance_time ON maintenance_windows(end_at,start_at);
+CREATE INDEX IF NOT EXISTS idx_host_rule_version ON rule_versions(name,effective_from,id);
+CREATE INDEX IF NOT EXISTS idx_host_retention ON host_samples(observed_at);
+CREATE INDEX IF NOT EXISTS idx_service_retention ON service_observations(observed_at);
+CREATE INDEX IF NOT EXISTS idx_event_retention ON event_log(ts);
+
+CREATE INDEX IF NOT EXISTS idx_receipt_retention ON ingest_receipts(received_at);
+CREATE INDEX IF NOT EXISTS idx_session_retention ON admin_sessions(expires_at);

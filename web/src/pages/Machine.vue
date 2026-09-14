@@ -9,6 +9,7 @@ import TimeBar from "../components/TimeBar.vue";
 import Spark from "../components/Spark.vue";
 import ServiceList from "../components/ServiceList.vue";
 import CheckEditor from "../components/CheckEditor.vue";
+import MaintenancePanel from "../components/MaintenancePanel.vue";
 import MachineNameEditor from "../components/MachineNameEditor.vue";
 const route=useRoute(),router=useRouter(),emit=defineEmits<{toast:[string,string?]}>();
 const exportURL=ref(''), historyError=ref('');
@@ -99,6 +100,7 @@ async function replaceSecret(){
     <button :disabled="!!pending || mode==='history' || !secretName || !secretHeader || !secretValue" @click="replaceSecret">{{ pending==='secret.replace'?'Отправляем…':'Записать секрет' }}</button>
    </section>
    <small class="muted">{{ updated ? `Последнее чтение ${updated.toLocaleTimeString()}` : '' }}</small>
+   <MaintenancePanel v-if="detail && tab==='agent'" kind="agent" :entity-id="String(route.params.id)" :locked="mode==='history'"/>
   </template>
  </div>
 </template>

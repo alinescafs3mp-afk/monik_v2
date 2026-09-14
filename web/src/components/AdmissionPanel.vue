@@ -1,0 +1,10 @@
+<script setup lang="ts">
+import {ref} from 'vue';import {get,submitOp} from '../api';import {usePolling} from '../composables/usePolling';
+const policy=ref<any>(null),busy=ref(false),minutes=ref(60),notice=ref('');
+const {loading,error,refresh}=usePolling(async()=>{policy.value=await get('/api/v1/enrollment/policy');});
+async function setWindow(value:number){if(busy.value||!policy.value)return;busy.value=true;notice.value='Сохраняем окно приёма…';
+ try{await submitOp('enrollment.window.set',{base_revision:policy.value.revision,minutes:value});await refresh();notice.value=value?'Приём новых объявлений открыт. Каждую машину всё равно нужно одобрить.':'Приём неизвестных машин закрыт. Уже ожидающие и одобренные продолжат подключение.';window.dispatchEvent(new Event('monik:refresh'));}catch(e){notice.value=(e as Error).message;}finally{busy.value=false;}}
+</script>
+<template><section class="panel admission-panel"><h2>Приём новых агентов</h2><p v-if="loading" role="status">Читаем состояние…</p><p v-if="error" class="err" role="alert">{{error}} <button @click="refresh">Повторить</button></p>
+ <template v-if="policy"><p><strong>{{policy.open?'Открыт':'Закрыт'}}</strong><span v-if="policy.open"> до {{new Date(policy.open_until).toLocaleString()}}</span> · ревизия {{policy.revision}}</p><p class="muted">По умолчанию закрыт. Откройте на время установки. Это разрешение появиться в очереди, а не автоматическое доверие. Действующие агенты и персональные коды регистрации не затрагиваются.</p><div class="row"><label>Открыть на <select v-model.number="minutes" :disabled="busy"><option :value="15">15 минут</option><option :value="60">1 час</option><option :value="240">4 часа</option><option :value="1440">24 часа</option></select></label><button :disabled="busy" @click="setWindow(minutes)">{{busy?'Сохраняем…':policy.open?'Продлить приём':'Открыть приём'}}</button><button v-if="policy.open" :disabled="busy" @click="setWindow(0)">Закрыть приём</button></div><router-link to="/machines">Перейти к ожидающим машинам</router-link></template><p v-if="notice" role="status">{{notice}}</p>
+</section></template>

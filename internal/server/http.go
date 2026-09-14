@@ -41,9 +41,12 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/exports/{id}", a.needAuth(a.handleExportDownload))
 	mux.HandleFunc("GET /api/v1/history/point", a.needAuth(a.handleHistoryPoint))
 	mux.HandleFunc("GET /api/v1/history/series", a.needAuth(a.handleHistorySeries))
+	mux.HandleFunc("GET /api/v1/monitoring", a.needAuth(a.handleMonitoring))
+	mux.HandleFunc("GET /api/v1/enrollment/policy", a.needAuth(a.handleAdmissionPolicy))
 	mux.HandleFunc("GET /api/v1/settings", a.needAuth(a.handleSettings))
 	mux.HandleFunc("POST /api/v1/settings", a.needAuth(a.handleSettingsPost))
 	mux.HandleFunc("POST /api/v1/reauth", a.needAuth(a.handleReauth))
+	mux.HandleFunc("POST /api/v1/account/password", a.needAuth(a.handlePasswordChange))
 	mux.HandleFunc("GET /api/v1/diagnostics", a.needAuth(a.handleDiagnostics))
 	mux.HandleFunc("GET /api/v1/releases", a.needAuth(a.handleReleases))
 	mux.HandleFunc("POST /api/v1/releases/import", a.needAuth(a.handleReleaseImport))
@@ -211,10 +214,22 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 			attention++
 		}
 	}
-	unread := 0
+	if err := a.annotateIncidents(incs, now); err != nil {
+		a.writeErr(w, 500, "maintenance", "could not determine maintenance status")
+		return
+	}
+	ruleVersion, err := a.Store.HostRulesAt(now)
+	if err != nil {
+		a.writeErr(w, 500, "rules", "could not load monitoring rules")
+		return
+	}
+	unread, actionable := 0, 0
 	for _, inc := range incs {
 		if inc["acked_at"] == "" {
 			unread++
+			if inc["maintenance_active"] != true {
+				actionable++
+			}
 		}
 	}
 	reporting, total := 0, 0
@@ -249,7 +264,7 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 			card["observed_at"] = obs
 			card["age_seconds"] = now.Sub(obs).Seconds()
 			card["metrics_fresh"] = fresh
-			breaches := rules.EvaluateHost(host, rules.DefaultRules())
+			breaches := rules.EvaluateHost(host, rules.ThresholdRules(ruleVersion.Rules))
 			card["breaches"] = breaches
 			if fresh && len(breaches) > 0 || !fresh {
 				card["has_problem"] = true
@@ -264,10 +279,16 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 				}
 			}
 		}
+		active, err := a.Store.InMaintenance("agent", ag.ID, now)
+		if err != nil {
+			a.writeErr(w, 500, "maintenance", "could not load maintenance")
+			return
+		}
+		card["maintenance_active"] = active
 		card["services"] = services
 		cards = append(cards, card)
 	}
-	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "unread_incidents": unread, "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
+	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "unread_incidents": unread, "actionable_incidents": actionable, "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
 }
 
 func display(ag *storage.AgentRow) string {
@@ -322,7 +343,11 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 		a.writeErr(w, 404, "not_found", "agent not found")
 		return
 	}
-	host, obs, _ := a.Store.LatestHost(id)
+	host, obs, hostErr := a.Store.LatestHost(id)
+	if hostErr != nil && hostErr != storage.ErrNotFound {
+		a.writeErr(w, 500, "db", "could not read host data")
+		return
+	}
 	svcs, err := a.serviceSummaries(id, a.Clock.Now())
 	if err != nil {
 		a.writeErr(w, 500, "db", "could not load services")
@@ -335,8 +360,13 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 		a.writeErr(w, 500, "db", "discovery lookup failed")
 		return
 	}
+	maintenance, err := a.Store.InMaintenance("agent", id, a.Clock.Now())
+	if err != nil {
+		a.writeErr(w, 500, "maintenance", "could not read maintenance")
+		return
+	}
 	a.writeJSON(w, 200, map[string]any{
-		"agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
+		"maintenance_active": maintenance, "agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
 		"discovery": discovery, "desired_config": json.RawMessage(orJSON(ag.DesiredConfig)),
 		"age_seconds": a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
 	})
@@ -357,7 +387,11 @@ func (a *App) handleService(w http.ResponseWriter, r *http.Request, s *storage.S
 		a.writeErr(w, 404, "not_found", "service not found")
 		return
 	}
-	obs, _ := a.Store.LatestCheckObs(sv.ID)
+	obs, err := a.Store.LatestCheckObs(sv.ID)
+	if err != nil && err != storage.ErrNotFound {
+		a.writeErr(w, 500, "db", "could not read valid service observation")
+		return
+	}
 	a.writeJSON(w, 200, map[string]any{"service": sv, "observation": obs})
 }
 
@@ -446,8 +480,12 @@ func (a *App) handleSSE(w http.ResponseWriter, r *http.Request, s *storage.Sessi
 	if q := r.URL.Query().Get("cursor"); q != "" {
 		cursor, _ = strconv.ParseInt(q, 10, 64)
 	}
-	max, _ := a.Store.MaxEventID()
-	if cursor < 0 || cursor > max || cursor > 0 && cursor < max-10000 {
+	min, max, boundsErr := a.Store.EventBounds()
+	if boundsErr != nil {
+		a.writeErr(w, 500, "db", "could not read event bounds")
+		return
+	}
+	if cursor < 0 || cursor > max || cursor > 0 && (cursor < max-10000 || cursor < min-1) {
 		cursor = max
 		_, _ = w.Write([]byte("event: resnapshot\ndata: {\"reason\":\"cursor_expired\"}\n\n"))
 		fl.Flush()
@@ -691,12 +729,12 @@ func (a *App) handleReauth(w http.ResponseWriter, r *http.Request, s *storage.Se
 	var body struct {
 		Password string `json:"password"`
 	}
-	if err := parseJSON(r, &body); err != nil {
+	if err := parseJSONLimit(r, &body, 16<<10); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
 	u, err := a.Store.UserByName(s.Username)
-	if err != nil || !secure.VerifyPassword(u.PasswordHash, body.Password) {
+	if err != nil || len(body.Password) > 1024 || !secure.VerifyPassword(u.PasswordHash, body.Password) {
 		a.writeErr(w, 401, "invalid_credentials", "invalid password")
 		return
 	}
@@ -709,12 +747,24 @@ func (a *App) handleReauth(w http.ResponseWriter, r *http.Request, s *storage.Se
 }
 
 func (a *App) handleDiagnostics(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	maxE, _ := a.Store.MaxEventID()
-	a.writeJSON(w, 200, map[string]any{
-		"version": version.Version, "commit": version.Commit,
-		"event_cursor": maxE, "db": a.Store.Path(),
-		"setup_complete": a.SetupComplete(),
-	})
+	d, err := a.Store.StorageDiagnostics(protocol.RawRetention)
+	if err != nil {
+		a.writeErr(w, 500, "diagnostics", "could not read storage diagnostics")
+		return
+	}
+	d["version"], d["commit"], d["setup_complete"] = version.Version, version.Commit, a.SetupComplete()
+	d["server_time"] = a.Clock.Now()
+	for _, file := range []struct{ name, path string }{{"database_bytes", a.Store.Path()}, {"wal_bytes", a.Store.Path() + "-wal"}} {
+		info, e := os.Stat(file.path)
+		if e == nil {
+			d[file.name] = info.Size()
+		} else if os.IsNotExist(e) {
+			d[file.name] = 0
+		} else {
+			d[file.name] = nil
+		}
+	}
+	a.writeJSON(w, 200, d)
 }
 
 func (a *App) handleReleases(w http.ResponseWriter, r *http.Request, s *storage.Session) {

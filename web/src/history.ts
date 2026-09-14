@@ -5,7 +5,7 @@ export function historyRange(hours: number, end: string | Date) {
   return { from: new Date(to.getTime() - hours * 3600000).toISOString(), to: to.toISOString() };
 }
 export function incidentStateLabel(value: string) {
-  return ({ pending:'Ожидает подтверждения', confirmed:'Подтверждён', resolved:'Восстановлен', interrupted:'Наблюдение прервано' } as Record<string,string>)[value] || value;
+  return ({ pending:'Ожидает подтверждения', confirmed:'Подтверждён', resolved:'Восстановлен', interrupted:'Наблюдение прервано', policy_changed:'Правило изменено (не восстановление)' } as Record<string,string>)[value] || value;
 }
 export function exportDownload(operation: any): string | null {
   const target = operation?.targets?.find((t:any) => t.agent_id === 'server' && t.status === 'succeeded');

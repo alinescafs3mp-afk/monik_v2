@@ -16,6 +16,7 @@ async function decide(c:any,approve:boolean){
 }
 </script>
 <template><section v-if="candidates.length||error||feedback" class="panel pending-agents">
+ <p><router-link to="/add">Управление окном приёма новых агентов</router-link></p>
  <h2>Ожидают подтверждения: {{candidates.length}}</h2><p class="muted">Машины обнаружены по исходящему сигналу агента. Имена и ОС пока не проверены. Сверьте отпечаток с установкой, прежде чем разрешить доступ. Метрики и команды недоступны до одобрения.</p>
  <p v-if="error" class="err" role="alert">{{error}} <button @click="refresh">Повторить</button></p><p v-if="feedback" role="status">{{feedback}}</p>
  <form v-if="auth" @submit.prevent="reauth"><label>Подтвердите пароль владельца <input v-model="password" type="password" autocomplete="current-password" required/></label><button :disabled="!!busy">Подтвердить</button></form>

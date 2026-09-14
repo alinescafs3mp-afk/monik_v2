@@ -15,6 +15,8 @@ import (
 
 func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 	switch req.Action {
+	case "rule.save", "maintenance.set", "maintenance.cancel", "enrollment.window.set", "incident.unacknowledge":
+		return validateMonitoringSyntax(req)
 	case "agent.rename":
 		id, idOK := req.Params["agent_id"].(string)
 		name, nameOK := req.Params["display_name"].(string)

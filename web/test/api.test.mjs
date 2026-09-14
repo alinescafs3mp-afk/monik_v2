@@ -14,7 +14,7 @@ beforeEach(() => {
   const values = new Map();
   globalThis.sessionStorage = { getItem: key => values.get(key) || null, setItem: (key,value) => values.set(key,value), removeItem: key => values.delete(key) };
   globalThis.window = new EventTarget();
-  api.setCsrf('csrf-test');
+  api.setCsrf('csrf-test'); api.setReauthHandler(null);
 });
 
 test('successful action has an idempotency key and clears pending state', async () => {
@@ -61,4 +61,23 @@ test('HTML in a 200 response is not treated as JSON success', async()=>{
 test('null, unavailable, and zero measurements remain distinct',()=>{
   assert.equal(format.number(null,'%'),'Нет данных'); assert.equal(format.number(undefined),'Нет данных');
   assert.equal(format.number(0,'%'),'0%'); assert.equal(format.bytes(-1),'Нет данных'); assert.equal(format.bytes(1073741824),'1 GiB');
+});
+
+test('recent auth retries once with the original operation key and no password persisted',async()=>{
+ let requests=[],prompts=0;
+ api.setReauthHandler(async()=>{prompts++;assert.equal(api.pendingRequests().length,0);return true;});
+ globalThis.fetch=async(path,init)=>{requests.push(JSON.parse(init.body));return requests.length===1?response({error:'recent_auth_required',message:'confirm'},401):response({operation_id:'ok',status:'completed'});};
+ const r=await api.submitOp('enrollment.window.set',{base_revision:0,minutes:60});assert.equal(r.op.operation_id,'ok');assert.equal(prompts,1);assert.equal(requests.length,2);assert.equal(requests[0].client_request_key,requests[1].client_request_key);assert.equal(api.pendingRequests().length,0);
+});
+test('cancelled recent-auth prompts do not execute or leave unknown requests',async()=>{
+ let writes=0;api.setReauthHandler(async()=>false);globalThis.fetch=async()=>{writes++;return response({error:'recent_auth_required'},401);};
+ await assert.rejects(api.submitOp('enrollment.window.set',{}),e=>e.error==='action_cancelled');assert.equal(writes,1);assert.equal(api.pendingRequests().length,0);
+});
+test('second authentication rejection does not loop',async()=>{
+ let writes=0,prompts=0;api.setReauthHandler(async()=>{prompts++;return true;});globalThis.fetch=async()=>{writes++;return response({error:'recent_auth_required'},401);};
+ await assert.rejects(api.submitOp('enrollment.window.set',{}),e=>e.error==='recent_auth_required');assert.equal(writes,2);assert.equal(prompts,1);assert.equal(api.pendingRequests().length,0);
+});
+test('lost actual response after recent auth reconciles rather than resubmitting',async()=>{
+ let writes=0;api.setReauthHandler(async()=>true);globalThis.fetch=async path=>{if(path.endsWith('lookup'))return response({found:true,operation:{operation_id:'saved',status:'completed'}});writes++;if(writes===1)return response({error:'recent_auth_required'},401);throw new Error('response lost');};
+ const r=await api.submitOp('enrollment.window.set',{});assert.equal(r.op.operation_id,'saved');assert.equal(writes,2);
 });

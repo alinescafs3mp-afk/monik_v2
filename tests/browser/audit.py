@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
+import secrets
 import ssl
 import subprocess
 import tempfile
@@ -62,7 +64,7 @@ def run(binary: Path, output: Path) -> None:
                     page.route("**/*", local_only)
                     page.goto(base + "/login", wait_until="domcontentloaded")
                     page.locator('input[autocomplete="username"]').fill(access["username"])
-                    page.locator('input[type="password"]').fill(access["password"])
+                    page.get_by_role("textbox", name="Пароль", exact=True).fill(access["password"])
                     page.get_by_role("button", name="Войти", exact=True).click()
                     expect(page.get_by_role("heading", name="Состояние машин", exact=True)).to_be_visible()
                     expect(page.locator(".page-title")).to_have_text("Обзор")
@@ -248,6 +250,86 @@ def run(binary: Path, output: Path) -> None:
                     assert page.get_by_role("button", name="Обновить всех").count() == 0
                     results.append("update import is visible and fleet-wide update remains absent")
 
+                    # V6 operates through the real API and compiled UI. Only
+                    # the telemetry/clock-condition fixture is synthetic.
+                    page.goto(base + "/settings", wait_until="domcontentloaded")
+                    rules = page.locator(".rule-editor")
+                    expect(rules.get_by_label("cpu: предупреждение", exact=True)).to_have_value("85")
+                    rules.get_by_label("cpu: предупреждение", exact=True).fill("88")
+                    rules.get_by_role("button", name="Сохранить пороги", exact=True).click()
+                    expect(rules).to_contain_text("Правила сохранены")
+                    policy = context.request.get(base + "/api/v1/monitoring").json()
+                    assert next(r for r in policy["host_rules"]["rules"] if r["metric"] == "cpu")["warning"] == 88
+                    page.reload(wait_until="domcontentloaded")
+                    expect(rules.get_by_label("cpu: предупреждение", exact=True)).to_have_value("88")
+                    results.append("real rule save commits and persists across reload; old history is not recolored")
+                    maintenance = page.locator(".maintenance-panel")
+                    maintenance.get_by_label("Причина", exact=True).fill("Fixture planned maintenance")
+                    maintenance.get_by_role("button", name="Запланировать обслуживание", exact=True).click()
+                    expect(maintenance).to_contain_text("Обслуживание сохранено")
+                    page.goto(base + "/", wait_until="domcontentloaded")
+                    expect(page.locator(".maintenance-badge").first).to_be_visible()
+                    page.goto(base + "/settings", wait_until="domcontentloaded")
+                    maintenance.get_by_role("button", name="Завершить сейчас", exact=True).click()
+                    expect(maintenance).to_contain_text("Завершено вручную")
+                    page.screenshot(path=str(output / "settings-monitoring-v6.png"), full_page=True)
+                    results.append("maintenance creates real interval/badge and cancellation keeps the historical record")
+
+                    announcement = {"agent_id":"audit6-admission", "credential":secrets.token_hex(32), "hostname":"candidate", "display_name":"New audit agent", "os":"linux", "arch":"amd64", "version":"fixture"}
+                    def announce():
+                        response = context.request.post(base + "/api/v1/agent/announce", data=json.dumps(announcement), headers={"Content-Type":"application/json"})
+                        assert response.ok
+                        return response.json()
+                    assert announce()["state"] == "admission_closed"
+                    # Expire recent authentication ONLY in the disposable fixture.
+                    with sqlite3.connect(Path(directory) / "monik.db", timeout=5) as db:
+                        db.execute("UPDATE admin_sessions SET recent_auth_until='2000-01-01T00:00:00.000000000Z'")
+                    page.goto(base + "/add", wait_until="domcontentloaded")
+                    admission = page.locator(".admission-panel")
+                    expect(admission).to_contain_text("Закрыт")
+                    operation_keys = []
+                    def admission_request(request):
+                        if request.method == "POST" and request.url.endswith("/api/v1/operations"):
+                            body = json.loads(request.post_data)
+                            if body.get("action") == "enrollment.window.set":
+                                operation_keys.append(body["client_request_key"])
+                    page.on("request", admission_request)
+                    admission.get_by_role("button", name="Открыть приём", exact=True).click()
+                    dialog = page.get_by_role("dialog", name="Подтвердите действие", exact=True)
+                    expect(dialog).to_be_visible()
+                    expect(dialog.get_by_label("Текущий пароль", exact=True)).to_be_focused()
+                    dialog.get_by_label("Текущий пароль", exact=True).fill(access["password"])
+                    dialog.get_by_role("button", name="Подтвердить и продолжить", exact=True).click()
+                    expect(dialog).not_to_be_visible()
+                    expect(admission.get_by_role("button", name="Закрыть приём", exact=True)).to_be_visible()
+                    assert len(operation_keys) == 2 and operation_keys[0] == operation_keys[1]
+                    page.remove_listener("request", admission_request)
+                    assert announce()["state"] == "pending"
+                    admission.get_by_role("button", name="Закрыть приём", exact=True).click()
+                    expect(admission).to_contain_text("Приём неизвестных машин закрыт")
+                    assert announce()["state"] == "pending", "closing admission stranded an existing pending agent"
+                    page.goto(base + "/machines", wait_until="domcontentloaded")
+                    candidate = page.locator(".pending-agent").filter(has=page.locator("strong", has_text="New audit agent"))
+                    expect(candidate).to_be_visible()
+                    candidate.get_by_role("button", name="Разрешить подключение", exact=True).click()
+                    expect(page.get_by_role("link", name="New audit agent", exact=True)).to_be_visible()
+                    assert announce()["state"] == "approved"
+                    results.append("closed/open admission, native recent-auth dialog with same key, and owner approval over real API")
+
+                    page.goto(base + "/problems?acknowledgement=unread", wait_until="domcontentloaded")
+                    expect(page.get_by_label("Прочтение", exact=True)).to_have_value("unread")
+                    incident = page.locator("tr").filter(has_text="Synthetic fixture incident")
+                    expect(incident).to_have_count(1)
+                    incident.get_by_role("button", name="Прочитано", exact=True).click()
+                    expect(incident).to_have_count(0)
+                    page.get_by_label("Прочтение", exact=True).select_option("read")
+                    expect(incident).to_have_count(1)
+                    incident.get_by_role("button", name="Считать непрочитанным", exact=True).click()
+                    expect(incident).to_have_count(0)
+                    page.get_by_label("Прочтение", exact=True).select_option("unread")
+                    expect(incident).to_have_count(1)
+                    results.append("unread route/filter, acknowledgement and reversal change visibility without recovery")
+
                     page.set_viewport_size({"width": 390, "height": 844})
                     page.goto(base + "/", wait_until="domcontentloaded")
                     expect(page.get_by_role("heading", name="Audit host", exact=True)).to_be_visible()
@@ -261,6 +343,25 @@ def run(binary: Path, output: Path) -> None:
                     expect(page.locator("svg.chart").first.locator(".x-tick")).to_have_count(3)
                     page.screenshot(path=str(output / "machine-mobile.png"), full_page=True)
                     results.append("mobile overview fits; menu closes on Escape and charts use three readable time ticks")
+                    page.set_viewport_size({"width":1440, "height":1000})
+                    page.goto(base + "/settings", wait_until="domcontentloaded")
+                    old_cookies = context.cookies()
+                    password_form = page.locator(".password-form")
+                    password_form.get_by_label("Текущий пароль", exact=True).fill(access["password"])
+                    new_password = secrets.token_urlsafe(24)
+                    password_form.get_by_label("Новый пароль", exact=True).fill(new_password)
+                    password_form.get_by_label("Повтор нового пароля", exact=True).fill(new_password)
+                    password_form.get_by_role("button", name="Изменить пароль и выйти", exact=True).click()
+                    expect(page.get_by_role("heading", name="Вход в Monik", exact=True)).to_be_visible()
+                    obsolete = browser.new_context(ignore_https_errors=True)
+                    obsolete.add_cookies(old_cookies)
+                    assert obsolete.request.get(base + "/api/v1/me").status == 401
+                    obsolete.close()
+                    page.locator('input[autocomplete="username"]').fill(access["username"])
+                    page.get_by_role("textbox", name="Пароль", exact=True).fill(new_password)
+                    page.get_by_role("button", name="Войти", exact=True).click()
+                    expect(page.get_by_role("heading", name="Состояние машин", exact=True)).to_be_visible()
+                    results.append("password change ends browser sessions and new password signs in; agent keys untouched")
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")
                     context.close()

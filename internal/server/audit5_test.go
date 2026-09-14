@@ -21,6 +21,9 @@ import (
 
 func TestAudit5TrustedDiscoveryOwnerApprovalThenReport(t *testing.T) {
 	app, h := testApp(t)
+	if _, e := app.Store.SetAdmission(0, 60, "fixture-owner"); e != nil {
+		t.Fatal(e)
+	}
 	ts := httptest.NewTLSServer(h)
 	defer ts.Close()
 	u, e := app.Store.UserByName("owner")
@@ -144,6 +147,9 @@ func TestAudit5TrustedDiscoveryOwnerApprovalThenReport(t *testing.T) {
 }
 func TestAudit5AnnouncementValidationAndApprovalPermissions(t *testing.T) {
 	app, h := testApp(t)
+	if _, e := app.Store.SetAdmission(0, 60, "fixture-owner"); e != nil {
+		t.Fatal(e)
+	}
 	for _, raw := range []string{`{}`, `{"agent_id":"x","credential":"bad","hostname":"x"}`, `{"agent_id":"x","credential":"` + strings.Repeat("aa", 32) + `","hostname":"x","extra":"not allowed"}`, strings.Repeat("x", 4097)} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/api/v1/agent/announce", strings.NewReader(raw))
@@ -165,6 +171,9 @@ func TestAudit5AnnouncementValidationAndApprovalPermissions(t *testing.T) {
 }
 func TestAudit5OverviewSeparatesUnreadFromOpenAndRenameValidation(t *testing.T) {
 	app, h := testApp(t)
+	if _, e := app.Store.SetAdmission(0, 60, "fixture-owner"); e != nil {
+		t.Fatal(e)
+	}
 	u, _ := app.Store.UserByName("owner")
 	token, _, _ := app.Store.CreateSession(u, time.Hour, time.Minute)
 	for i := 0; i < 2; i++ {

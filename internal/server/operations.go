@@ -31,6 +31,14 @@ func (a *App) handleSubmitOp(w http.ResponseWriter, r *http.Request, s *storage.
 func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req protocol.SubmitOperation) {
 	a.controlMu.Lock()
 	defer a.controlMu.Unlock()
+	// Real HTTP sessions can be revoked while waiting for the lock. Empty IDs
+	// occur only in internal unit calls, never in needAuth HTTP handling.
+	if s.ID != "" {
+		if err := a.Store.SessionStillValid(s.ID); err != nil {
+			a.writeErr(w, 401, "unauthorized", "session was revoked or expired")
+			return
+		}
+	}
 	if reason := actions.UnavailableReason(req.Action); reason != "" {
 		a.writeErr(w, 501, "not_implemented", reason)
 		return
@@ -171,8 +179,13 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	}
 	a.Store.Audit(s.Username, req.Action, op.ID, "operation created")
 	if err := a.executeServerSide(op, def, s, req, secretPlain); err != nil {
+		var committed *policyResultUnconfirmed
 		for _, target := range op.Targets {
-			_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
+			if errors.As(err, &committed) {
+				_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetUnknownResult, "result_unconfirmed", err.Error(), "result_write", false, nil)
+			} else {
+				_ = a.Store.UpdateTarget(op.ID, target.AgentID, protocol.TargetFailed, "failed", err.Error(), "exec", true, nil)
+			}
 		}
 		loaded, _ := a.Store.Operation(op.ID)
 		a.writeJSON(w, 202, loaded)
@@ -260,27 +273,14 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		return a.runBackup(op)
 	case "update.import":
 		return a.importRelease(op, req)
-	case "rule.save":
-		name, _ := req.Params["name"].(string)
-		if name == "" {
-			name = "default"
-		}
-		body, _ := json.Marshal(req.Params)
-		if err := a.Store.SaveRule(name, string(body)); err != nil {
+	case "rule.save", "maintenance.set", "maintenance.cancel", "enrollment.window.set":
+		return a.executeMonitoring(op, req, s)
+	case "incident.unacknowledge":
+		id, _ := req.Params["incident_id"].(string)
+		if err := a.Store.UnackIncident(id, s.Username); err != nil {
 			return err
 		}
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_effective_rule", "rule version stored", "", false, map[string]any{"name": name})
-	case "maintenance.set":
-		purpose, _ := req.Params["purpose"].(string)
-		start, _ := req.Params["start_at"].(string)
-		end, _ := req.Params["end_at"].(string)
-		if start == "" || end == "" {
-			return fmt.Errorf("start_at and end_at required")
-		}
-		if err := a.Store.SaveMaintenance(idgen.New(), "fleet", "", purpose, start, end, s.Username); err != nil {
-			return err
-		}
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_interval", "maintenance window stored", "", false, nil)
+		return a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_unread", "Marked unread; health was not changed", "", false, nil)
 	case "operation.cancel_pending":
 		id, _ := req.Params["operation_id"].(string)
 		if id == "" {

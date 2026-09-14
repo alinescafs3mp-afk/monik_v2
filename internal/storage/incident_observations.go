@@ -13,6 +13,9 @@ import (
 type IncidentPolicy struct {
 	PersistFor, RecoverFor, MaxGap time.Duration
 	Failures, Successes            int
+	RuleVersion                    int64
+	HoldRecovery                   bool // A confirmed breach must cross the recovery threshold.
+	Maintenance                    bool
 }
 
 type incidentStreak struct {
@@ -39,8 +42,8 @@ func (s *Store) ObserveIncident(entityType, entityID, metric string, at time.Tim
 		if !streak.Last.IsZero() && !at.After(streak.Last) {
 			return nil
 		}
-		var incidentID, status string
-		err = tx.QueryRow(`SELECT id,status FROM incidents WHERE entity_type=? AND entity_id=? AND metric=? AND status IN ('pending','confirmed') ORDER BY opened_at DESC LIMIT 1`, entityType, entityID, metric).Scan(&incidentID, &status)
+		var incidentID, status, previousSeverity string
+		err = tx.QueryRow(`SELECT id,status,severity FROM incidents WHERE entity_type=? AND entity_id=? AND metric=? AND status IN ('pending','confirmed') ORDER BY opened_at DESC LIMIT 1`, entityType, entityID, metric).Scan(&incidentID, &status, &previousSeverity)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -52,7 +55,7 @@ func (s *Store) ObserveIncident(entityType, entityID, metric string, at time.Tim
 				if _, err = tx.Exec(`UPDATE incidents SET status='interrupted',resolved_at=?,reason=reason || '; observation continuity interrupted' WHERE id=?`, at.UTC().Format(dbTimeFormat), incidentID); err != nil {
 					return err
 				}
-				status, incidentID = "", ""
+				status, incidentID, previousSeverity = "", "", ""
 			}
 		}
 		if known && failed {
@@ -64,11 +67,23 @@ func (s *Store) ObserveIncident(entityType, entityID, metric string, at time.Tim
 			if incidentID == "" {
 				incidentID = idgen.New()
 				status = "pending"
-				if _, err = tx.Exec(`INSERT INTO incidents(id,entity_type,entity_id,metric,severity,status,opened_at,reason) VALUES(?,?,?,?,?,'pending',?,?)`, incidentID, entityType, entityID, metric, severity, at.UTC().Format(dbTimeFormat), reason); err != nil {
+				if _, err = tx.Exec(`INSERT INTO incidents(id,entity_type,entity_id,metric,severity,status,opened_at,reason,rule_version,maintenance) VALUES(?,?,?,?,?,'pending',?,?,?,?)`, incidentID, entityType, entityID, metric, severity, at.UTC().Format(dbTimeFormat), reason, policy.RuleVersion, policy.Maintenance); err != nil {
 					return err
 				}
 			}
-			if _, err = tx.Exec(`UPDATE incidents SET severity=?,reason=? WHERE id=?`, severity, reason, incidentID); err != nil {
+			if previousSeverity == "warning" && severity == "critical" {
+				if _, err = tx.Exec(`UPDATE incidents SET acked_at=NULL,acked_by=NULL WHERE id=?`, incidentID); err != nil {
+					return err
+				}
+				if _, err = tx.Exec(`INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,'system','incident.escalated',?,'critical escalation requires acknowledgement')`, at.UTC().Format(dbTimeFormat), incidentID); err != nil {
+					return err
+				}
+			}
+			// Retain peak severity until recovery, not alternating read/unread on every sample.
+			if previousSeverity == "critical" {
+				severity = "critical"
+			}
+			if _, err = tx.Exec(`UPDATE incidents SET severity=?,reason=?,maintenance=MAX(maintenance,?) WHERE id=?`, severity, reason, policy.Maintenance, incidentID); err != nil {
 				return err
 			}
 			if status == "pending" && streak.Bad >= policy.Failures && at.Sub(streak.BadSince) >= policy.PersistFor {
@@ -76,6 +91,8 @@ func (s *Store) ObserveIncident(entityType, entityID, metric string, at time.Tim
 					return err
 				}
 			}
+		} else if known && status == "confirmed" && policy.HoldRecovery {
+			streak.Good, streak.GoodSince = 0, time.Time{}
 		} else if known {
 			streak.Bad, streak.BadSince = 0, time.Time{}
 			if streak.Good == 0 {

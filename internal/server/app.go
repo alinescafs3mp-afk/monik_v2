@@ -255,7 +255,9 @@ func (a *App) background(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C():
-			_ = a.Store.RetainRaw(protocol.RawRetention)
+			if err := a.Store.RetainRaw(protocol.RawRetention); err != nil {
+				a.Log.Error("bounded retention failed", "error", err)
+			}
 			if err := a.TLS.MaybeRenew(filepath.Join(a.Cfg.DataDir, "tls"), nil, nil, 90*24*time.Hour); err != nil {
 				a.Log.Error("TLS renewal failed", "error", err)
 			}

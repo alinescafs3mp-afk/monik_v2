@@ -14,9 +14,9 @@ import (
 var ErrInvalidHistoryQuery = errors.New("invalid history query")
 
 type IncidentQuery struct {
-	From, To                                  time.Time
-	State, Severity, Metric, EntityID, Before string
-	Limit                                     int
+	From, To                                                   time.Time
+	State, Severity, Metric, EntityID, Before, Acknowledgement string
+	Limit                                                      int
 }
 type incidentCursor struct {
 	At string `json:"at"`
@@ -41,11 +41,20 @@ func (s *Store) SearchIncidents(ctx context.Context, q IncidentQuery) ([]map[str
 	case "", "all":
 	case "open":
 		where += ` AND status IN ('pending','confirmed')`
-	case "pending", "confirmed", "resolved", "interrupted":
+	case "pending", "confirmed", "resolved", "interrupted", "policy_changed":
 		where += ` AND status=?`
 		args = append(args, q.State)
 	default:
 		return nil, "", fmt.Errorf("%w: invalid incident state", ErrInvalidHistoryQuery)
+	}
+	switch q.Acknowledgement {
+	case "", "all":
+	case "unread":
+		where += ` AND acked_at IS NULL`
+	case "read":
+		where += ` AND acked_at IS NOT NULL`
+	default:
+		return nil, "", fmt.Errorf("%w: invalid acknowledgement filter", ErrInvalidHistoryQuery)
 	}
 	if q.Severity != "" {
 		if q.Severity != "warning" && q.Severity != "critical" {
@@ -80,7 +89,7 @@ func (s *Store) SearchIncidents(ctx context.Context, q IncidentQuery) ([]map[str
 		args = append(args, when, when, c.ID)
 	}
 	args = append(args, q.Limit+1)
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,entity_type,entity_id,metric,severity,status,opened_at,confirmed_at,resolved_at,reason,acked_at,acked_by FROM incidents WHERE `+where+` ORDER BY opened_at DESC,id DESC LIMIT ?`, args...)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,entity_type,entity_id,metric,severity,status,opened_at,confirmed_at,resolved_at,reason,acked_at,acked_by,rule_version,maintenance,CASE WHEN entity_type='agent' THEN COALESCE((SELECT display_name FROM agents WHERE agents.id=incidents.entity_id),entity_id) ELSE COALESCE((SELECT display_name FROM services WHERE services.id=incidents.entity_id),entity_id) END,CASE WHEN entity_type='agent' THEN entity_id ELSE COALESCE((SELECT agent_id FROM services WHERE services.id=incidents.entity_id),'') END FROM incidents WHERE `+where+` ORDER BY opened_at DESC,id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -89,11 +98,14 @@ func (s *Store) SearchIncidents(ctx context.Context, q IncidentQuery) ([]map[str
 	for rows.Next() {
 		var id, et, eid, sev, state, opened string
 		var metric sql.NullString
+		var rule sql.NullInt64
+		var maintenance int
+		var displayName, agentID string
 		var confirmed, resolved, reason, acked, actor sql.NullString
-		if err = rows.Scan(&id, &et, &eid, &metric, &sev, &state, &opened, &confirmed, &resolved, &reason, &acked, &actor); err != nil {
+		if err = rows.Scan(&id, &et, &eid, &metric, &sev, &state, &opened, &confirmed, &resolved, &reason, &acked, &actor, &rule, &maintenance, &displayName, &agentID); err != nil {
 			return nil, "", err
 		}
-		out = append(out, map[string]any{"id": id, "entity_type": et, "entity_id": eid, "metric": metric.String, "severity": sev, "status": state, "opened_at": opened, "confirmed_at": confirmed.String, "resolved_at": resolved.String, "reason": reason.String, "acked_at": acked.String, "acked_by": actor.String})
+		out = append(out, map[string]any{"id": id, "entity_type": et, "entity_id": eid, "metric": metric.String, "severity": sev, "status": state, "opened_at": opened, "confirmed_at": confirmed.String, "resolved_at": resolved.String, "reason": reason.String, "acked_at": acked.String, "acked_by": actor.String, "rule_version": rule.Int64, "maintenance_observed": maintenance != 0, "display_name": displayName, "agent_id": agentID, "name_semantics": "current_inventory"})
 	}
 	if err = rows.Err(); err != nil {
 		return nil, "", err

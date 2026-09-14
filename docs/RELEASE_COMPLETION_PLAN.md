@@ -1,173 +1,65 @@
-# Audit5 update: first-contact and everyday usability
+# Monik: completion plan after Audit 6
 
-Date: 2026-09-14. Baseline 37dc234. This section supersedes earlier claims that owner renaming, grouped services, visible request-editor opening and owner-approved candidate announcements are wholly absent. Their bounded implementation now exists. It does not erase any existing release blocker.
+Authority: owner v3 requirements, later requested UX/custom-check/agent-arrival behavior and actual integrated code. Current baseline `e771f35`; Audit 6 source adds the bounded controls documented in `AUDIT_REVIEW_6_2026-09-14.md`. This is a completion directive, not evidence that the remaining tasks are done.
 
-## Next most useful work, in order
+## What is no longer an empty control
 
-1. **Finish the native installer before mass deployment.** Linux must actually create/validate the dedicated service identity and assign only the protected Monik state to it. Windows must enforce the intended identity and ACLs rather than ignore a LocalService option. Never recurse through unrelated directories/symlinks or make every credential world-readable. Prove that `setup -> install -> reboot -> pending signal -> approval -> metrics` works without login. A waiting loop in a foreground binary is not this native evidence.
-2. **Make public registration operator-controlled.** Add a bounded acceptance window or explicit mode switch and destination/network policy, queue saturation visibility, archived rejection handling, and NAT-aware quotas. Keep approval tied to the full local proof. Never introduce a single permanent shared fleet secret or implicit approval by hostname. Provide pending/offline/rejected/first-report status and explain differences.
-3. **Add a deploy-readiness panel.** Separate foreground tested, installed, account/paths writable, managed service running, controller trusted, update trust enrolled, independent recovery proven. Show exact component versions and last real report. A single green "installed" field must not cover untested boot/recovery.
-4. **Improve reversible presentation controls.** Add bulk overview pinning with target preview, per-user saved group expansion, unread-only Problems filter matching Overview, and an explicit unacknowledge action as a new audit event if needed. Never erase original acknowledgement history or redefine a failed service as healthy.
-5. **Support safe metadata changes.** Name-value CAS exists; add monotonic metadata revision for stronger cross-tab conflicts, searchable former names and scoped notes/tags if required. Preserve stable IDs and historical identity. Do not turn rename into remote OS hostname changes.
-6. **Prove the editor journey visually.** Test direct and repeated links, history request failure, long service lists, dirty draft switch/cancel, keyboard focus and narrow displays. A source assertion that a ref exists is not a passed click in a browser.
+Global CPU/RAM/disk threshold editing is wired to evaluation with rule versions, persistence, hysteresis and policy-change evidence. Maintenance windows/cancellation preserve observations and history. Admission can be opened/closed with expiry and owner approval. Incident read/unread and critical escalation are meaningful. Recent-auth UI and password rotation preserve operation/session semantics. These must stay working; do not replace them with unused settings during a refactor.
 
-**Still P0:** independently recoverable service-host replacement, immutable signed releases and queued-byte identity, genuine cohort/batch pause/resume, protected full-controller backup/restore with newer-agent reconciliation and single-writer cutover. **Still P1 before general release:** long-term measured history, effective custom rules/maintenance, secret availability after offline restart, complete per-check trust, performance/load and native acceptance. The previous roadmap is retained below; read it through the actual implemented subset above.
+These implementations are intentionally small: three global percent rules, no repeating maintenance or service-specific UI wizard, no anonymous agent auto-approval, no general RBAC, no complete historical recomputation. Baseline compact overview, pinning, grouped services, names, axis labels and custom requests remain acceptance requirements.
 
----
+## P0 / gate 1: install once, genuinely recover later
 
-# Monik release completion plan after audit 4
+Review `internal/install`, `internal/servicehost`, agent setup, CLI and packages. Provision and validate an appropriate Linux identity and directory ownership. Use deliberate Windows restricted identities/ACLs. Paths in the installer and protected data directory must agree; compiling a unit containing User=monik does not create that account.
 
-Date: 2026-09-14. This section supersedes earlier statements that custom request editing, per-check intervals, typed response expectations or local health suggestions are wholly absent. Those bounded features are implemented in Audit 4. The following roadmap items are **not** newly implemented by mentioning them.
+Implement independent native recovery for updating the service-host itself. An immediately crashing new supervisor must not be the only component able to roll back. Preserve signed current/previous slots, version/digest/journal identity, compatible worker state and spool. Local IPC needs request correlation, bounded input, concurrency and deadline handling, particularly Windows file-based request/reply transport.
 
-## First, preserve this pass
+Evidence: real systemd and SCM, before-login boot, stop/restart, killed worker/supervisor, invalid entrypoint, full disk, denied write, interrupted activation and re-upgrade after rollback. All credentials remain protected. No remote shell, host reboot or unrelated application control.
 
-Use the exact source/patch from `4f85de3`. Keep request_version/capability validation, strict server + worker checks, paused-state preservation, nonblocking trial, bounded scheduler, negative controls, and rule/transport distinction. Run the actual browser and native journeys in `GROK_AUDIT4_HANDOFF.md`. A recent green liveness endpoint is not permission to erase a failing readiness endpoint or existing owner check.
+## P0 / gate 2: immutable signed releases and durable rollout
 
-## Priority 0: still mandatory, not displaced by more probing features
+Finish immutable release publication so importing B cannot replace the metadata/bytes promised to a pending operation for A. Verify and stage all content before catalogue publication; serialize or atomically publish manifests. Pin exact authenticated target digests and trust state independently of operation parameters.
 
-Independent native recovery for service-host replacement remains unimplemented. Signed worker activation/probation corrections are not that recovery mechanism. Complete restricted OS identities, Windows ACLs and before-login boot; correlate and bound local supervisor commands/replies. Test killed worker/supervisor and entrypoint failure on real Linux and Windows.
+Use a maintained TUF client where feasible. Complete root/key rotation, expiry/replay defense and high-water recovery. Keep private signing custody outside the runtime controller. Persist canary/platform cohorts, batches, pause/resume/deadlines and failure thresholds. A rollback is a failed update with recovered availability, never a successful upgrade. Downloads must not starve heartbeat/control and progress must be real bytes/stages.
 
-Publish immutable versioned release files, preserve queued-job exact metadata/bytes, stage imports atomically and maintain persisted canary/batch/pause/resume control. Prove crash recovery and rollback-safe state formats. Coordinate old/new custom-check profiles on downgrade.
+Evidence: concurrent imports and old queued jobs, corrupt/mismatched metadata, root rotation, controller restart in each cohort state, failed new process, interrupted disk writes, unauthorized receipts and actual native recovery. `operation.retry_selected` and `update.resume` stay rejected until real linked retry/rollout behavior exists.
 
-Complete a protected whole-controller backup/restore, key custody, version reconciliation with newer agents and one authoritative writer. Do not lose the encryption key, reuse an old job cursor as proof, regenerate trust on corruption or claim that a SQLite snapshot alone restores the platform. Measure FULL synchronous I/O on actual storage. Long-term aggregates, actual custom rule/maintenance evaluation and fleet-scale limits remain release work, not accepted features.
+## P0 / gate 3: full protected controller recovery and migration
 
-## New high-value follow-through: easier setup without false health
+Build a protected consistent archive of DB committed state, controller identity, CA/TLS, encryption/update trust keys, configuration, journals/receipts and a checksummed version manifest. A SQLite snapshot alone is not enough. Validate paths, sizes, hashes and compatibility before staging a restore into a clean destination.
 
-| Priority | Idea / code surface | Concrete implementation contract / acceptance |
-|---|---|---|
-| P1 | Separate readiness, liveness and optional functional check on one service | Extend identity from one primary definition to check IDs with explicit purpose/vantage. Separate timelines and roll-up policy. Never pick any passing check as the whole service healthy. Preserve existing primary IDs/history in migration. |
-| P1 | Manual TCP connect and narrow protocol adapters for unresolved listeners | TCP proves reachability only. gRPC standard health, Redis PING or other adapters require explicit typed protocol/authorization and native fixtures. Do not send arbitrary HTTP to known non-web software or introduce raw shell probes. |
-| P1 | Declarative local service health contract | Optional owner-authored manifest with exact listener/path/method/purpose/expected result/secret references. Prefer this over heuristic routes. Only the already discovered local destination; schema/version/size bounds; no execution fields; explicit approval for POST. An HTTP-provided manifest is untrusted evidence, not authority to expand destinations. |
-| P1 | Small versioned service-template registry | Templates for documented readiness APIs, with source URL, supported versions, cost class and expected semantics. Process/metadata hints select suggestions, not silent credentials or expensive calls. No LLM or cloud runtime dependency. |
-| P1 | Operator-controlled advisor policy | Per-agent/off/allowlisted-path budget, excluded services, backoff after 429/503 with bounded Retry-After, and explanation of skipped candidates. This pass has finite safe defaults and cache, not all these controls. |
-| P1 | Request diff and trusted recent-auth workflow | Display exact normalized method/URL/path/header names/body secret references and expected conditions before fleet changes. One shared reauthentication prompt for secrets/updates; preserve draft without storing passwords. |
-| P1 | Durable secret availability/invalidation | Persist only appropriately protected agent-scoped secrets where authorized, survive offline restart, rotate without stale cache use, preserve stable references, prevent secret values in export/evidence. Current cache is memory-only. |
-| P1 | Per-check CA and mTLS | Trusted scoped CA/client-secret references, cert expiry, same-origin isolation, native tests. Do not confuse controller CA with application-service trust; no global insecure fallback. |
-| P1 | Scheduler visibility | Record due/start/end/late/skipped/budget counts and active probes; expose per-service data age and config version. Meter per-agent rate/cost and distribute phase so many 30s checks do not spike together. Validate responsiveness under body timeouts, disk pressure and downloads. |
-| P1 | Diagnostic evidence on demand | Return structured bounded error layer/errno, HTTP status and whitelisted predicates. A privileged redacted short body excerpt would need explicit retention/secrecy rules; raw responses are deliberately absent today. |
-| P2 | Small protocol-aware cURL importer | Parse offline into the typed request editor and preview; never execute shell or substitutions, reject files/proxy/redirect/insecure/unbounded options, turn credentials into secret references. Useful convenience, not required for current manual editor. |
+After restore, reconcile newer agent revisions/generations/completed effects. Never replay old update/restart instructions or downgrade accepted trust because the restored database is stale. Enforce one authoritative writer during physical migration. Complete scheduled/armed move uncertainty, disconnected cancellation, endpoint expiry and trust retirement. Unknown new addresses cannot reach offline agents without a previously authorized route.
 
-Do not expand the runtime into an infrastructure automation center. No subnet crawling, unauthenticated admin bypass, browser-based inference tests, arbitrary POST health guessing or script-defined plugin execution. A predictable negative result is preferable to a fabricated green one.
+Evidence: busy backup/empty restore, deliberately absent key, old DB versus newer worker, interrupted restore, writer fencing, overlapping/non-overlapping endpoint changes and reassigned old endpoint. No tests against the owner's active controller without an explicit deployment plan.
 
-## Original broader release gates retained below
+## P1 / gate 4: complete monitoring policy, capabilities and service health
 
-The following prior plan is retained for completeness. Its older references to features being absent must be read with the implemented Audit 4 subset above. Historical numerical test counts are not current evidence. Work until each required gate has real implementation plus native/test evidence, not merely additional documentation.
+Extend the real v6 rule contract only through selectors and tests: per-profile/per-agent overrides, available RAM/absolute disk space, named sensor temperatures, ping/latency/TLS thresholds and historical version anchors. Defaults are workload-dependent; do not enable one universal hardware alarm. Rule edits do not reclassify historical raw evidence or count as physical recovery.
 
----
+Complete maintenance editing/recurrence only with explicit timezone/DST semantics. A bounded recent list is not the full maintenance archive; add pagination/filtering when needed. Acknowledged, under maintenance, paused and healthy are separate dimensions. Keep critical escalation unread once, not repeatedly flapping. Preserve evidence of acknowledgement transitions.
 
-# Monik: finish the product without expanding it into an orchestration platform
+Custom service requests already execute on the agent under destination/method/body budgets. Keep health expectations separate from HTTP responsiveness, explicit configured success from baseline errors, and denied/missing evidence from failure. Add multiple checks per service with a clear primary/rollup contract before readiness/liveness/TCP/gRPC adapters. Prefer explicit allowed metadata/manifests over path crawling or choosing any green response. No auto POST or raw secret-body retention.
 
-Authority: the owner's approved v3 requirements, later UI requests, and the cumulative audit 3 source corrections. This is a completion directive for the local implementer, NOT evidence these tasks are already implemented. Do not remove explicit unsupported-action guards until the corresponding actual behavior and tests exist.
+Prove per-collector scheduling, deadlines, pause-with-control and versioned capability enforcement. Secret refresh/offline restart/invalidation, per-check scoped trust and address authorization deserve a focused next pass. Never accept unknown configuration fields as silent no-op success.
 
-## Objective
+## P1 / gate 5: storage, history, coverage and operational bounds
 
-Install once, select important machines in the web UI, see trustworthy host/service states, investigate any retained period, centrally configure/update/rebind agents, and recover from failures without losing identity or inventing success. The running system must not depend on cloud LLMs. No Telegram/email release dependency, arbitrary remote command execution, host reboot, unrelated service/container control, scanner, plugin marketplace, mandatory external database or HA cluster.
+V6 cleanup and indexed diagnostics are bounded but do not implement 30/180-day aggregates. Complete the owner retention contract (48h raw, 30d minute, 180d coarse) or obtain an explicit revised measured capacity. Preserve min/max, sample counts, durations, missingness and rule/inventory anchors. Means of percentiles are not overall percentiles. Earliest/latest records are not coverage.
 
-All four delivery dimensions matter: working implementation, usable UI, native operational evidence, and truthful documentation. Compilation does not replace any of the other three.
+Measure retention/ingestion/exports concurrently on a populated database. New indexes/migrations must be reviewed for write-lock duration. Bound operation, incident, rule/config, admission, dedup and event history consistently with allowed retries and retained explanations. Keep drop/loss intervals durable. Never acknowledge uncommitted telemetry under disk pressure.
 
-## Order and stop rules
+Add historical service/rule/name navigation and time-zone/DST edge tests. Raw export is already bounded and authenticated; larger asynchronous/export formats are optional only with cancellation and quotas. Do not confuse diagnostic or sample export with full restore backup.
 
-Implement the following gates in order, preserving functioning monitoring. Finish a vertical scenario before starting another framework. Keep main coherent, run regressions and commit each reviewable slice; never force-reset concurrent owner work. Do not mark the product released while a P0 below is open. When a target OS, permission or device is unavailable, record the exact missing test rather than replacing it with a mock and a green status.
+## P1 / gate 6: finish everyday interaction and secure admission
 
-### Gate 0: integration and operability baseline
+Run the expanded browser fixture against the exact compiled build, then native agent smoke tests. Verify rule edit/conflict, maintenance start/cancel, admission window expiry and already-pending survival, recent-auth same-key continuation/cancel, password change with two sessions, unread escalation and corruption errors. No weakened assertions or synthetic metrics relabeled as real host data.
 
-Apply exactly one cumulative/incremental patch route, verify hashes, build the UI and server from matching source, and run all tests. The overview must show only pinned machines in compact rows by default. Preserve card fallback, collapsible sidebar, chart axis labels, feedback states and all six ranges. Run the browser scenario against its local synthetic fixture, then run a real native agent against a disposable controller. Verify actual schema/worker version and desired/applied revision/hash.
+Retain dense/optional-card overview, per-machine pin, stable ordering/search, grouped service expansion, focus/drafts, charts and all six ranges. Show actual collection age separately from browser stream state. Add bounded support diagnostics and explicit managed-install readiness where every green indication has corresponding evidence.
 
-Deliver an explicit supported-platform table: build supported, foreground tested, installer tested, pre-login boot tested, worker update tested, service-host recovery tested. Never merge these into one checkbox.
+The new admission window is a public exposure reduction, not DoS protection. Consider explicit allowlisted networks, a reject/retry policy, bounded tombstone retention and an optional enrollment challenge. Keep already trusted agents unaffected and unknown machines quarantined. Never distribute a shared eternal fleet credential. Account password recovery is still needed via a protected local operator flow; no unauthenticated takeover endpoint. Full role expansion comes only with endpoint authorization tests.
 
-### Gate 1: native install-and-forget (P0)
+## Release evidence required
 
-**Paths:** `internal/install`, `internal/servicehost`, `internal/agent/setup`, packaging, CLI, add-machine UI.
+Return a coherent main commit, rebuilt native release artifacts with actual version/commit metadata, checksums/signatures and a matrix separating build, foreground, install, boot, update, service-host recovery and restore. Native Windows, systemd power loss, complete v3 battery, 50-agent capacity and 24h soak remain NOT RUN in Audit 6. A green helper suite is not a complete release.
 
-- Choose a concrete privilege boundary for worker, supervisor and installer. Create/validate Linux service identity and state ownership. Choose Windows service identity and ACLs deliberately. A monik user entry in a unit is not user creation; root-created 0700 state is not readable by an unrelated account.
-- Make enrollment/install restartable with process locking and durable phases. Handle concurrent installer invocation, uncertain HTTP completion, expiry, interrupted credential/config writes, existing enrollment, repeated install, paths with spaces and Unicode, and refused permissions. Never overwrite a working identity through normal setup.
-- Correlate every local supervisor request/reply by request ID and expected operation/version; use a bounded message size, queue/concurrency and deadline. Fixed request/response files must not be treated as a safe multi-request protocol. No remote shell or arbitrary file command.
-- Implement independently recoverable replacement of the service-host itself through a native installer/watchdog boundary that survives an immediately crashing new service-host. The installed code being replaced cannot be the only recovery mechanism.
-- Define disk reserve, current/previous slot, signed desired digest, state schema compatibility and rollback authorization. A worker process that merely exists is not a verified upgrade. Network loss is not a reason to oscillate versions.
-- Preserve both legacy and v2 spool directories across supported rollback. Explain whether an older worker temporarily cannot drain newer records. Reconcile rather than delete uncertain records.
-
-**Evidence:** real Linux systemd and real Windows SCM, boot without interactive login, stop/start, killed worker, killed supervisor, failed entrypoint, disk full, denied write, interruption at each activation boundary, lost server contact, restored contact, upgrade then rollback then re-upgrade. Capture versions/digests/jobs and protection of credentials. Gate remains open until both worker and service-host pass.
-
-### Gate 2: controlled signed publishing and rollout (P0)
-
-**Paths:** `internal/tufutil`, `internal/update`, `internal/server/lifecycle.go`, release tool, Updates UI.
-
-- Publish immutable release directories or content-addressed objects; a queued operation names authenticated metadata and exact target bytes for one release. Do not reuse one mutable target path for concurrent releases.
-- Stage and fully verify all metadata/targets before atomic catalogue publication. Serialize import or use a transactional manifest pointer. An invalid high-version candidate must not advance trusted state. Detect duplicate IDs with different bytes.
-- Adopt a maintained TUF implementation where feasible rather than keep increasing custom crypto/protocol code. Independently enrolled root, timestamp/snapshot/targets linkage, length/hash/version/expiry/rollback defenses, key rotation and trusted-root persistence are mandatory regardless of library.
-- Persist cohort/canary/batch/pause/resume/deadline state. Preflight each OS/arch and eligible version. Freeze targets, make offline disposition visible, and pause next activation when health/rollback thresholds fail. Resume must continue the actual rollout, not issue a fresh untracked batch.
-- Use bounded downloads independent from heartbeat/control. Show real byte progress, verification/activation/probation/confirmation, offline waiting and error evidence. Cancel only work that can actually be cancelled; no fabricated percentages.
-- Recovered previous version means failed update with rollback, not update success. Avoid recurring activation of a failed release. Keep explicit security version floor and digest-authorized local recovery separate from replay of old metadata.
-
-**Evidence:** two imports while old jobs wait, tampered/mismatched metadata, root rotation, missing platform, truncated transfer, repeated request, controller restart in every cohort state, rejected receipts, disk full, healthy canary then failing cohort, actual OS recovery. New artifact must not modify queued older jobs.
-
-### Gate 3: protected full-state backup, restore and rebind (P0)
-
-**Paths:** server CLI, TLS/secret/config storage, jobs, rebind, operator runbook.
-
-- Build a consistent protected controller archive: database including committed WAL through a proper backup interface, controller identity, TLS/CA material, secret-encryption key, configuration, enrolled update trust/high-water state, versions and checksummed manifest. Never put any of these live secrets in Git or normal diagnostics.
-- Restore only into an explicitly chosen clean destination, validate archive paths/size/checksums/version before activation, stage/verify atomically, and prove an old backup cannot silently regain authority over newer agent state.
-- Restore mode needs actual reconciliation: compare agent config revisions, endpoint generations, completed receipts and update trust state. Do not replay an old restart/update or downgrade accepted trust. Unknown effects remain unknown until evidence resolves them.
-- Establish one active writer during physical migration. A generation field does not fence two independent writable databases. Address rollback is not starting an old stale database after the new writer accepted data.
-- Finish migration plan delivery/receipt, unverified future address, scheduled arming with time uncertainty, primary-loss trigger, candidate authenticated trial, committed confirmations, offline cancellation and old endpoint/trust retirement. Expiring an unactivated plan does not undo an already confirmed primary.
-- Add protected local recovery flows for truly disconnected agents; they preserve identity/history where possible. Never claim unknown-IP recovery without a preconfigured route/DNS/fallback.
-
-**Evidence:** backup on a busy disposable controller; empty restore; deliberate missing CA/key; old snapshot with newer agent revisions; power cut during staging; two-writer prevention; overlap and non-overlap endpoint moves; offline unprepared agent truth; old endpoint reassigned to another authority. Never test these on the owner's active controller without a separate deployment plan.
-
-### Gate 4: monitoring semantics and complete controls (P1, before general release)
-
-**Paths:** protocol validation, runtime/checks, collectors, rule evaluator, config history, Problems/settings UI.
-
-- Maintain separate machine contact, collector quality, HTTP responsiveness, configured application health, service discovery presence and checker vantage. Missing data never resolves a confirmed problem and must not preserve old green state.
-- Connect user rules to the actual evaluator, with effective version, selector, thresholds, persistence, coverage, hysteresis and recovery evidence. A raised threshold ends a rule/policy state explicitly; it does not rewrite yesterday's observations.
-- Implement maintenance in a durable interval model that keeps observations, explains suppression and recovers automatically at the chosen end. Acknowledgement is not recovery; hidden/pinned is not monitoring enablement.
-- Complete config field/unknown-field validation. A accepted profile must either change supported behavior with an applied hash/revision or clearly reject the field. Do not save unused settings as a successful operation.
-- Implement selected-target retry as a new linked operation with fresh preconditions and immutable eligible scope. Do not retry already successful disruptive effects or resurrect expired commands. Expose revision conflicts and per-target reasons.
-- Make collector capabilities explicit by platform: known sensor identity, CPU counter delta baseline, RAM available, local filesystem exclusions/deadlines, ICMP sent versus permission failure, network counter reset/sleep/resume. Optional unsupported sensor data is not zero.
-- Bound slow host APIs, probes, discovery, Docker metadata and release downloads independently. Update/pause must not disable the control channel. Preserve collector-specific observation timestamps and missed-run counters.
-- Present safe HTTP response evidence by configured method/path/Host/SNI: status, duration, content type, bounded known health words. Auth requirements/HEAD/SPA fallback/HTML/contradictory JSON must remain clear. Explicit health expectations need exact bounded validation; do not guess a database is healthy from 200.
-- Inventory discovery must say what was not inspected (virtual hosts/namespaces/containers/permissions/budget). Add suggested health endpoints from known documentation/approved metadata only as previewed suggestions, not unbounded path crawling. A manually approved URL uses the same local probe policy and secret handling.
-
-**Evidence:** brief/persistent CPU spikes, changed sampling period, missing collector, sleep/resume, HEAD fallback, conflicting health fields, 401 versus connection failure, body budget, remote/local vantage difference, stale discovery, container recreation, cancelled/late jobs and gap-preserving incidents.
-
-### Gate 5: history, storage and forensic usefulness (P1)
-
-**Paths:** SQLite schema/queries/retention, history/chart/Problems/export UI.
-
-- Implement and measure 48h raw, 30d minute and 180d coarser retention from the v3 contract, or explicitly negotiate a different measured capacity. Do not quietly drop requested history to pass benchmarks.
-- Preserve extrema, counts, durations, coverage and retained configuration/rule/inventory anchors. Aggregating 95th percentiles by averaging is invalid. A minute bucket must not masquerade as a sample measured at a chosen second.
-- Add bounded retention batches and suitable time/entity indexes. Include WAL/checkpoint/backlog metrics. Long read snapshots, deletes, export and backup cannot starve live ingestion/control. Full disk must not acknowledge uncommitted samples.
-- Bound event, session, enrollment, operation, receipt, dedup and export metadata by compatible retention horizons. Job/observation dedup cannot expire before a replay can arrive. Durable loss intervals survive restart and report data dropped by spool/retention without fabricated coverage.
-- Keep historical incident search stable for equal timestamps; link service incidents to their machine/check and display human names without losing immutable IDs. Current status filters must not pretend they describe the exact status known at time T.
-- Finish range exports beyond the new bounded raw JSON subset as actual requirements warrant: service UI entry, provenance/coverage, safe CSV optional, async export with cancellable bounded work only when needed. A sample export is never the full protected controller backup.
-- Test timezone offset, midnight, DST ambiguity and nonexistent local time explicitly; storage uses UTC. Fixed-history links retain absolute bounds and selected entity after navigation/reload.
-
-**Evidence:** generate a measured fleet dataset, query recent raw and older aggregates, confirm a single five-second failure/CPU peak remains visible, force collection gaps, backfill/duplicate data, delete expired raw while preserving explanations, run retention concurrent with ingestion/export and inspect WAL growth. Record machine specs, number of agents/checks, disk bytes and latency percentiles. No unmeasured capacity claim.
-
-### Gate 6: useful web interface, not just working endpoints (P1)
-
-**Paths:** Vue app/shell, actions, history, setup, updates, machine/service details, browser tests.
-
-- Every action has immediate local feedback, a durable server result and per-target delivery/application/evidence when applicable. No spinner without a reason, no accepted-as-applied, no all-green partial fleet result, no invented progress.
-- Session/network/SSE errors are distinct. Keep forms/focus/selection while metrics refresh; preserve last known values with an explicit stale label. Slow/failed requests must not switch the user to login unless authentication actually failed.
-- Add a reusable recent-auth prompt for sensitive operations; no plaintext password in browser storage. Add local-owner password change and recovery procedures, current-session revocation and idle/absolute lifetime clarity. Evaluate a simple viewer role only after every endpoint is authorized consistently; do not grow an enterprise RBAC framework prematurely.
-- Per-row pin, rename, check configuration and bulk operations have independent pending/error states. "All matching" differs from "this page"; preview/freeze disruptive targets. Never overwrite per-agent profile exceptions without preview.
-- Overview has search, stable sorting, groups/problems filters, selected/hidden/offline counts and a bounded service summary. Add bulk pin/unpin and display-density controls only when small and tested; do not infer monitoring selection from screen visibility.
-- Charts retain readable axis text and units, fixed proportional percentage scales, responsive time ticks and keyboard cursor. Link events, updates and config changes without asserting unproven causality. Do not mix unrelated metric units on one unexplained axis.
-- Validate long names, hundreds of services, zero machines/no pins, offline-only fleet, 200% browser zoom, 390px width, keyboard/focus, reduced motion, blocked browser storage and Russian/English technical identifier boundaries. Browser fixture uses synthetic telemetry; a separate real-agent smoke test proves collection.
-- Add a self-diagnostics/compatibility panel with actual version/build, protocol range, last live contact versus sample age, config lag, spool/collector errors, certificate expiry, backup age and unfinished capabilities. Keep one-click bounded redacted support export, not unrestricted logs/files.
-
-**Evidence:** full Chromium/Firefox where available against exact build, no console errors, real screenshots, asserts for download/unknown-result/conflict/offline/cancel/refresh. Keep browser CI failures visible and never weaken assertions to make an audit green.
-
-## Additional checks worth retaining after launch
-
-- Signed release provenance, dependency lockfiles, SBOM/license notices and dependency vulnerability checks against trusted upstream sources. This package does not claim a vulnerability database scan in the isolated environment.
-- Agent cloning/duplicate identity detection, planned retirement and orphan inventory lifecycle without erasing past incidents.
-- Time source uncertainty and certificate lifetime policy, key custody and root rotation with long-offline agents.
-- Bounded diagnostic exports and parameter/body redaction at ingestion as well as presentation. No password, bearer credential, full response body or private key in screenshots/logs/artifacts.
-- Operator-run independent watchdog can later detect the controller's complete outage. A dead controller cannot report through its own UI. Telegram and external notifications stay deferred.
-- Read-only Docker metadata and IPv6/vhost/platform support remain explicit capabilities. Do not silently grant Docker daemon/root authority or install hardware drivers for a missing temperature tile.
-
-## Release decision and delivery back to the owner
-
-Return a coherent main commit, source/release checksums, a platform matrix, actual test logs and a requirement-to-evidence ledger. Enumerate implemented, test-only, deferred and unsupported items separately. A green test suite validates the tested subset only. Mandatory worker AND service-host update/recovery, controller recovery, safe rebind, observable UI actions and truthful history may not be silently deferred to a hypothetical next release.
+Telegram and mandatory third-party services stay deferred. Do not add Redis/Kafka/an LLM/plugin marketplace to solve a small fixed-scope problem. The goal remains: install once, know what is happening, control safely, inspect honest history and recover without losing the fleet.

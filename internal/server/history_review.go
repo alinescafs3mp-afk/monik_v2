@@ -37,7 +37,7 @@ func (a *App) searchHistoricalIncidents(w http.ResponseWriter, r *http.Request) 
 	}
 	state := q.Get("state")
 	switch state {
-	case "", "all", "open", "pending", "confirmed", "resolved", "interrupted":
+	case "", "all", "open", "pending", "confirmed", "resolved", "interrupted", "policy_changed":
 	default:
 		a.writeErr(w, 400, "bad_state", "invalid incident state")
 		return
@@ -49,13 +49,17 @@ func (a *App) searchHistoricalIncidents(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	rows, next, err := a.Store.SearchIncidents(ctx, storage.IncidentQuery{From: from, To: to, State: state, Severity: severity, Metric: q.Get("metric"), EntityID: q.Get("entity_id"), Before: q.Get("cursor"), Limit: limit})
+	rows, next, err := a.Store.SearchIncidents(ctx, storage.IncidentQuery{From: from, To: to, State: state, Severity: severity, Metric: q.Get("metric"), EntityID: q.Get("entity_id"), Before: q.Get("cursor"), Limit: limit, Acknowledgement: q.Get("acknowledgement")})
 	if err != nil {
 		status := 500
 		if errors.Is(err, storage.ErrInvalidHistoryQuery) {
 			status = 400
 		}
 		a.writeErr(w, status, "history_query_failed", "could not read incident history or cursor is invalid; no empty success returned")
+		return
+	}
+	if err := a.annotateIncidents(rows, a.Clock.Now()); err != nil {
+		a.writeErr(w, 500, "maintenance", "could not read current maintenance")
 		return
 	}
 	a.writeJSON(w, 200, map[string]any{"incidents": rows, "next_cursor": next, "from": from, "to": to, "view": "event_time_current_evidence", "server_time": a.Clock.Now()})

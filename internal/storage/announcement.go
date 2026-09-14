@@ -63,6 +63,14 @@ func (s *Store) Announce(req protocol.Announcement, ip string) (state string, cr
 		if !errors.Is(e, sql.ErrNoRows) {
 			return e
 		}
+		policy, e := admissionPolicy(tx, s.now())
+		if e != nil {
+			return e
+		}
+		if !policy.Open {
+			state = "admission_closed"
+			return nil
+		}
 		var count, peer int
 		if e = tx.QueryRow(`SELECT COUNT(*),COALESCE(SUM(CASE WHEN source_ip=? THEN 1 ELSE 0 END),0) FROM agent_candidates`, ip).Scan(&count, &peer); e != nil {
 			return e

@@ -22,6 +22,10 @@ type Def struct {
 }
 
 var Registry = map[string]Def{
+	"maintenance.cancel":     {ID: "maintenance.cancel", Scope: ScopeServer, Risk: "config", IdempotencyRequired: true, AuthoritativeCompletion: "committed_cancellation_interval"},
+	"enrollment.window.set":  {ID: "enrollment.window.set", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_admission_window"},
+	"incident.unacknowledge": {ID: "incident.unacknowledge", Scope: ScopeServer, Risk: "reversible", IdempotencyRequired: true, AuthoritativeCompletion: "commit_unread"},
+
 	"enrollment.approve":       {ID: "enrollment.approve", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_owner_approval"},
 	"enrollment.reject":        {ID: "enrollment.reject", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_owner_rejection"},
 	"preference.save":          {ID: "preference.save", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
