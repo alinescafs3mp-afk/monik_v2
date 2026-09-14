@@ -250,3 +250,125 @@ legend { padding:0 .5rem; }
 .maintenance-badge {display:block;font-weight:500;font-size:.8rem}
 .panel details {margin:1rem 0}
 .panel summary {cursor:pointer;font-weight:600}
+
+/* Audit 7: device-local density. No browser zoom or transform is required. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.shell-content,.main,.overview,.panel,.table-wrap,.row > *, .bar > * { min-width: 0; }
+.main { width:100%; }
+input,select,textarea { max-width:100%; }
+textarea { width:100%; }
+button,a,input,select,textarea,summary { -webkit-tap-highlight-color: transparent; }
+button:focus,a:focus,input:focus,select:focus,textarea:focus,summary:focus { outline:2px solid var(--focus); outline-offset:2px; }
+.display-controls {display:flex;align-items:center;flex-wrap:wrap;gap:.3rem;min-width:0;}
+.display-controls select {max-width:10rem;}
+.display-error {flex-basis:100%;max-width:24rem;font-size:.8rem;}
+.login-page {max-width:30rem;margin:5vh auto;padding:1rem;}
+.login-form {display:flex;flex-direction:column;gap:.85rem;}
+.login-form>input {width:100%;}
+.login-form .remember-choice {display:flex;align-items:center;gap:.5rem;}
+.password-field {min-width:0;}
+.password-field>label {display:block;margin-bottom:.35rem;}
+.password-control {display:flex;gap:.35rem;align-items:stretch;}
+.password-control input {width:100%;min-width:0;flex:1;}
+.password-control button {display:flex;align-items:center;justify-content:center;flex-shrink:0;min-width:44px;}
+.service-overview-toggle {display:inline-flex;flex-direction:column;gap:.2rem;max-width:22rem;margin:.3rem 0;}
+.service-overview-toggle label {display:flex;align-items:center;gap:.4rem;cursor:pointer;}
+.service-overview-toggle input {width:1.15rem;height:1.15rem;}
+.service-overview-toggle small {font-size:.75rem;overflow-wrap:anywhere;}
+.service-empty {font-size:.8rem;margin:.3rem 0;}
+:root[data-display="compact"] {font-size:14px;}
+:root[data-display="compact"] .main {padding:.65rem;}
+:root[data-display="compact"] .host-line {padding:.55rem;gap:.7rem;}
+:root[data-display="compact"] .overview-counts {padding:.5rem;}
+/* TV browsers may expose a 960x540 CSS viewport even on a large display.
+   Choose the TV layout explicitly; do not infer a physical TV from a width. */
+:root[data-display="tv"] {font-size:var(--tv-font-size,14px);}
+.tv-mode.shell {display:block;}
+.tv-mode .nav {display:none;}
+.tv-mode.mobile-menu-open .nav {display:block;height:auto;position:static;max-height:50vh;overflow:auto;}
+.tv-mode.mobile-menu-open .nav-label {display:inline;}
+.tv-mode.mobile-menu-open .nav a {display:inline-flex;justify-content:flex-start;}
+.tv-mode.mobile-menu-open .nav-group {display:block;}
+.tv-mode .app-topbar {padding:.4rem .55rem 0;margin-bottom:.4rem;gap:.4rem;}
+.tv-mode .app-topbar .global-search {display:none;}
+.tv-mode .app-topbar .header-user {font-size:.85rem;}
+.tv-mode .main {padding:.3rem .55rem .35rem;}
+.tv-mode .overview-counts {padding:.4rem .55rem;margin-bottom:.4rem;gap:1rem;font-size:.95rem;}
+.tv-mode .overview-tools {margin-bottom:.4rem;gap:.3rem;}
+.tv-mode .overview-tools .row {gap:.6rem;}
+.tv-mode .overview-tools input[type=search] {max-width:17rem;width:100%;padding:.25rem .4rem;}
+.tv-mode .overview-tools a {font-size:.85rem;}
+.tv-mode .connection-warning {margin:.3rem .6rem;padding:.35rem .5rem;}
+.tv-mode .display-controls {flex-wrap:nowrap;}
+.tv-mode .display-controls select {max-width:10rem;padding:.25rem .3rem;}
+.tv-mode .display-controls button {padding:.3rem .4rem;}
+.tv-board {width:100%;min-width:0;}
+.tv-columns,.tv-machine {display:grid;grid-template-columns:minmax(110px,1.15fr) minmax(44px,.42fr) minmax(86px,.78fr) minmax(65px,.6fr) minmax(75px,.65fr) minmax(150px,1.65fr);gap:.6rem;align-items:center;}
+.tv-columns {font-size:.8rem;color:var(--muted);padding:.25rem .65rem;}
+.tv-machine {height:5.85rem;margin-bottom:4px;padding:.4rem .6rem;background:var(--panel);border:1px solid var(--line);border-left:3px solid transparent;border-radius:6px;box-shadow:none;}
+.tv-machine.has-problem {border-left-color:var(--warn);}
+.tv-machine>div {min-width:0;}
+.tv-identity {display:flex;flex-direction:column;gap:.1rem;line-height:1.15;}
+.tv-identity>a {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:1rem;}
+.tv-identity small {font-size:.72rem;color:var(--muted);}
+.tv-identity .badge {font-size:.75rem;}
+.tv-metric {display:flex;flex-direction:column;gap:.22rem;}
+.tv-metric>strong {font-size:1.2rem;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.tv-metric>small {font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tv-machine.measurements-stale .tv-metric {color:var(--muted);}
+.tv-services {min-width:0;display:flex;flex-direction:column;gap:.15rem;line-height:1.15;}
+.tv-service {display:flex;gap:.3rem;align-items:flex-start;min-width:0;}
+.tv-service .dot {flex-shrink:0;margin-top:.25rem;}
+.tv-service a {min-width:0;flex:1;text-decoration:none;}
+.tv-service strong,.tv-service small {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tv-service strong {font-size:.8rem;}
+.tv-service small,.tv-services>small {font-size:.7rem;}
+.tv-pager {display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.7rem;padding:.35rem 0;font-size:.82rem;}
+.tv-pager label {display:flex;gap:.3rem;align-items:center;}
+.tv-pager button {min-height:30px;}
+@media(max-width:1100px) { .app-topbar .header-user {margin-left:auto;} .app-topbar .global-search {max-width:200px;} }
+@media(max-width:860px) {
+ .app-topbar {gap:.5rem;}
+ .app-topbar .global-search {max-width:none;}
+ .app-topbar .display-controls {order:3;flex-basis:100%;}
+ .tv-mode .app-topbar .display-controls {order:0;flex-basis:auto;}
+ .tv-columns,.tv-machine {grid-template-columns:minmax(92px,1.05fr) minmax(40px,.45fr) minmax(68px,.7fr) minmax(50px,.55fr) minmax(62px,.7fr) minmax(135px,1.7fr);gap:.4rem;}
+ .form-grid {grid-template-columns:1fr;}
+ .host-line .metric-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;}
+ .response-feedback dl {grid-template-columns:7rem minmax(0,1fr);}
+ .overview-tools .row {width:100%;}
+ .table-wrap {max-width:100%;overscroll-behavior-x:contain;}
+ .reauth-dialog {max-height:90vh;overflow:auto;}
+}
+@media(max-width:600px) {
+ .cards {grid-template-columns:minmax(0,1fr);}
+ .main {padding:.6rem .55rem 2rem;}
+ .bar {gap:.65rem;}
+ .overview-counts {font-size:.9rem;}
+ .display-controls {gap:.5rem;}
+ .toast {left:.5rem;right:.5rem;bottom:.5rem;max-width:none;overflow-wrap:anywhere;}
+ .global-error {margin:.4rem;padding:.55rem;overflow-wrap:anywhere;}
+ .login-page {margin:1vh auto;}
+ /* A TV layout on an actual phone must still remain navigable. */
+ .tv-columns {display:none;}
+ .tv-machine {height:auto;min-height:8rem;grid-template-columns:repeat(4,minmax(0,1fr));}
+ .tv-identity {grid-column:1/-1;}
+ .tv-services {grid-column:1/-1;}
+ .tv-mode .app-topbar .display-controls {flex-wrap:wrap;}
+}
+@media(pointer:coarse) {
+ :root:not([data-display="tv"]) button,:root:not([data-display="tv"]) input:not([type=checkbox]),:root:not([data-display="tv"]) select {min-height:44px;}
+ :root:not([data-display="tv"]) .nav a {min-height:44px;}
+ :root:not([data-display="tv"]) .service-overview-toggle label {min-height:44px;}
+}
+
+.service-choices {display:flex;align-items:flex-start;flex-wrap:wrap;gap:.8rem;}
+.service-monitor-toggle {display:inline-flex;flex-direction:column;gap:.2rem;margin:.3rem 0;max-width:24rem;}
+.service-monitor-toggle label,.check-choice {display:flex;align-items:center;gap:.4rem;}
+.service-monitor-toggle input {width:1.15rem;height:1.15rem;}
+.service-monitor-toggle small {font-size:.75rem;overflow-wrap:anywhere;}
+.monitoring-policy {padding:.8rem 0;border-bottom:1px solid var(--line);margin-bottom:.8rem;}
+@media(pointer:coarse){.service-monitor-toggle label,.check-choice {min-height:44px;}}
+
+.tv-mode .main {max-width:none;}
+:root[data-display="compact"] .main {max-width:none;}

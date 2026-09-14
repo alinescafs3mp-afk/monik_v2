@@ -4,6 +4,9 @@ import { get, submitOp } from "../api";
 import { usePolling } from "../composables/usePolling";
 import { bytes, number, stateLabel } from "../format";
 import { worstDisk, readPreference, savePreference, matchesMachine } from "../presentation";
+import TVBoard from "../components/TVBoard.vue";
+import {useDisplay} from "../composables/useDisplay";
+const {mode}=useDisplay();
 import ServiceList from "../components/ServiceList.vue";
 const emit = defineEmits<{ toast: [string, string?] }>();
 const data = ref<any>(null), problemsOnly = ref(false), pending = ref<string[]>([]), query = ref("");
@@ -24,14 +27,15 @@ async function pin(c: any) {
 </script>
 <template>
   <div class="overview">
-    <header class="bar"><div><h2>Состояние машин</h2></div><button :disabled="refreshing" @click="refresh">{{ refreshing ? 'Обновляем…' : 'Обновить' }}</button></header>
+    <header v-if="mode!=='tv'" class="bar"><div><h2>Состояние машин</h2></div><button :disabled="refreshing" @click="refresh">{{ refreshing ? 'Обновляем…' : 'Обновить' }}</button></header>
     <div class="bar overview-counts"><span>На связи <b>{{ data?.agents_reporting ?? '…' }}/{{ data?.agents_total ?? '…' }}</b></span><span>Сервисов <b>{{ data?.services ?? '…' }}</b></span><router-link to="/problems?acknowledgement=unread" title="Открытые непрочитанные инциденты; прочитанные остаются в истории">Инцидентов {{ data?.unread_incidents ?? '…' }}</router-link><small v-if="data&&data.actionable_incidents!==data.unread_incidents">Вне обслуживания: {{data.actionable_incidents}}</small><router-link to="/operations">Требуют внимания {{ data?.operations_attention ?? '…' }}</router-link></div>
-    <div class="bar overview-tools"><div class="row"><input v-model="query" type="search" placeholder="Машина, сервис или HTTP-код" aria-label="Поиск в обзоре"/><label><input v-model="problemsOnly" type="checkbox"/> Только проблемы</label><router-link to="/machines">Выбрать машины для обзора</router-link></div><div class="row" role="group" aria-label="Вид обзора"><button :aria-pressed="layout==='rows'" @click="chooseLayout('rows')">Строки</button><button :aria-pressed="layout==='cards'" @click="chooseLayout('cards')">Карточки</button></div></div>
+    <div class="bar overview-tools" :class="{'tv-tools':mode==='tv'}"><div class="row"><input v-model="query" type="search" placeholder="Машина, сервис или HTTP-код" aria-label="Поиск в обзоре"/><label><input v-model="problemsOnly" type="checkbox"/> Только проблемы</label><router-link to="/machines">Выбрать машины для обзора</router-link></div><div v-if="mode!=='tv'" class="row" role="group" aria-label="Вид обзора"><button :aria-pressed="layout==='rows'" @click="chooseLayout('rows')">Строки</button><button :aria-pressed="layout==='cards'" @click="chooseLayout('cards')">Карточки</button></div></div>
     <p v-if="error" role="alert" class="panel err">{{ error }}. Показанные ранее данные могут быть устаревшими.</p>
     <div v-if="loading" class="skeleton" aria-label="Загрузка машин"/>
     <p v-else-if="data && !data.agents_total" class="panel">Машин пока нет. <router-link to="/add">Подключить первую</router-link></p>
     <p v-else-if="data && !cards.length" class="panel">Нет выбранных машин, соответствующих фильтрам. <router-link to="/machines">Отметьте «Показывать в обзоре» во вкладке «Машины»</router-link>.</p>
-    <div :class="layout==='rows' ? 'host-rows' : 'cards host-cards'">
+    <TVBoard v-if="mode==='tv'" :cards="cards" :fresh="fresh"/>
+    <div v-else :class="layout==='rows' ? 'host-rows' : 'cards host-cards'">
       <article v-for="c in cards" :key="c.id" class="card host-card" :class="{ 'host-line':layout==='rows', 'has-problem': c.has_problem, 'measurements-stale':!fresh(c) }">
         <div class="host-ident">
           <router-link class="card-main" :to="`/machines/${encodeURIComponent(c.id)}`"><h3 class="truncate" :title="c.name">{{ c.name }}</h3><small class="muted">{{ c.os }} / {{ c.arch }}</small></router-link>
@@ -45,10 +49,10 @@ async function pin(c: any) {
           <div :class="{ 'metric-problem': breach(c,'disk') }"><dt>DISK <small class="disk-mount" :title="worstDisk(c.disks)?.mount">{{ worstDisk(c.disks)?.mount }}</small></dt><dd>{{ number(worstDisk(c.disks)?.used_percent, '%', 1) }}</dd><small>{{ bytes(worstDisk(c.disks)?.used_bytes) }} / {{ bytes(worstDisk(c.disks)?.total_bytes) }}</small><small v-if="c.disks?.length > 1">Самый заполненный из {{ c.disks.length }}</small></div>
           <div><dt>Средний ping</dt><dd>{{ number(c.ping?.mean_ms, ' мс', 1) }}</dd><small>Потери {{ number(c.ping?.loss_percent, '%') }} · {{ c.ping?.window_seconds || 60 }} с</small></div>
         </dl>
-        <div class="host-service-cell"><router-link :to="`/machines/${encodeURIComponent(c.id)}#services`" class="service-heading">Сервисы · {{ c.services?.length || 0 }}</router-link><ServiceList :services="c.services || []" :limit="layout==='rows' ? 2 : 4" :compact="layout==='rows'" :force-stale="!fresh(c)"/><router-link v-if="c.services?.length > (layout==='rows'?2:4)" :to="`/machines/${encodeURIComponent(c.id)}#services`">Все сервисы →</router-link></div>
+        <div class="host-service-cell"><router-link :to="`/machines/${encodeURIComponent(c.id)}#services`" class="service-heading">Выбрано сервисов {{ c.services?.length || 0 }}/{{c.services_total||0}}</router-link><p v-if="!c.services?.length" class="muted service-empty">Отметьте сервисы для обзора во вкладке «Сервисы».</p><small v-if="c.unselected_service_problems" class="err">Проблем вне выбранных: {{c.unselected_service_problems}}</small><ServiceList v-if="c.services?.length" :services="c.services || []" :limit="layout==='rows' ? 2 : 4" :compact="layout==='rows'"/><router-link v-if="c.services?.length > (layout==='rows'?2:4)" :to="`/machines/${encodeURIComponent(c.id)}#services`">Все сервисы →</router-link></div>
         <div class="host-line-actions"><button :disabled="pending.includes(c.id)" :aria-label="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" :title="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" @click="pin(c)"><span aria-hidden="true">{{ pending.includes(c.id) ? '…' : c.pinned ? '★' : '☆' }}</span></button><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`" title="Графики и параметры">↗</router-link></div>
       </article>
     </div>
-    <p class="muted"><small>{{ cards.length }} машин показано · {{ updated ? `Данные получены ${updated.toLocaleTimeString()}` : 'Ожидаем данные сервера' }}. Ошибки сервисов показаны первыми.</small></p>
+    <p v-if="mode!=='tv'" class="muted"><small>{{ cards.length }} машин показано · {{ updated ? `Данные получены ${updated.toLocaleTimeString()}` : 'Ожидаем данные сервера' }}. Ошибки сервисов показаны первыми.</small></p>
   </div>
 </template>

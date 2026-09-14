@@ -1,12 +1,16 @@
-# Monik: completion plan after Audit 6
+# Monik: completion plan after Audit 7
 
-Authority: owner v3 requirements, later requested UX/custom-check/agent-arrival behavior and actual integrated code. Current baseline `e771f35`; Audit 6 source adds the bounded controls documented in `AUDIT_REVIEW_6_2026-09-14.md`. This is a completion directive, not evidence that the remaining tasks are done.
+Authority: owner v3 requirements, later requested UX/custom-check/agent-arrival behavior and actual integrated code. Current baseline `5d17aaa`; Audit 7 adds the service-selection, wallboard and session slice documented in `AUDIT_REVIEW_7_2026-09-14.md`. This is a completion directive, not evidence that the remaining tasks are done.
 
 ## What is no longer an empty control
 
 Global CPU/RAM/disk threshold editing is wired to evaluation with rule versions, persistence, hysteresis and policy-change evidence. Maintenance windows/cancellation preserve observations and history. Admission can be opened/closed with expiry and owner approval. Incident read/unread and critical escalation are meaningful. Recent-auth UI and password rotation preserve operation/session semantics. These must stay working; do not replace them with unused settings during a refactor.
 
 These implementations are intentionally small: three global percent rules, no repeating maintenance or service-specific UI wizard, no anonymous agent auto-approval, no general RBAC, no complete historical recomputation. Baseline compact overview, pinning, grouped services, names, axis labels and custom requests remain acceptance requirements.
+
+## Preserve the newly completed slice
+
+Do not conflate service `pinned` with periodic monitoring. Disabled checks suppress original and configured socket rediscovery after capability-confirmed application; new checks default paused. Existing enabled checks stay unchanged. Keep TV mode explicit for small CSS viewports, mobile touch targets, selected-service summaries, safe device preferences and absolute remembered-session expiry/revocation. Finish a viewer-only wallboard credential before recommending owner sessions on shared/public displays.
 
 ## P0 / gate 1: install once, genuinely recover later
 

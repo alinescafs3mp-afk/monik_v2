@@ -22,6 +22,7 @@ type Def struct {
 }
 
 var Registry = map[string]Def{
+	"session.revoke_others":  {ID: "session.revoke_others", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "other_sessions_revoked"},
 	"maintenance.cancel":     {ID: "maintenance.cancel", Scope: ScopeServer, Risk: "config", IdempotencyRequired: true, AuthoritativeCompletion: "committed_cancellation_interval"},
 	"enrollment.window.set":  {ID: "enrollment.window.set", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_admission_window"},
 	"incident.unacknowledge": {ID: "incident.unacknowledge", Scope: ScopeServer, Risk: "reversible", IdempotencyRequired: true, AuthoritativeCompletion: "commit_unread"},

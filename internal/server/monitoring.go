@@ -213,6 +213,6 @@ func validateMonitoringSyntax(req *protocol.SubmitOperation) error {
 type policyResultUnconfirmed struct{ cause error }
 
 func (e *policyResultUnconfirmed) Error() string {
-	return "Policy was committed, but its operation result could not be recorded; read current policy before another action"
+	return "Change was committed, but its operation result could not be recorded; read current state before another action"
 }
 func (e *policyResultUnconfirmed) Unwrap() error { return e.cause }

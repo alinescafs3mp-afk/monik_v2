@@ -230,6 +230,15 @@ func (a *App) expandTargets(req protocol.SubmitOperation) ([]string, error) {
 
 func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *storage.Session, req protocol.SubmitOperation, secretPlain string) error {
 	switch req.Action {
+	case "session.revoke_others":
+		n, err := a.Store.RevokeOtherSessions(s.UserID, s.ID, s.Username)
+		if err != nil {
+			return err
+		}
+		if err = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "revoked", "Other browser sessions revoked", "", false, map[string]any{"revoked": n}); err != nil {
+			return &policyResultUnconfirmed{err}
+		}
+		return nil
 	case "enrollment.create":
 		code, exp, err := a.Store.CreateEnrollmentCode(s.Username, protocol.EnrollmentTTL)
 		if err != nil {
@@ -243,7 +252,13 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		if err := a.applyPreference(req); err != nil {
 			return err
 		}
-		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit", "saved", "", false, nil)
+		if err := a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit", "saved", "", false, nil); err != nil {
+			return &policyResultUnconfirmed{err}
+		}
+		if err := a.Store.AppendEvent("preference", "preference", op.ID, 0, map[string]any{"action": req.Action}); err != nil {
+			a.Log.Warn("preference event could not be written", "operation_id", op.ID)
+		}
+		return nil
 	case "enrollment.approve", "enrollment.reject":
 		if s.Role != "owner" {
 			return fmt.Errorf("owner approval required")
@@ -344,8 +359,15 @@ func (a *App) applyPreference(req protocol.SubmitOperation) error {
 		return a.Store.UpdateAgentFlags(id, map[string]any{"archived": 1})
 	case "service.pin":
 		id, _ := req.Params["service_id"].(string)
-		pinned, _ := req.Params["pinned"].(bool)
-		return a.Store.UpdateServiceFlags(id, map[string]any{"pinned": boolInt(pinned)})
+		pinned, ok := req.Params["pinned"].(bool)
+		if !ok {
+			return fmt.Errorf("pinned must be a boolean")
+		}
+		var expected *bool
+		if v, exists := req.Params["expected_pinned"].(bool); exists {
+			expected = &v
+		}
+		return a.Store.SetServicePinned(id, pinned, expected)
 	case "service.hide":
 		id, _ := req.Params["service_id"].(string)
 		hidden, _ := req.Params["hidden"].(bool)
@@ -384,6 +406,9 @@ func (a *App) bumpDesired(op *protocol.Operation, req protocol.SubmitOperation) 
 			}
 		}
 		if err := applyConfigPatch(&cfg, req); err != nil {
+			return err
+		}
+		if err := a.monitoringExclusions(ag, &cfg); err != nil {
 			return err
 		}
 		if err := protocol.ValidateAgentConfig(cfg); err != nil {
@@ -429,6 +454,16 @@ func (a *App) bumpDesired(op *protocol.Operation, req protocol.SubmitOperation) 
 }
 
 func applyConfigPatch(cfg *protocol.AgentConfig, req protocol.SubmitOperation) error {
+	if req.Action == "profile.apply" {
+		if v, ok := req.Params["auto_monitor_new"].(bool); ok {
+			cfg.AutoMonitorNew = v
+		}
+		if v, ok := req.Params["pause_all_services"].(bool); ok {
+			for i := range cfg.Checks {
+				cfg.Checks[i].Paused = v
+			}
+		}
+	}
 	if req.Action == "check.apply" {
 		chk, ok := req.Params["check"].(map[string]any)
 		if !ok {

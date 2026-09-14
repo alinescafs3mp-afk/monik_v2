@@ -26,6 +26,18 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/setup", a.handleSetup)
 	mux.HandleFunc("POST /api/v1/login", a.handleLogin)
 	mux.HandleFunc("POST /api/v1/logout", a.needAuth(func(w http.ResponseWriter, r *http.Request, s *storage.Session) { a.handleLogout(w, r) }))
+	mux.HandleFunc("GET /api/v1/sessions", a.needAuth(func(w http.ResponseWriter, r *http.Request, s *storage.Session) {
+		rows, err := a.Store.BrowserSessions(s.UserID, s.ID)
+		if err != nil {
+			a.writeErr(w, 500, "sessions", "could not read sessions")
+			return
+		}
+		truncated := len(rows) > 100
+		if truncated {
+			rows = rows[:100]
+		}
+		a.writeJSON(w, 200, map[string]any{"sessions": rows, "truncated": truncated})
+	}))
 	mux.HandleFunc("GET /api/v1/me", a.needAuth(a.handleMe))
 	mux.HandleFunc("GET /api/v1/overview", a.needAuth(a.handleOverview))
 	mux.HandleFunc("GET /api/v1/agents", a.needAuth(a.handleAgents))
@@ -149,9 +161,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Remember bool   `json:"remember"`
 	}
 	if err := parseJSONLimit(r, &body, 1<<16); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
+		return
+	}
+	if len(body.Username) > 255 || len(body.Password) > 1024 || body.Username == "" || body.Password == "" {
+		a.writeErr(w, 400, "invalid_credentials", "username and password are required within size limits")
 		return
 	}
 	u, err := a.Store.UserByName(body.Username)
@@ -159,20 +176,34 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 401, "invalid_credentials", "invalid username or password")
 		return
 	}
-	raw, sess, err := a.Store.CreateSession(u, 12*time.Hour, 10*time.Minute)
+	ttl := 12 * time.Hour
+	if body.Remember {
+		ttl = 30 * 24 * time.Hour
+	}
+	raw, sess, err := a.Store.CreateSession(u, ttl, 10*time.Minute)
 	if err != nil {
 		a.writeErr(w, 500, "session", "could not create session")
 		return
 	}
-	a.setSessionCookie(w, raw, sess.ExpiresAt)
-	a.writeJSON(w, 200, map[string]any{"ok": true, "username": u.Username, "role": u.Role, "csrf": sess.CSRF})
+	cookie := &http.Cookie{Name: "monik_session", Value: raw, Path: "/", HttpOnly: true,
+		Secure: a.TLS != nil || r.TLS != nil || strings.HasPrefix(a.Cfg.AdvertisedURL, "https://"), SameSite: http.SameSiteStrictMode}
+	if body.Remember {
+		cookie.Expires = sess.ExpiresAt
+		cookie.MaxAge = int(ttl.Seconds())
+	}
+	http.SetCookie(w, cookie)
+	a.writeJSON(w, 200, map[string]any{"ok": true, "username": u.Username, "role": u.Role, "csrf": sess.CSRF, "expires_at": sess.ExpiresAt, "remembered": body.Remember})
 }
 
 func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if s := a.sessionFrom(r); s != nil {
-		_ = a.Store.DeleteSession(s.ID)
+		if err := a.Store.DeleteSession(s.ID); err != nil {
+			a.writeErr(w, 503, "logout_failed", "session could not be revoked; retry sign out")
+			return
+		}
 	}
-	a.setSessionCookie(w, "", time.Unix(0, 0))
+	http.SetCookie(w, &http.Cookie{Name: "monik_session", Value: "", Path: "/", HttpOnly: true,
+		Secure: a.TLS != nil || r.TLS != nil || strings.HasPrefix(a.Cfg.AdvertisedURL, "https://"), SameSite: http.SameSiteStrictMode, Expires: time.Unix(1, 0), MaxAge: -1})
 	a.writeJSON(w, 200, map[string]any{"ok": true})
 }
 
@@ -180,7 +211,7 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request, s *storage.Sessio
 	recent := s.RecentAuthUntil != nil && a.Clock.Now().Before(*s.RecentAuthUntil)
 	a.writeJSON(w, 200, map[string]any{
 		"username": s.Username, "role": s.Role, "csrf": s.CSRF,
-		"recent_auth": recent, "locale_default": "ru",
+		"recent_auth": recent, "locale_default": "ru", "session_expires_at": s.ExpiresAt,
 		"controller_id": a.ControllerID(), "advertised_url": a.Cfg.AdvertisedURL,
 		"restore_mode": a.Cfg.RestoreMode, "version": version.Version,
 	})
@@ -271,11 +302,22 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 			}
 		}
 		services := make([]serviceSummary, 0)
+		serviceTotal, otherProblems := 0, 0
 		for _, sv := range svcs {
-			if sv.AgentID == ag.ID && !sv.Hidden {
+			if sv.AgentID != ag.ID {
+				continue
+			}
+			serviceTotal++
+			visible := sv.Pinned && !sv.Hidden
+			if visible {
 				services = append(services, sv)
-				if sv.State != "ok" && sv.State != "responds" && sv.State != "paused" {
-					card["has_problem"] = true
+			}
+			// Presentation cannot mute monitored failures. Conversely, inventory-only
+			// services and pending configuration are not proven service failures.
+			if serviceHasProblem(sv.State) {
+				card["has_problem"] = true
+				if !visible {
+					otherProblems++
 				}
 			}
 		}
@@ -286,6 +328,9 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 		}
 		card["maintenance_active"] = active
 		card["services"] = services
+		card["services_total"] = serviceTotal
+		card["services_selected"] = len(services)
+		card["unselected_service_problems"] = otherProblems
 		cards = append(cards, card)
 	}
 	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "unread_incidents": unread, "actionable_incidents": actionable, "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})

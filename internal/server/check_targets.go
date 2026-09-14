@@ -14,6 +14,14 @@ func supportsCustom(a *storage.AgentRow) bool {
 	return caps["http_custom_v1"].Status == "supported"
 }
 func (a *App) validateCheckTargets(req protocol.SubmitOperation, targets []string) error {
+	if req.Action == "profile.apply" && req.Params["auto_monitor_new"] == true {
+		for _, id := range targets {
+			ag, e := a.Store.Agent(id)
+			if e != nil || !supportsSelective(ag) {
+				return fmt.Errorf("update agent and wait for selective_monitor_v1 before enabling automatic monitoring")
+			}
+		}
+	}
 	if req.Action != "check.apply" && req.Action != "check.trial" {
 		return nil
 	}

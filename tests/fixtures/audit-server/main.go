@@ -53,6 +53,9 @@ func main() {
 	must(err)
 	must(app.CompleteSetup(server.SetupRequest{Username: "owner", Password: password, Listen: addr, AdvertisedURL: url}))
 	cfg := protocol.DefaultAgentConfig()
+	for i, id := range []string{"audit-api", "audit-auth", "audit-broken"} {
+		cfg.Checks = append(cfg.Checks, protocol.CheckDefinition{ID: "check-" + id, ServiceID: id, Kind: "baseline_http", URL: fmt.Sprintf("http://127.0.0.1:%d", 28000+i), DialTarget: fmt.Sprintf("127.0.0.1:%d", 28000+i), Method: "GET", IntervalSeconds: 5, TimeoutSeconds: 2})
+	}
 	raw, _ := json.Marshal(cfg)
 	hash := secure.SHA256Bytes(raw)
 	for _, id := range []string{"audit-host", "offline-host"} {
@@ -67,7 +70,7 @@ func main() {
 	for i, sv := range services {
 		target := fmt.Sprintf("127.0.0.1:%d", 28000+i)
 		must(app.Store.UpsertService(protocol.DiscoveredEndpoint{ServiceID: sv.id, DialTarget: target, URL: "http://" + target, SpeaksHTTP: true, Source: "fixture"}, "audit-host"))
-		must(app.Store.UpdateServiceFlags(sv.id, map[string]any{"display_name": sv.name}))
+		must(app.Store.UpdateServiceFlags(sv.id, map[string]any{"display_name": sv.name, "pinned": 1}))
 	}
 	must(app.Store.InsertIncident(map[string]any{"id": "fixture-incident", "entity_type": "service", "entity_id": "audit-broken", "metric": "http", "severity": "warning", "status": "confirmed", "reason": "Synthetic fixture incident for acknowledgement controls"}))
 	now := time.Now().UTC()
@@ -77,7 +80,7 @@ func main() {
 	}
 	feed := func(seq int64) {
 		at := time.Now().UTC()
-		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "audit-host", SessionID: "fixture-live", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "audit-fixture", Capabilities: map[string]protocol.Capability{"http_custom_v1": {Status: "supported"}}, Host: host(at, int(seq))}
+		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "audit-host", SessionID: "fixture-live", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "audit-fixture", Capabilities: map[string]protocol.Capability{"http_custom_v1": {Status: "supported"}, "selective_monitor_v1": {Status: "supported"}}, Host: host(at, int(seq))}
 		for _, sv := range services {
 			code := sv.code
 			rep.Checks = append(rep.Checks, protocol.CheckObservation{ServiceID: sv.id, CheckID: "check-" + sv.id, ObservedAt: at, Vantage: "agent/local", Transport: "ok", HTTPStatus: &code, LatencyMS: ptr(12), AppResult: sv.result, AppReason: sv.reason, Quality: protocol.QualityOK})

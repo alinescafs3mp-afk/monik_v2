@@ -2,9 +2,13 @@
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: Audit 6, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_6_2026-09-14.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: Audit 7, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_7_2026-09-14.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
-The configurable bootstrap URL remains `https://46.120.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V6_OPERATIONS_RU.md).
+The configurable bootstrap URL remains `https://46.120.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
+
+## Audit 7 additions
+
+Service monitoring and display are independent controls. New discoveries remain paused by default; opt-in automatic monitoring requires `selective_monitor_v1`. Existing enabled checks are preserved. TV mode adds compact rows, device density and paging without browser zoom; login can retain a revocable 30-day session without storing the password in app storage. Current physical-TV/browser/native release acceptance is not claimed.
 
 ## Working scenarios
 

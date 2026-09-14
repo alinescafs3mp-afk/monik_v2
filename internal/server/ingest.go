@@ -235,7 +235,11 @@ func (a *App) ensureBaselineCheck(agentID string, ep protocol.DiscoveredEndpoint
 			}
 		}
 	}
+	d.Paused = !cfg.AutoMonitorNew
 	cfg.Checks = append(cfg.Checks, d)
+	if err := a.monitoringExclusions(ag, &cfg); err != nil {
+		return
+	}
 	if protocol.ValidateAgentConfig(cfg) != nil {
 		return
 	}
@@ -300,6 +304,24 @@ func (a *App) evalHostIncidents(agentID string, h *protocol.HostMetrics, at time
 }
 
 func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
+	ag, err := a.Store.Agent(agentID)
+	if err != nil {
+		return
+	}
+	var cfg protocol.AgentConfig
+	if ag.DesiredConfig != "" {
+		if json.Unmarshal([]byte(ag.DesiredConfig), &cfg) != nil {
+			return
+		}
+		if cfg.Paused {
+			return
+		}
+		for _, d := range cfg.Checks {
+			if d.ServiceID == c.ServiceID && (d.Paused || d.Ignored) {
+				return
+			}
+		}
+	}
 	now := a.Clock.Now()
 	if c.ObservedAt.After(now.Add(5*time.Second)) || now.Sub(c.ObservedAt) > protocol.CheckFreshness(c.IntervalSeconds) {
 		return

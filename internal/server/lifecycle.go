@@ -15,6 +15,48 @@ import (
 
 func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 	switch req.Action {
+	case "session.revoke_others":
+		if len(req.Params) != 0 {
+			return fmt.Errorf("no parameters accepted")
+		}
+		return nil
+	case "profile.apply":
+		for k, v := range req.Params {
+			switch k {
+			case "auto_monitor_new", "pause_all_services", "paused":
+				if _, ok := v.(bool); !ok {
+					return fmt.Errorf("%s must be a boolean", k)
+				}
+			case "collect_seconds", "ping_target", "display_name", "base_revision":
+			default:
+				return fmt.Errorf("unknown profile parameter: %s", k)
+			}
+		}
+		return nil
+	case "service.pin", "service.hide":
+		id, ok := req.Params["service_id"].(string)
+		if !ok || id == "" || len(id) > 128 {
+			return fmt.Errorf("service_id is required")
+		}
+		field := "pinned"
+		if req.Action == "service.hide" {
+			field = "hidden"
+		}
+		if _, ok := req.Params[field].(bool); !ok {
+			return fmt.Errorf("%s must be a boolean", field)
+		}
+		for key, value := range req.Params {
+			if key == "expected_pinned" && req.Action == "service.pin" {
+				if _, ok := value.(bool); !ok {
+					return fmt.Errorf("expected_pinned must be a boolean")
+				}
+				continue
+			}
+			if key != "service_id" && key != field {
+				return fmt.Errorf("unknown service preference parameter")
+			}
+		}
+		return nil
 	case "rule.save", "maintenance.set", "maintenance.cancel", "enrollment.window.set", "incident.unacknowledge":
 		return validateMonitoringSyntax(req)
 	case "agent.rename":

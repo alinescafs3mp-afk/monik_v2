@@ -716,12 +716,22 @@ func (s *Store) Audit(actor, action, entity, detail string) {
 // RetainRaw does bounded work. Catch-up can span many passes; retained bounds
 // and cleanup lag are diagnostic facts, not a promise that the target is met.
 func (s *Store) RetainRaw(maxAge time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := s.retainRaw(ctx, maxAge)
+	// Our own time budget is a cooperative yield, not a failed cleanup. Other
+	// database failures still surface; diagnostics expose remaining retention lag.
+	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil {
+		return nil
+	}
+	return err
+}
+
+func (s *Store) retainRaw(ctx context.Context, maxAge time.Duration) error {
 	if maxAge < time.Hour {
 		return fmt.Errorf("raw retention must be at least one hour")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for _, q := range []struct {
+	queries := []struct {
 		table, column string
 		cutoff        time.Time
 	}{
@@ -730,8 +740,17 @@ func (s *Store) RetainRaw(maxAge time.Duration) error {
 		{"ingest_receipts", "received_at", s.now().Add(-2 * maxAge)},
 		{"event_log", "ts", s.now().Add(-24 * time.Hour)},
 		{"admin_sessions", "expires_at", s.now()},
-	} {
-		for batch := 0; batch < 10; batch++ {
+	}
+	done := make([]bool, len(queries))
+	// Interleave tables so a large host backlog cannot monopolize all ten batches.
+	for batch := 0; batch < 10; batch++ {
+		for i, q := range queries {
+			if done[i] {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			result, err := s.DB.ExecContext(ctx, `DELETE FROM `+q.table+` WHERE rowid IN (SELECT rowid FROM `+q.table+` WHERE `+q.column+`<? ORDER BY `+q.column+` LIMIT 1000)`, q.cutoff.UTC().Format(dbTimeFormat))
 			if err != nil {
 				return fmt.Errorf("bounded %s cleanup: %w", q.table, err)
@@ -740,9 +759,7 @@ func (s *Store) RetainRaw(maxAge time.Duration) error {
 			if err != nil {
 				return err
 			}
-			if n < 1000 {
-				break
-			}
+			done[i] = n < 1000
 		}
 	}
 	return nil

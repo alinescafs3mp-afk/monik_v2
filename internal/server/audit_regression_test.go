@@ -104,6 +104,10 @@ func TestAuditOverviewContainsMetricsAndRealServiceOutcome(t *testing.T) {
 	if err := app.Store.UpsertService(protocol.DiscoveredEndpoint{ServiceID: "s", URL: "http://127.0.0.1:8080", DialTarget: "127.0.0.1:8080", SpeaksHTTP: true}, "a"); err != nil {
 		t.Fatal(err)
 	}
+	// Overview now shows explicitly pinned services only.
+	if err := app.Store.SetServicePinned("s", true, nil); err != nil {
+		t.Fatal(err)
+	}
 	report := protocol.AgentReport{SchemaVersion: 3, AgentID: "a", SessionID: "s1", Sequence: 1, ObservedAt: now, IsLive: true, Host: &protocol.HostMetrics{Hostname: "fixture", CPUPercent: &cpu, RAMTotal: 100, RAMUsed: 40, RAMAvailable: 60, Disks: []protocol.Disk{{Mount: "/", Total: 200, Used: 100, Available: 100, UsedPct: 50}}, Ping: &protocol.PingSummary{Target: "8.8.8.8", MeanMS: &ping, LossPct: &loss}}, Checks: []protocol.CheckObservation{{ServiceID: "s", CheckID: "c", ObservedAt: now, Vantage: "agent/local", Transport: "ok", HTTPStatus: &code, AppResult: "not_configured", Quality: protocol.QualityOK}}}
 	if _, err := app.Store.AcceptReport(report); err != nil {
 		t.Fatal(err)

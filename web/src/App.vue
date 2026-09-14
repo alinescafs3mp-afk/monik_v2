@@ -61,10 +61,10 @@ watch(() => route.path, async () => {
 const publicPage = computed(() => !!route.meta.public);
 
 async function logout() {
-  await post("/api/v1/logout", {});
-  me.value = null;
-  setCsrf("");
-  await router.replace("/login");
+  try {
+    await post("/api/v1/logout", {});
+    me.value = null; setCsrf(""); await router.replace("/login");
+  } catch(e) {handleError(e);}
 }
 
 function onToast(msg: string, href = "") {

@@ -1,22 +1,18 @@
-# Monik implementation status: Audit 6 source
+# Monik implementation status: Audit 7 source
 
-Base: `e771f35343b0c3f9aaba7db446d2ffd1afc3aa97` / tree `a4e92aa2286f3540982463768bd45752fe025d5c`. **PRE-RELEASE.** See `docs/AUDIT_REVIEW_6_2026-09-14.md`, `docs/V6_OPERATIONS_RU.md`, `ACCEPTANCE_LEDGER.md` and `docs/RELEASE_COMPLETION_PLAN.md`. Earlier audit documents are historical, not current acceptance status.
+Base `5d17aaab6b3f4259820b089c28a7f4367e065372`, tree `1c2aaf9da364c541471bb45b9ec43bf3329a65d6`. **PRE-RELEASE; source package, not deployment.** Current evidence is in `docs/audit/validation-review7-2026-09-14.json`; audit in `docs/AUDIT_REVIEW_7_2026-09-14.md`; operator guide in `docs/V7_SCREEN_AND_MONITORING_RU.md`. Historical audit ledgers remain in Git history.
 
-| Area | Actual implementation and remaining scope |
+| Area | Implemented / remaining boundary |
 |---|---|
-| Existing monitoring/UI | Dense pinned overview, grouped services, explicit editor opening, rename, chart axes, custom HTTP requests/advice and bounded raw history/export retained |
-| Host rules | Effective global CPU/used-RAM/most-filled-disk percent rules, CAS versions, persistence/recovery/hysteresis and policy-change evidence implemented; per-host/other metrics not implemented |
-| Maintenance | Durable fleet/agent/service API windows, cancel/history, current/evidence markers; fleet+machine creation UI. Measurements continue; repeating/editable schedules not implemented |
-| Automatic enrollment | Owner-controlled expiring window for unknown identities; default closed; existing pending/approved and one-use codes unaffected; native installer gaps remain |
-| Incident attention | Unread filter, audited unacknowledge, critical escalation clears read once; peak severity retained; no acknowledgement-as-recovery |
-| Account/session | Recent-auth dialog resumes original key once; owner password change revokes all browser sessions atomically; stale-login/session races covered |
-| Storage | Corrupt/null service observations return errors, indexed diagnostics, bounded cleanup/event resync; long-term aggregates and large-fleet performance not accepted |
-| Operation evidence | New policy commit/result-write uncertainty stays unknown; unsupported retry_selected/update.resume remain rejected |
-| Native lifecycle | Independently recoverable service-host self-update NOT implemented; worker update has partial tested paths, native install/reboot/power-loss not accepted |
-| Updates/rebind/restore | Full immutable catalogue/cohort rollout, physical migration/recovery and protected controller restore remain release blockers |
-| Verification | Go race 178 top-level / 239 test+subtest events / 18 packages; 57 Node tests, vet, module verify, tsc, UI pass on this host (Go 1.27.1) |
-| Browser/native evidence | This host: Playwright 19/19 on the synthetic fixture plus disposable loopback smoke for rules/maintenance/admission. Auditor browser was blocked before login. Windows builds are cross-compilation only; systemd/SCM/soak NOT RUN |
+| Service selection | Independent persistent overview pins and periodic-check controls; per-machine bulk pause/enable; original-socket discovery suppression on new workers |
+| Discovery default | New primary checks paused; opt-in automatic monitoring with capability gate; limited initial identification remains active; existing checks preserved |
+| TV/mobile | Explicit full-width TV rows, three densities, bounded paging and optional cycling; narrow controls/containers; physical Yandex/TV and remote-control acceptance NOT RUN |
+| Login | Eye and native-manager autocomplete; opt-in 30-day server-backed persistent session, ordinary 12-hour session; logout/other-session revocation/expiry tests |
+| Monitoring truth | Hidden/unpinned monitored failures still count; inventory-only/paused/progress not fabricated failures; history and all v6 rules/maintenance preserved |
+| Storage | Cleanup time-budget yielding and interleaved bounded tables; native disk-loss/performance and long-term aggregates NOT ACCEPTED |
+| Existing functionality | Grouped services, names, overview layout, chart axes, custom request/trial, admission, rules, maintenance, incident lifecycle, history/export retained |
+| Native lifecycle | User/ACL provisioning and independent service-host self-update recovery remain incomplete, not merely untested |
+| Release and recovery | Immutable multi-release publication, durable cohorts/resume, full protected backup/restore/reconciliation and long retention remain mandatory blockers |
+| Browser | Host Chromium PASS 22/22 on the expanded scenario; auditor environment stayed BLOCKED_BEFORE_LOGIN. Previous 19/19 is baseline evidence only |
 
-Unknown automatic registrations now require opening the admission window. Server/UI first, then compatible workers. Existing identities, trusted configuration and selected controller URL must be preserved. Rules/maintenance/admission are NOT enforced by a pre-v6 server after downgrade. Publishing source does not deploy it.
-
-The bootstrap URL remains `https://46.120.103.61:8777`; it never overrides an existing selected endpoint. Telegram, generic remote execution and host reboot remain excluded.
+Server/UI first, then updated workers. Do not change identities, secrets, queues or the selected controller endpoint. New unknown registrations still need the existing admission window and approval. Telegram and general remote commands remain excluded. TV mode does not create a viewer-only security boundary.

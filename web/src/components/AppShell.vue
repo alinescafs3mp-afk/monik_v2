@@ -3,6 +3,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { get, setStream } from "../api";
 import { readPreference, savePreference } from "../presentation";
+import DisplayControls from "./DisplayControls.vue";
+import {useDisplay} from "../composables/useDisplay";
+const {mode,notice:displayNotice}=useDisplay();
 import NavIcon from "./NavIcon.vue";
 
 defineProps<{ me: Record<string, unknown> | null; stream: string }>();
@@ -12,8 +15,9 @@ const route = useRoute();
 const collapsed = ref(readPreference('monik:sidebar-collapsed', 'false') === 'true');
 const mobileOpen = ref(false);
 const media = window.matchMedia('(max-width: 860px)');
-const isMobile = ref(media.matches);
-function resizeMenu() { isMobile.value = media.matches; mobileOpen.value = false; }
+const narrow = ref(media.matches);
+const isMobile = computed(()=>narrow.value || mode.value==='tv');
+function resizeMenu() { narrow.value = media.matches; mobileOpen.value = false; }
 const preferenceNotice = ref('');
 function toggleSidebar() {
   if (isMobile.value) { mobileOpen.value = !mobileOpen.value; return; }
@@ -77,14 +81,14 @@ function connectSSE() {
     conn.value = "paused";
     setStream("paused");
   };
-  for (const type of ["metrics","discovery","agent","incident","operation","enrollment","resnapshot"]) es.addEventListener(type,()=>window.dispatchEvent(new Event("monik:refresh")));
+  for (const type of ["metrics","discovery","agent","incident","operation","enrollment","preference","resnapshot"]) es.addEventListener(type,()=>window.dispatchEvent(new Event("monik:refresh")));
   es.addEventListener("operation", () => {
     void refreshOps();
   });
 }
 
 onMounted(() => {
-  media.addEventListener("change", resizeMenu);
+  if(media.addEventListener)media.addEventListener("change", resizeMenu);else media.addListener(resizeMenu);
   window.addEventListener("keydown", escapeMenu);
   void refreshOps();
   connectSSE();
@@ -93,7 +97,7 @@ onMounted(() => {
   }, 8000);
 });
 onUnmounted(() => {
-  media.removeEventListener("change", resizeMenu);
+  if(media.removeEventListener)media.removeEventListener("change", resizeMenu);else media.removeListener(resizeMenu);
   window.removeEventListener("keydown", escapeMenu);
   es?.close();
   if (poll) window.clearInterval(poll);
@@ -101,7 +105,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="shell" :class="{'sidebar-collapsed':collapsed,'mobile-menu-open':mobileOpen}">
+  <div class="shell" :class="{'sidebar-collapsed':collapsed,'mobile-menu-open':mobileOpen,'tv-mode':mode==='tv'}">
     <a href="#main-content" class="skip-link">К содержимому</a>
     <nav id="main-nav" class="nav" aria-label="Основная навигация">
       <h1><span aria-hidden="true">M</span><span class="nav-label">onik</span></h1>
@@ -118,11 +122,12 @@ onUnmounted(() => {
         <strong class="page-title">{{ (route.meta.title as string) || "Monik" }}</strong>
         <router-link class="header-operations" to="/operations">Операции {{ running }}/{{ attn < 0 ? '?' : attn }}</router-link>
         <form class="global-search" @submit.prevent="$router.push({ path:'/machines', query:{ q } })"><input v-model="q" type="search" placeholder="Поиск машины" aria-label="Глобальный поиск"/></form>
-        <span class="header-user muted">{{ (me && (me.username as string)) || "" }}</span>
+        <DisplayControls/><span class="header-user muted">{{ (me && (me.username as string)) || "" }}</span>
         <button type="button" @click="$emit('logout')">Выйти</button>
       </header>
       <p v-if="conn === 'paused'" class="connection-warning" role="status">Обновления приостановлены: восстанавливаем соединение с сервером. Данные могут быть устаревшими.</p>
       <p v-if="preferenceNotice" class="muted preference-notice" role="status">{{ preferenceNotice }}</p>
+      <p v-if="displayNotice" role="status" class="preference-notice">{{displayNotice}}</p>
       <main id="main-content" class="main" tabindex="-1"><slot /></main>
     </div>
   </div>

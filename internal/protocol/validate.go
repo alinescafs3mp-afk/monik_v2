@@ -2,9 +2,21 @@ package protocol
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 )
 
 func ValidateAgentConfig(c AgentConfig) error {
+	if len(c.DiscoveryDisabledTargets) > 256 {
+		return fmt.Errorf("too many discovery exclusions")
+	}
+	for _, t := range c.DiscoveryDisabledTargets {
+		h, p, e := net.SplitHostPort(t)
+		n, _ := strconv.Atoi(p)
+		if e != nil || net.ParseIP(h) == nil || n < 1 || n > 65535 {
+			return fmt.Errorf("invalid numeric discovery exclusion")
+		}
+	}
 	if c.Intervals.CollectSeconds != 5 || c.Intervals.ReportSeconds != 5 || c.Intervals.CheckSeconds != 5 {
 		return fmt.Errorf("this worker supports five-second host/report/check scheduling only")
 	}

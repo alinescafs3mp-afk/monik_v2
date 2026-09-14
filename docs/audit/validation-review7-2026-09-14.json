@@ -1,0 +1,60 @@
+{
+  "audit": "7",
+  "date": "2026-09-14",
+  "repository": "alinescafs3mp-afk/monik_v2",
+  "base_commit": "5d17aaab6b3f4259820b089c28a7f4367e065372",
+  "base_tree": "1c2aaf9da364c541471bb45b9ec43bf3329a65d6",
+  "toolchain": {
+    "go": "go1.27.0 linux/amd64",
+    "node": "22.16.0",
+    "dependencies": "baseline locked module/npm snapshot; GOPROXY=off"
+  },
+  "final_go": {
+    "top_level_tests": 194,
+    "test_and_subtest_pass_events": 257,
+    "tested_packages": 18,
+    "failures": 0
+  },
+  "commands": {
+    "go-final": 0,
+    "go-vet": 0,
+    "go-mod-verify": 0,
+    "frontend": 0,
+    "typescript": 0,
+    "frontend-build": 0,
+    "builds": 0,
+    "fixture-build": 0,
+    "browser-syntax": 0,
+    "browser": 1
+  },
+  "frontend_tests": 72,
+  "baseline_failures": [
+    "TestAudit6RetentionIsBoundedAndDiagnosticsAreReal",
+    "github.com/alinescafs3mp-afk/monik_v2/internal/storage"
+  ],
+  "baseline_notes": "Retention test coupled a fixed delete count to a five-second runtime deadline; timed context and volume correctness are now separate checks. An early parallel run was interrupted, not counted as passing.",
+  "browser": {
+    "status": "HOST_PASS",
+    "auditor_status": "BLOCKED_BEFORE_LOGIN",
+    "auditor_reason": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "host": "Playwright 1.62.0 Chromium; 22/22 including remembered session, independent pin/monitor, 960x540 TV rows",
+    "scope": "compiled Go API + built Vue; synthetic loopback fixture",
+    "results": {
+      "passed": 22,
+      "errors": [],
+      "fixture": "synthetic loopback; not production/native fleet acceptance"
+    }
+  },
+  "native_systemd": "NOT RUN",
+  "native_windows": "NOT RUN; cross-build only",
+  "owner_tv_yandex": "NOT RUN",
+  "full_v3_and_24h_soak": "NOT RUN",
+  "full_controller_restore": "NOT IMPLEMENTED / NOT RUN",
+  "independent_service_host_update_recovery": "NOT IMPLEMENTED / NOT RUN",
+  "production_touched": false,
+  "publication": {
+    "commit_created": false,
+    "main_updated": false,
+    "mode": "source ZIP and full patch; remote Git object preparation did not reach a complete verified commit"
+  }
+}

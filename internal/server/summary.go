@@ -30,6 +30,11 @@ func contact(ag *storage.AgentRow, now time.Time) (string, string) {
 }
 
 type serviceSummary struct {
+	MonitoringEnabled bool  `json:"monitoring_enabled"`
+	MonitoringApplied bool  `json:"monitoring_applied"`
+	ConfigRevision    int64 `json:"configuration_revision"`
+	GlobalPaused      bool  `json:"globally_paused"`
+	HasCheck          bool  `json:"has_check"`
 	*storage.ServiceRow
 	Observation       *protocol.CheckObservation   `json:"observation"`
 	AgentState        string                       `json:"agent_state"`
@@ -126,7 +131,17 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 		if obs != nil && obs.Feedback != nil && obs.Feedback.Health != "" {
 			item.Summary += " · ответ: " + obs.Feedback.HealthSource + "=" + obs.Feedback.Health
 		}
-		d := desiredChecks[sv.ID]
+		d, hasCheck := desiredChecks[sv.ID]
+		item.HasCheck = hasCheck
+		item.ConfigRevision = desiredRev[sv.AgentID]
+		item.GlobalPaused = globalPaused[sv.AgentID]
+		item.MonitoringEnabled = hasCheck && !d.Paused && !d.Ignored
+		item.MonitoringApplied = configConfirmed[sv.AgentID]
+		if !hasCheck && obs == nil {
+			item.State = "unmonitored"
+			item.Summary = "Обнаружен; периодическая проверка не настроена"
+			item.Fresh = false
+		}
 		if obs != nil && (appliedRev[sv.AgentID] < desiredRev[sv.AgentID] || obs.ConfigRev < appliedRev[sv.AgentID]) {
 			item.Summary += " · ожидаем результат актуальной конфигурации"
 			if item.State == "ok" {
@@ -154,4 +169,14 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 		out = append(out, item)
 	}
 	return out, nil
+}
+
+// Desired-state progress is shown separately from observed service failures.
+func serviceHasProblem(state string) bool {
+	switch state {
+	case "ok", "responds", "paused", "unmonitored", "pending":
+		return false
+	default:
+		return true
+	}
 }

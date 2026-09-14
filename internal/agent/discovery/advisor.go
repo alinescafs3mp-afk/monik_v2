@@ -201,6 +201,15 @@ func InspectListeners(ctx context.Context, ls []Listener, locals []net.IP, budge
 	if advisor == nil {
 		advisor = &Advisor{}
 	}
+	return InspectListenersPolicy(ctx, ls, locals, budget, advisor, nil, true)
+}
+
+// InspectListenersPolicy inventories disabled targets from their configuration without
+// sending HTTP, TLS, or health-advice requests. It never broadens local probe scope.
+func InspectListenersPolicy(ctx context.Context, ls []Listener, locals []net.IP, budget int, advisor *Advisor, disabled map[string]protocol.CheckDefinition, advise bool) *protocol.DiscoveryDelta {
+	if advisor == nil {
+		advisor = &Advisor{}
+	}
 	start := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
@@ -234,6 +243,10 @@ func InspectListeners(ctx context.Context, ls []Listener, locals []net.IP, budge
 			defer wg.Done()
 			for target := range jobs {
 				l := processes[target]
+				if _, blocked := disabled[target]; blocked {
+					results <- result{un: &protocol.UnresolvedCandidate{DialTarget: target, ProcessName: l.Process, Reason: "monitoring disabled; listener present; no network probe sent"}}
+					continue
+				}
 				if knownNonHTTP(l.Process) {
 					results <- result{un: &protocol.UnresolvedCandidate{DialTarget: target, ProcessName: l.Process, Reason: "known non-HTTP process; no HTTP payload sent; native protocol check required"}}
 					continue
@@ -252,9 +265,11 @@ func InspectListeners(ctx context.Context, ls []Listener, locals []net.IP, budge
 					if ep.SpeaksTLS {
 						ep.IdentificationNote = "TLS protocol observed; certificate validity is checked separately by the health probe"
 					}
-					c, stop := context.WithTimeout(ctx, 6*time.Second)
-					ep.Suggestions = advisor.Suggest(c, *ep, locals)
-					stop()
+					if advise {
+						c, stop := context.WithTimeout(ctx, 6*time.Second)
+						ep.Suggestions = advisor.Suggest(c, *ep, locals)
+						stop()
+					}
 				} else if un != nil {
 					un.ProcessName = l.Process
 				}

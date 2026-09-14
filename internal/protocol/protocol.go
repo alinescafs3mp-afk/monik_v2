@@ -312,13 +312,16 @@ type DesiredConfig struct {
 }
 
 type AgentConfig struct {
-	DisplayName  string            `json:"display_name,omitempty"`
-	Intervals    IntervalConfig    `json:"intervals"`
-	Collectors   CollectorConfig   `json:"collectors"`
-	Ping         PingConfig        `json:"ping"`
-	Checks       []CheckDefinition `json:"checks"`
-	Paused       bool              `json:"paused"`
-	SelectedTemp string            `json:"selected_temperature,omitempty"`
+	DiscoveryDisabledTargets []string `json:"discovery_disabled_targets,omitempty"`
+	// False discovers new endpoints without scheduling recurring checks. Existing checks are unchanged.
+	AutoMonitorNew bool              `json:"auto_monitor_new,omitempty"`
+	DisplayName    string            `json:"display_name,omitempty"`
+	Intervals      IntervalConfig    `json:"intervals"`
+	Collectors     CollectorConfig   `json:"collectors"`
+	Ping           PingConfig        `json:"ping"`
+	Checks         []CheckDefinition `json:"checks"`
+	Paused         bool              `json:"paused"`
+	SelectedTemp   string            `json:"selected_temperature,omitempty"`
 }
 
 type IntervalConfig struct {

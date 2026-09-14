@@ -1,31 +1,27 @@
-# Acceptance ledger: Audit 6
+# Acceptance ledger: Audit 7
 
-2026-09-14. Baseline `e771f35343b0c3f9aaba7db446d2ffd1afc3aa97`, tree `a4e92aa2286f3540982463768bd45752fe025d5c`. No live-system mutation.
+2026-09-14. Exact source baseline `5d17aaab6b3f4259820b089c28a7f4367e065372`, tree `1c2aaf9da364c541471bb45b9ec43bf3329a65d6`. Go 1.27.0, Node 22.16.0; baseline lockfiles. This ledger replaces current acceptance claims, not historical evidence in Git.
 
-| Check | Actual result / limits |
+| Check | Actual outcome and scope |
 |---|---|
-| Baseline race suite | PASS: 158 top-level / 216 pass events / 18 tested packages |
-| New defects reproduced before fixes | 2: acknowledged-warning escalation, corrupt service observations |
-| Final Go race suite | PASS: 178 top-level / 239 test and subtest pass events / 18 tested packages |
-| Go vet / Go module verify | PASS / PASS |
-| Frontend Node suite | PASS: 57, including behavior and source-contract tests |
-| TypeScript | `tsc --noEmit` PASS; no separate vue-tsc component typecheck |
-| Production Vue/Vite | PASS |
-| Linux amd64 | Four commands built, not a native installation proof |
-| Windows amd64 | Four commands cross-built; SCM/boot NOT RUN |
-| Rule/maintenance/admission | Actual temporary SQLite, handler tests and fake-clock boundaries PASS; not native-fleet evidence |
-| Password/session consistency | Current password, CSRF, revocation and concurrent stale-login checks PASS |
-| Fault injection | Committed policy plus failed operation-result write reports unknown; PASS |
-| Bounded cleanup | 10,500 expired records, bounded first pass, visible lag and subsequent cleanup; PASS |
-| Browser script syntax | PASS |
-| Current browser | PASS on this host: 19/19 Playwright scenarios against the synthetic loopback fixture (rules persist, maintenance badge+cancel, admission_closed then recent-auth dialog with the same client_request_key, unread ack/unack, password change revokes cookies). Auditor environment was blocked before login. |
-| Expanded v6 browser interactions | PASS as the 19/19 run above; synthetic fixture, not native-fleet visual acceptance |
-| Full patch/source archive | Packaging verifies clean application on baseline; this host's extras change the tree after `fdabbd16` |
-| Native privilege/install/update/recovery | NOT RUN; mandatory incomplete features remain |
-| 50-agent/1000-check load, full v3 battery, 24h soak | NOT RUN |
-| Populated-copy index migration | PASS: sqlite backup of the live controller DB (integrity ok, ~159 MiB, WAL/synchronous=2); new time indexes created in 70 ms on the copy. Not a protected full restore. |
-| Disposable loopback smoke | PASS: unknown announce `admission_closed`; after owner window, pending; `rule.save` warning 88 persists; maintenance set/cancel; diagnostics WAL + synchronous=2. Isolated temp data dir. |
+| Baseline race | FAILED on retention-test timing under contention; not claimed clean |
+| Final race | PASS: 194 top-level tests, 257 test/subtest pass events, 18 packages; package parallelism 1, GOMAXPROCS=2 |
+| Vet / module verify | PASS / PASS |
+| Frontend | PASS: 72 Node tests, both behavioral and identified source contracts |
+| TypeScript | PASS tsc --noEmit; no separate vue-tsc claim |
+| Production UI | PASS Vue/Vite build |
+| Linux amd64 | Four commands built; no native installation claim |
+| Windows amd64 | Four commands cross-built; no SCM or boot evidence |
+| Selective monitoring | Local HTTP listener: repeated disabled discovery generated zero requests; SQLite/API tests preserve settings, scope, pin independence and desired/applied truth |
+| Session lifecycle | Cookie flags/absolute expiry, ordinary versus remembered lifetime, own-session list and other-session revocation, logout and fake-clock cases PASS |
+| TV/mobile | Pure sizing/paging/aging tests and compiled responsive components PASS; real physical layout acceptance is NOT RUN |
+| Browser syntax/fixture build | PASS / PASS |
+| Current browser walkthrough | HOST PASS 22/22 Playwright 1.62.0 Chromium (`PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64`); auditor run stayed BLOCKED_BEFORE_LOGIN |
+| Previous 19/19 browser evidence | Historical baseline only, not inherited for Audit 7 |
+| Full patch/source reproduction | Auditor tree `15f9c493` reproduced; host extras then change the tree (browser locators, ledger) |
+| Owner production and TV | Physical Yandex/TV NOT RUN; live LAN deploy is a later host step, not this source ledger |
+| Native privileged install, independent service-host recovery, full protected restore, fleet load, 24h soak | NOT RUN; mandatory implementations also remain incomplete |
 
-Host extras (not in the auditor tree): closed recent-auth dialog is not mounted on public pages and has no password field in the DOM until shown; login uses the labeled «Пароль» field; the synthetic acknowledgement incident is an HTTP service row so `rule.save` `policy_changed` does not hide it from the open/unread filter.
+Host extras versus auditor tree `15f9c493`: pin/monitor/machine-overview checkboxes commit only after server CAS, so the browser scenario uses `click` plus `expect` instead of Playwright `check()`/`uncheck()` (those require an immediate native toggle). Assertions of persisted pin independence, paused desired config, remembered session, and two TV rows at 960×540 are unchanged.
 
-Toolchain actually used on this host: Go 1.27.1, Node 22.16.0 and the baseline lockfiles. No generated binary here is certified or signed as a production release. Native Windows SCM/boot, Linux systemd identity installer, independent service-host recovery, immutable rollout resume, full-controller restore, `operation.retry_selected`, `update.resume` and 24h soak remain NOT RUN / not implemented.
+Machine-readable evidence: `docs/audit/validation-review7-2026-09-14.json`. Logs accompany the source archive. No audit binary is distributed as a signed production release. Host race: 194 top-level / 257 events / 18 packages (`go test -race -count=1 ./...`), Node 72, tsc, Vite, vet, `go mod verify`.

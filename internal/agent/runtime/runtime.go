@@ -219,9 +219,15 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 		a.scheduleChecks(ctx, now, locals)
 	}
 	caps["http_custom_v1"] = protocol.Capability{Status: "supported", Reason: "bounded custom requests, typed assertions and per-check intervals"}
+	caps["selective_monitor_v1"] = protocol.Capability{Status: "supported", Reason: "paused checks excluded from scheduler and rediscovery probes"}
 	caps["health_advisor_v1"] = protocol.Capability{Status: "supported", Reason: "bounded local suggestions; no auth/TLS bypass or custom-check replacement"}
 	if discover && !a.cfg.Paused && a.discovering.CompareAndSwap(false, true) {
 		a.forceDiscovery = false
+		disabled := discovery.DisabledTargets(a.cfg.Checks, locals)
+		for _, t := range a.cfg.DiscoveryDisabledTargets {
+			disabled[t] = protocol.CheckDefinition{}
+		}
+		advise := a.cfg.AutoMonitorNew
 		go func() {
 			defer a.discovering.Store(false)
 			ls, err := discovery.Listeners()
@@ -229,7 +235,7 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 			if err != nil {
 				d = &protocol.DiscoveryDelta{StartedAt: time.Now().UTC(), EndedAt: time.Now().UTC(), PermissionGaps: []string{err.Error()}}
 			} else {
-				d = discovery.InspectListeners(ctx, ls, locals, protocol.DiscoveryBudgetMin, &a.advisor)
+				d = discovery.InspectListenersPolicy(ctx, ls, locals, protocol.DiscoveryBudgetMin, &a.advisor, disabled, advise)
 			}
 			select {
 			case a.discoveries <- d:

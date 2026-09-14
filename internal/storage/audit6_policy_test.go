@@ -290,7 +290,7 @@ func TestAudit6RetentionIsBoundedAndDiagnosticsAreReal(t *testing.T) {
 	if e = tx.Commit(); e != nil {
 		t.Fatal(e)
 	}
-	if e = s.RetainRaw(48 * time.Hour); e != nil {
+	if e = s.retainRaw(context.Background(), 48*time.Hour); e != nil {
 		t.Fatal(e)
 	}
 	var n int
@@ -304,7 +304,7 @@ func TestAudit6RetentionIsBoundedAndDiagnosticsAreReal(t *testing.T) {
 	if d["host_samples"].(map[string]any)["retention_lag_seconds"].(float64) <= 0 {
 		t.Fatal("cleanup lag concealed")
 	}
-	if e = s.RetainRaw(48 * time.Hour); e != nil {
+	if e = s.retainRaw(context.Background(), 48*time.Hour); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.RetainRaw(0); e == nil {

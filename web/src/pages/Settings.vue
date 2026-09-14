@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SessionPanel from "../components/SessionPanel.vue";
 import {ref} from 'vue';import {get,submitOp} from '../api';import {usePolling} from '../composables/usePolling';import {bytes} from '../format';
 import RuleEditor from '../components/RuleEditor.vue';import MaintenancePanel from '../components/MaintenancePanel.vue';import PasswordForm from '../components/PasswordForm.vue';
 const emit=defineEmits<{toast:[string,string?]}>();
@@ -16,5 +17,5 @@ async function backup(){if(pending.value)return;pending.value=true;try{const r=a
  <details><summary>Границы данных и технические сведения</summary><pre>{{JSON.stringify(diag,null,2)}}</pre><p class="muted">Первая и последняя запись не доказывают, что между ними нет пропусков. Длительные агрегаты пока не реализованы.</p></details>
  <details><summary>Доверие и параметры подключения</summary><p>Listen: {{settings?.listen}}</p><p>ID: {{settings?.controller_id}}</p><p>Корень обновлений: {{settings?.tuf_root_enrolled?'Настроен':'Не настроен'}}</p><pre>{{settings?.ca_cert_pem}}</pre></details>
  <p class="data-warning">Снимок SQLite не включает полный набор TLS, ключей, настроек и подтверждённого восстановления контроллера. Сохраняйте защищённый каталог отдельно; проверка полного restore ещё требуется.</p><button :disabled="pending||!settings" @click="backup">{{pending?'Создаём снимок…':'Создать снимок базы'}}</button>
- </section><PasswordForm/>
+ </section><SessionPanel/><PasswordForm/>
 </div></template>
