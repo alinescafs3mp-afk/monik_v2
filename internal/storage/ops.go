@@ -152,6 +152,20 @@ func (s *Store) refreshOperationTx(tx *sql.Tx, opID string) error {
 	case attn > 0 || cancelled > 0:
 		agg = protocol.OpAttentionRequired
 	}
+	var rolloutState string
+	if e := tx.QueryRow(`SELECT state FROM update_rollouts WHERE operation_id=?`, opID).Scan(&rolloutState); e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return e
+	}
+	switch rolloutState {
+	case "running":
+		agg = protocol.OpRunning
+	case "paused", "blocked":
+		agg = protocol.OpAttentionRequired
+	case "cancelling":
+		if running > 0 || wait > 0 {
+			agg = protocol.OpRunning
+		}
+	}
 	result, err := tx.Exec(`UPDATE operations SET status=?, revision=revision+1 WHERE id=?`, string(agg), opID)
 	if err != nil {
 		return err
@@ -171,36 +185,68 @@ func (s *Store) refreshOperationTx(tx *sql.Tx, opID string) error {
 	return err
 }
 
+// PendingJobs inspects deliverable jobs. HTTP dispatch uses ClaimPendingJobs so
+// cancellation/pause cannot race selection and the durable delivery boundary.
 func (s *Store) PendingJobs(agentID string, limit int) ([]protocol.JobEnvelope, error) {
-	if err := s.expireAndBlockJobs(); err != nil {
-		return nil, err
+	if e := s.AdvanceRollouts(); e != nil {
+		return nil, e
 	}
-	if limit <= 0 {
+	return s.pendingJobs(s.db(), agentID, limit)
+}
+func (s *Store) pendingJobs(q sqlExecutor, agentID string, limit int) ([]protocol.JobEnvelope, error) {
+	if limit < 1 || limit > 32 {
 		limit = 8
 	}
-	now := s.now().UTC().Format(dbTimeFormat)
-	rows, err := s.db().Query(`SELECT job_id,operation_id,action,envelope FROM agent_jobs WHERE agent_id=? AND status IN ('queued','waiting_offline','delivered') AND deadline>? ORDER BY created_at LIMIT ?`,
-		agentID, now, limit)
+	now := s.now()
+	rows, e := q.Query(`SELECT j.job_id,j.operation_id,j.action,j.envelope FROM agent_jobs j LEFT JOIN update_rollouts r ON r.operation_id=j.operation_id WHERE j.agent_id=? AND j.status IN ('queued','waiting_offline','delivered') AND j.deadline>? AND (j.status='delivered' OR r.operation_id IS NULL OR r.state='running') ORDER BY j.created_at,j.job_id LIMIT 1000`, agentID, now.Format(dbTimeFormat))
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	out := []protocol.JobEnvelope{}
+	for rows.Next() {
+		var id, op, action, raw string
+		if e = rows.Scan(&id, &op, &action, &raw); e != nil {
+			return nil, e
+		}
+		var env protocol.JobEnvelope
+		if e = json.Unmarshal([]byte(raw), &env); e != nil {
+			return nil, fmt.Errorf("invalid stored job envelope: %w", e)
+		}
+		if env.JobID != id || env.OperationID != op || env.Action != action || env.SchemaVersion != protocol.SchemaVersion || env.Deadline.IsZero() {
+			return nil, fmt.Errorf("stored job envelope identity or schema mismatch")
+		}
+		if env.NotBefore.After(now) || !env.Deadline.After(now) {
+			continue
+		}
+		out = append(out, env)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, rows.Err()
+}
+func (s *Store) ClaimPendingJobs(agentID string, limit int) (out []protocol.JobEnvelope, err error) {
+	if err = s.AdvanceRollouts(); err != nil {
+		return nil, err
+	}
+	err = s.WithTx(func(tx *sql.Tx) error {
+		var e error
+		out, e = s.pendingJobs(tx, agentID, limit)
+		if e != nil {
+			return e
+		}
+		for _, env := range out {
+			if _, e = tx.Exec(`UPDATE agent_jobs SET status='delivered',delivered_at=COALESCE(delivered_at,?) WHERE job_id=? AND agent_id=? AND status IN ('queued','waiting_offline')`, s.now().Format(dbTimeFormat), env.JobID, agentID); e != nil {
+				return e
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []protocol.JobEnvelope
-	for rows.Next() {
-		var jobID, opID, action, raw string
-		if err := rows.Scan(&jobID, &opID, &action, &raw); err != nil {
-			return nil, err
-		}
-		var env protocol.JobEnvelope
-		if err := json.Unmarshal([]byte(raw), &env); err != nil {
-			return nil, fmt.Errorf("invalid stored job envelope: %w", err)
-		}
-		if env.JobID != jobID || env.OperationID != opID || env.Action != action || env.SchemaVersion != protocol.SchemaVersion || env.Deadline.IsZero() {
-			return nil, fmt.Errorf("stored job envelope identity or schema mismatch")
-		}
-		out = append(out, env)
-	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) MarkJobDelivered(jobID string) error {
@@ -231,6 +277,9 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 		}
 		if rec.OperationID != "" && rec.OperationID != opID {
 			return ErrConflict
+		}
+		if status == "preparing" || status == "rollout_held" {
+			return fmt.Errorf("receipt for unpublished or held job")
 		}
 		if previous == string(b) {
 			return nil
@@ -368,11 +417,14 @@ func (s *Store) CancelPending(opID string) error {
 	}
 	err := s.WithTx(func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`UPDATE operation_targets SET status='cancelled_before_execution',stage='cancelled',message='cancelled before dispatch',updated_at=?
-  WHERE operation_id=? AND status IN ('queued','waiting_offline') AND NOT EXISTS(SELECT 1 FROM agent_jobs j WHERE j.operation_id=operation_targets.operation_id AND j.agent_id=operation_targets.agent_id AND j.status NOT IN ('queued','waiting_offline'))`, s.now().UTC().Format(dbTimeFormat), opID); err != nil {
+  WHERE operation_id=? AND status IN ('queued','waiting_offline') AND NOT EXISTS(SELECT 1 FROM agent_jobs j WHERE j.operation_id=operation_targets.operation_id AND j.agent_id=operation_targets.agent_id AND j.status NOT IN ('preparing','rollout_held','queued','waiting_offline'))`, s.now().UTC().Format(dbTimeFormat), opID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE agent_jobs SET status='cancelled_before_execution' WHERE operation_id=? AND status IN ('queued','waiting_offline')`, opID)
+		_, err := tx.Exec(`UPDATE agent_jobs SET status='cancelled_before_execution' WHERE operation_id=? AND status IN ('preparing','rollout_held','queued','waiting_offline')`, opID)
 		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE update_rollouts SET state='cancelling',reason='Undispatched targets cancelled; waiting for already claimed work',stable_since='',revision=revision+1,updated_at=? WHERE operation_id=? AND state NOT IN ('completed','cancelled')`, s.now().Format(dbTimeFormat), opID); err != nil {
 			return err
 		}
 		return s.refreshOperationTx(tx, opID)

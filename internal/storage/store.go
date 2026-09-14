@@ -62,6 +62,11 @@ func Open(path string, clk clock.Clock) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// A restart is a gap in controller observation, not healthy probation time.
+	if _, err := db.Exec(`UPDATE update_rollouts SET stable_since='',last_tick='' WHERE state='running'`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.initializeOperationAttention(); err != nil {
 		db.Close()
 		return nil, err

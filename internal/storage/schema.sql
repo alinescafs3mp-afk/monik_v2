@@ -485,3 +485,32 @@ CREATE TABLE IF NOT EXISTS release_trust (
  root_json BLOB NOT NULL,
  versions_json TEXT NOT NULL
 );
+
+-- Controller-owned release waves. Held jobs cannot be dispatched by the agent API.
+CREATE TABLE IF NOT EXISTS update_rollouts (
+ operation_id TEXT PRIMARY KEY REFERENCES operations(id),
+ release_id TEXT NOT NULL REFERENCES release_publications(release_id),
+ state TEXT NOT NULL CHECK(state IN ('running','paused','blocked','cancelling','cancelled','completed')),
+ revision INTEGER NOT NULL DEFAULT 1,
+ batch_size INTEGER NOT NULL CHECK(batch_size BETWEEN 1 AND 10),
+ observe_seconds INTEGER NOT NULL CHECK(observe_seconds BETWEEN 15 AND 300),
+ wave INTEGER NOT NULL DEFAULT 0,
+ canary_waves INTEGER NOT NULL,
+ stable_since TEXT NOT NULL DEFAULT '',
+ last_tick TEXT NOT NULL DEFAULT '',
+ reason TEXT NOT NULL DEFAULT '',
+ deadline TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS update_rollout_members (
+ operation_id TEXT NOT NULL REFERENCES update_rollouts(operation_id),
+ agent_id TEXT NOT NULL,
+ platform TEXT NOT NULL,
+ wave INTEGER NOT NULL,
+ released_at TEXT,
+ PRIMARY KEY(operation_id,agent_id),
+ FOREIGN KEY(operation_id,agent_id) REFERENCES operation_targets(operation_id,agent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rollout_wave ON update_rollout_members(operation_id,wave);
+CREATE INDEX IF NOT EXISTS idx_rollout_active ON update_rollouts(state,created_at);

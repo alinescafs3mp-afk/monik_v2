@@ -209,6 +209,15 @@ func TestAudit10RolloutPinsCompleteJobAndRejectsLegacyAgent(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	jobs, e := a.Store.PendingJobs("modern", 5)
+	if e != nil || len(jobs) != 0 {
+		t.Fatal("mixed incompatible selection dispatched partial rollout", jobs, e)
+	}
+	w = httptest.NewRecorder()
+	a.processSubmit(w, ownerRecent(t), protocol.SubmitOperation{Action: "update.rollout", ClientRequestKey: "modern-only", TargetIDs: []string{"modern"}, Params: map[string]any{"release_id": id}})
+	if w.Code >= 400 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	jobs, e = a.Store.PendingJobs("modern", 5)
 	if e != nil || len(jobs) != 1 || jobs[0].Params["release_digest"] != id || jobs[0].Params["sha256"] == nil {
 		t.Fatal(jobs, e)
 	}

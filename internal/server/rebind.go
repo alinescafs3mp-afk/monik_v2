@@ -156,9 +156,6 @@ func (a *App) planID(req protocol.SubmitOperation) (string, error) {
 }
 
 func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation) error {
-	if req.Action == "update.resume" {
-		return fmt.Errorf("persisted batch resume is not implemented")
-	}
 	eligible := false
 	for _, target := range op.Targets {
 		if target.AgentID != "server" && target.Status != protocol.TargetRejected {
@@ -242,6 +239,33 @@ func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation
 		}
 		p.Evidence = map[string]any{"release_id": releaseID, "release_digest": digest, "os": ag.OS, "arch": ag.Arch, "name": art["name"], "sha256": art["sha256"], "length": art["length"], "component": "worker", "previous_session": ag.SessionID}
 		plan = append(plan, p)
+	}
+	if req.Action == "update.rollout" {
+		invalid := len(plan) != len(op.Targets)
+		for _, p := range plan {
+			if p.Status != protocol.TargetQueued && p.Status != protocol.TargetWaitingOffline {
+				invalid = true
+			}
+		}
+		if invalid {
+			// No partial best-effort rollout after a failed frozen-scope preflight.
+			for i := range plan {
+				if plan[i].Status == protocol.TargetQueued || plan[i].Status == protocol.TargetWaitingOffline {
+					plan[i].Status = protocol.TargetRejected
+					plan[i].Stage = "rollout.preflight_blocked"
+					plan[i].Message = "Another frozen target failed preflight; review an entirely eligible selection"
+				}
+			}
+			return a.Store.PublishUpdatePlan(op.ID, plan)
+		}
+		opts := storage.RolloutOptions{BatchSize: 2, ObserveSeconds: 30}
+		if n, ok := req.Params["batch_size"].(float64); ok {
+			opts.BatchSize = int(n)
+		}
+		if n, ok := req.Params["observe_seconds"].(float64); ok {
+			opts.ObserveSeconds = int(n)
+		}
+		return a.Store.PublishBatchedUpdatePlan(op.ID, releaseID, plan, opts)
 	}
 	return a.Store.PublishUpdatePlan(op.ID, plan)
 }

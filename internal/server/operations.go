@@ -138,6 +138,9 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		if req.Action == "profile.apply" || req.Action == "check.apply" || req.Action == "service.pause" || req.Action == "service.ignore" {
 			dl = now.Add(24 * time.Hour)
 		}
+		if req.Action == "update.rollout" {
+			dl = now.Add(24 * time.Hour)
+		}
 		op.Deadline = &dl
 	}
 	for _, id := range targets {
@@ -328,8 +331,10 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		return a.replaceSecret(op, req, secretPlain)
 	case "rebind.prepare", "rebind.arm", "rebind.activate", "rebind.retire":
 		return a.handleRebind(op, req, s)
-	case "update.rollout", "update.rollback", "update.resume":
+	case "update.rollout", "update.rollback":
 		return a.handleRollout(op, req)
+	case "update.pause", "update.resume":
+		return a.Store.ControlRollout(req.Params["operation_id"].(string), int64(req.Params["rollout_revision"].(float64)), req.Action == "update.pause", op.ID)
 	case "agent.restart":
 		return a.handleRestart(op)
 	case "check.trial":

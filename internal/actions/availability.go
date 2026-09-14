@@ -6,8 +6,6 @@ func UnavailableReason(action string) string {
 	switch action {
 	case "operation.retry_selected":
 		return "Retry orchestration is not implemented; explicitly review and submit a new eligible operation."
-	case "update.resume":
-		return "There is no persisted rollout batching/resume state machine yet."
 	}
 	return ""
 }

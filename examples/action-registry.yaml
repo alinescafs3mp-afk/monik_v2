@@ -149,9 +149,9 @@ actions:
 - id: update.rollout
   scope: agents
   risk: disruptive
-  requires_capability: binary_update
+  requires_capability: immutable_release_v1
   local_feedback: pending_within_100ms_target
-  authoritative_completion: build_digest_session_committed_current_exchange
+  authoritative_completion: all_frozen_waves_digest_session_and_fresh_observation
   durable_operation: true
   idempotency_required: true
   recent_authentication_required: true
@@ -168,12 +168,23 @@ actions:
   recent_authentication_required: true
   cancellation: before_effect_only_with_receipts
   errors: code_reason_retryability_and_correlation_id
+- id: update.pause
+  scope: server_job
+  risk: config
+  requires_capability: null
+  local_feedback: pending_within_100ms_target
+  authoritative_completion: same_rollout_revision_paused_durably
+  durable_operation: true
+  idempotency_required: true
+  recent_authentication_required: false
+  cancellation: does_not_recall_claimed_jobs
+  errors: code_reason_retryability_and_correlation_id
 - id: update.resume
   scope: server_job
   risk: disruptive
   requires_capability: null
   local_feedback: pending_within_100ms_target
-  authoritative_completion: revalidated_rollout_authorization
+  authoritative_completion: same_frozen_rollout_revision_resumed_durably
   durable_operation: true
   idempotency_required: true
   recent_authentication_required: true

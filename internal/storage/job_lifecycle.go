@@ -37,6 +37,10 @@ func (s *Store) expireAndBlockJobs() error {
 			} else if j.deadline <= now {
 				status = string(protocol.TargetExpired)
 				reason = "job deadline expired; result was not confirmed"
+				if (j.action == "update.rollout" || j.action == "update.rollback") && j.status != "preparing" && j.status != "queued" && j.status != "waiting_offline" {
+					status = string(protocol.TargetUnknownResult)
+					reason = "Delivered update deadline expired; the remote effect is unknown and must be reconciled"
+				}
 			}
 			if status == "" {
 				continue

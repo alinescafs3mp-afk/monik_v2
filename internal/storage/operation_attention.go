@@ -79,6 +79,26 @@ func introducesAttention(previous, current string) bool {
 
 func (s *Store) syncOperationAttentionTx(tx *sql.Tx, id string, status protocol.OperationStatus, targets []protocol.TargetResult) error {
 	fingerprint, required := attentionFingerprint(status, targets)
+	// A new rollout block is new evidence even if a manual pause was already read.
+	var rolloutState, rolloutReason string
+	if e := tx.QueryRow(`SELECT state,reason FROM update_rollouts WHERE operation_id=?`, id).Scan(&rolloutState, &rolloutReason); e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return e
+	}
+	if rolloutState == "blocked" {
+		var snapshot attentionSnapshot
+		if fingerprint != "" {
+			if e := json.Unmarshal([]byte(fingerprint), &snapshot); e != nil {
+				return e
+			}
+		}
+		snapshot.Fallback = "rollout.blocked:" + rolloutReason
+		raw, e := json.Marshal(snapshot)
+		if e != nil {
+			return e
+		}
+		fingerprint = string(raw)
+		required = true
+	}
 	var previous string
 	e := tx.QueryRow(`SELECT fingerprint FROM operation_attention WHERE operation_id=?`, id).Scan(&previous)
 	if errors.Is(e, sql.ErrNoRows) {

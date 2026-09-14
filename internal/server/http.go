@@ -65,6 +65,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/account/password", a.needAuth(a.handlePasswordChange))
 	mux.HandleFunc("GET /api/v1/diagnostics", a.needAuth(a.handleDiagnostics))
 	mux.HandleFunc("GET /api/v1/releases", a.needAuth(a.handleReleases))
+	mux.HandleFunc("GET /api/v1/rollouts", a.needAuth(a.handleRollouts))
 	mux.HandleFunc("POST /api/v1/releases/import", a.needAuth(a.handleReleaseImport))
 	mux.HandleFunc("GET /api/v1/enrollment", a.needAuth(a.handleEnrollmentGet))
 	mux.HandleFunc("GET /api/v1/secrets", a.needAuth(a.handleSecrets))

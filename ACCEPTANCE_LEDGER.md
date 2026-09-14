@@ -1,3 +1,33 @@
+# Current acceptance: Audit 11
+
+Baseline `b110c2de7688d8d2d28f6c5498bb276c8825a1f8`. Auditor source tree `7326a43f273ecf3b6bca73971fb3aacaa0aa58a4`. Host extras versus that tree are listed below; they do not weaken product contracts. Source validation digest and scopes: `docs/audit/validation-review11-2026-09-14.json`.
+
+| Check | Current evidence |
+|---|---|
+| Full Go race suite | HOST PASS 280 top-level tests / 352 pass events / 19 tested packages; 2 opt-in process tests skipped here, passed separately. |
+| Baseline regressions | CONFIRMED: 3; all pass after correction. |
+| Concurrency/restart repeats | HOST PASS: four selected tests, ten repetitions each. |
+| Frontend | PASS: 103 Node helper/request tests. |
+| TypeScript / Vite | PASS: tsc --noEmit and production bundle; not vue-tsc or visual acceptance. |
+| Vet / module verification | PASS. |
+| Linux / Windows amd64 | HOST PASS: four commands each; Windows is cross-compilation only. |
+| Compiled Linux worker + supervisor | HOST PASS uid=1000 (setuid 65534 only when euid=0); real CPU/RAM, stop/restart/respawn and outage/spool recovery. |
+| SSH fixture suite | HOST PASS: existing 8 encrypted SSH/PTY protocol fixtures, not native shell/browser proof. |
+| New browser scenario | HOST PASS 29/29 Playwright 1.57.0 Chromium, including canary preview, durable pause/reload/resume and pending cancel. Auditor BLOCKED_BEFORE_LOGIN ERR_BLOCKED_BY_ADMINISTRATOR. |
+| Native systemd/SCM boot, signed multi-machine rollout, power-loss recovery, physical TV | NOT RUN. |
+| Full restore / service-host independent recovery | NOT IMPLEMENTED / NOT ACCEPTED. |
+| Full fleet, long retention and 24h soak | NOT RUN. |
+
+Host extras versus auditor tree `7326a43f` (do not weaken product contracts):
+
+- Ledger/status/validation record the host Playwright and native uid=1000 runs. No product-code change was required after the patch.
+
+The full suite first caught one obsolete expectation that update.resume must return an unimplemented error. Only that outdated assertion was replaced with real resume authorization/CAS/same-job/expiry/fault tests; generic retry remains unavailable. The intermediate failure log is retained in the package.
+
+---
+
+## Historical acceptance (not current-source execution)
+
 # Current acceptance: Audit 10
 
 Base `ce602d01b3bc335a94b194bf1c3c04e7e46a25ad`. Auditor source tree `13ac3da94fb53427edd338a9e7a897c4e937f420`. Host extras versus that tree are listed below; they do not weaken product contracts.

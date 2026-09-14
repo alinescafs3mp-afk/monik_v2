@@ -99,9 +99,12 @@ func (s *Store) NextMigrationGeneration() int64 {
 
 func (s *Store) HasActiveLifecycle(agentID string) (string, bool) {
 	var action string
-	err := s.db().QueryRow(`SELECT action FROM agent_jobs WHERE agent_id=? AND action IN ('update.rollout','update.rollback','rebind.activate','agent.restart','credential.rotate','trust.retire') AND status IN ('preparing','queued','waiting_offline','delivered','accepted','running','awaiting_confirmation') LIMIT 1`, agentID).Scan(&action)
-	if err != nil {
+	err := s.db().QueryRow(`SELECT action FROM agent_jobs WHERE agent_id=? AND action IN ('update.rollout','update.rollback','rebind.activate','agent.restart','credential.rotate','trust.retire') AND status IN ('preparing','rollout_held','queued','waiting_offline','delivered','accepted','running','awaiting_confirmation','unknown_result') LIMIT 1`, agentID).Scan(&action)
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false
+	}
+	if err != nil {
+		return "lifecycle_state_unavailable", true
 	}
 	return action, true
 }

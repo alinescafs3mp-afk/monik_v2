@@ -162,7 +162,10 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		}
 		desired = &protocol.DesiredConfig{Revision: fresh.DesiredRevision, Hash: fresh.DesiredHash, Body: body}
 	}
-	jobs, err := a.Store.PendingJobs(ag.ID, 8)
+	var jobs []protocol.JobEnvelope
+	if !a.Cfg.RestoreMode {
+		jobs, err = a.Store.ClaimPendingJobs(ag.ID, 8)
+	}
 	if err != nil {
 		a.writeErr(w, 500, "db", "job lookup failed")
 		return
@@ -184,10 +187,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		if err := a.Store.MarkJobDelivered(jobs[i].JobID); err != nil {
-			a.writeErr(w, 500, "db", "job delivery recording failed")
-			return
-		}
+
 	}
 	a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, DesiredConfig: desired, Jobs: jobs, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks})
 }

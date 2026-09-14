@@ -35,8 +35,33 @@ func (a *App) validateLifecycleParams(req *protocol.SubmitOperation) error {
 		if !ok || id == "" || len(id) > 128 {
 			return fmt.Errorf("release_id required")
 		}
-		if len(req.Params) != 1 {
-			return fmt.Errorf("only release_id accepted; artifact locations are server-controlled")
+		for k, v := range req.Params {
+			switch k {
+			case "release_id":
+			case "batch_size", "observe_seconds":
+				n, ok := v.(float64)
+				if !ok || n != float64(int(n)) {
+					return fmt.Errorf("%s must be an integer", k)
+				}
+				if k == "batch_size" && (n < 1 || n > 10) || k == "observe_seconds" && (n < 15 || n > 300) {
+					return fmt.Errorf("%s outside supported range", k)
+				}
+			default:
+				return fmt.Errorf("unknown rollout option; artifact locations are server-controlled")
+			}
+		}
+		if len(req.TargetIDs) > 500 {
+			return fmt.Errorf("at most 500 frozen targets")
+		}
+		return nil
+	case "update.pause", "update.resume":
+		id, ok := req.Params["operation_id"].(string)
+		rev, valid := req.Params["rollout_revision"].(float64)
+		if !ok || id == "" || len(id) > 128 || !valid || rev < 1 || rev != float64(int64(rev)) || len(req.Params) != 2 {
+			return fmt.Errorf("operation_id and integer rollout_revision required")
+		}
+		if len(req.TargetIDs) != 0 || req.TargetMode == "all" {
+			return fmt.Errorf("rollout control uses its existing frozen targets")
 		}
 		return nil
 

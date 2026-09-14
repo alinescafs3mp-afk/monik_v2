@@ -1,3 +1,15 @@
+# Current implementation: Audit 11, PRE-RELEASE
+
+Baseline `b110c2de7688d8d2d28f6c5498bb276c8825a1f8`. Implements durable worker rollout canaries by OS/architecture, bounded later waves, fresh-identity observation, persisted pause/resume, automatic failure blocking, held-job cancellation and atomic delivery claims. Existing v10 immutable publication/download remains unchanged. No owner installation was contacted or changed.
+
+New `update.pause` and `update.resume` operate on an existing rollout revision, retaining frozen job IDs. Generic `operation.retry_selected` is still guarded. Read/unread never authorizes a failed rollout to continue. Declared limits are not capacity evidence. Workers already advertising `immutable_release_v1` need no new registration for controller-side batching.
+
+See `docs/AUDIT_REVIEW_11_2026-09-14.md`, `docs/V11_ROLLOUTS_RU.md` and `docs/audit/validation-review11-2026-09-14.json`. Auditor browser execution was blocked before login; host Playwright 1.57.0 ran the full fixture including the new canary/wave pause/resume/cancel scenario (29/29). Native process tests ran as uid=1000. These are not systemd/SCM/boot, signed multi-machine rollout, or physical-TV acceptance. Native fleet upgrade/boot/power loss, service-host recovery, full protected restore and long-term history remain open. Do not downgrade a server with active new-format rollout jobs. Generic `operation.retry_selected` remains guarded.
+
+---
+
+## Historical implementation records (not current acceptance)
+
 # Current implementation: Audit 10, PRE-RELEASE
 
 Baseline ce602d0. Implements immutable signed release storage/URLs, transactionally committed catalogue/trust/result, capability-gated complete update envelopes, corruption rejection and Updates preflight feedback. The importer no longer calls the legacy mutable ImportTrusted path. No production installation was changed by this source audit.

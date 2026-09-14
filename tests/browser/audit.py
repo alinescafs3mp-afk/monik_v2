@@ -18,6 +18,7 @@ import time
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
 from operation_read_scenarios import exercise_operation_reads
+from rollout_scenarios import exercise_rollouts
 
 
 def run(binary: Path, output: Path) -> None:
@@ -274,6 +275,7 @@ def run(binary: Path, output: Path) -> None:
                         expect(checkbox).to_be_disabled()
                     page.screenshot(path=str(output / "immutable-updates.png"), full_page=True)
                     results.append("immutable-release explanation, disabled incompatible agents and no implicit fleet-wide update")
+                    exercise_rollouts(page, context, base, directory, access, output, results)
 
                     # V6 operates through the real API and compiled UI. Only
                     # the telemetry/clock-condition fixture is synthetic.

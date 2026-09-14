@@ -45,7 +45,7 @@ func TestReviewHistoryDatabaseErrorIsNotMissingData(t *testing.T) {
 }
 func TestReviewUnimplementedActionsDoNotClaimSuccess(t *testing.T) {
 	a, _ := testApp(t)
-	for _, action := range []string{"operation.retry_selected", "update.resume"} {
+	for _, action := range []string{"operation.retry_selected"} {
 		w := httptest.NewRecorder()
 		a.processSubmit(w, &storage.Session{Username: "owner"}, protocol.SubmitOperation{Action: action, ClientRequestKey: action, Params: map[string]any{}})
 		if w.Code != 501 {

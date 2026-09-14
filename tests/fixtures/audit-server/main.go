@@ -19,6 +19,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/server"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/storage"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 )
 
 func must(err error) {
@@ -90,7 +91,17 @@ func main() {
 		must(app.Store.AppendEvent("metrics", "agent", "audit-host", seq, map[string]any{"fixture": true}))
 	}
 	feed(1)
-	access, _ := json.Marshal(map[string]string{"url": url, "username": "owner", "password": password})
+	// Signed but deliberately non-executable payload for controller/browser tests.
+	// No fixture agent will ever download or execute it.
+	keys, err := tufutil.InitKeys(filepath.Join(*dir, "test-release-keys"))
+	must(err)
+	payload := filepath.Join(*dir, "test-worker-data")
+	must(os.WriteFile(payload, []byte("browser fixture, not executable"), 0600))
+	repo := filepath.Join(*dir, "test-release-repo")
+	must(tufutil.SignRepository(keys, repo, map[string]string{"linux-amd64/monik-agent": payload}, 30, 2))
+	bundle := filepath.Join(*dir, "browser-release.tgz")
+	must(tufutil.PackBundle(repo, bundle, "browser-canary-fixture", "Synthetic payload; never executed"))
+	access, _ := json.Marshal(map[string]string{"url": url, "username": "owner", "password": password, "release_bundle": bundle})
 	must(os.WriteFile(filepath.Join(*dir, "fixture-access.json"), access, 0600))
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

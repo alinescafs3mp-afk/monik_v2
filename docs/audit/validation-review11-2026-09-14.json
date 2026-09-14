@@ -1,0 +1,123 @@
+{
+  "audit": 11,
+  "date": "2026-09-14",
+  "baseline_commit": "b110c2de7688d8d2d28f6c5498bb276c8825a1f8",
+  "baseline_tree": "8a6441bc287174edb750d9637cacba71eca5467a",
+  "validated_source_digest": "094d1d6cad4bf3b7fa25fc9176fb6646672a45726d64f6e5d49c542d8597251b",
+  "source_digest_method": "Sorted path UTF-8 + NUL + SHA256(file bytes), for cmd/internal/web/tests + go.mod/go.sum/Makefile, excluding generated ignored assets",
+  "environment": {
+    "go": "1.27.0",
+    "node": "22.16.0",
+    "dependencies": "Baseline locked Go/npm dependencies from existing repository audit artifacts; no dependency updates",
+    "network_scope": "Local temporary HTTPS/SSH fixtures only. Owner production not contacted."
+  },
+  "baseline_go": {
+    "passed_events": 322,
+    "top_level": 254,
+    "tested_packages": 19,
+    "skipped_opt_in": [
+      "TestAudit8NativeWorkerRestartAndRejectedUpload",
+      "TestAudit8NativeSupervisorRestartsWorker"
+    ]
+  },
+  "final_go": {
+    "passed_events": 352,
+    "top_level": 280,
+    "tested_packages": 19,
+    "skipped_opt_in": [
+      "TestAudit8NativeWorkerRestartAndRejectedUpload",
+      "TestAudit8NativeSupervisorRestartsWorker"
+    ]
+  },
+  "frontend_passed": 103,
+  "exit_codes": {
+    "final-go": 0,
+    "repeated-rollouts": 0,
+    "vet": 0,
+    "modules": 0,
+    "final-web": 0,
+    "build": 0,
+    "native": 0
+  },
+  "regressions_before": {
+    "confirmed_failing_tests": [
+      "TestAudit11RejectReceiptForUnpublishedUpdate",
+      "TestAudit11LifecycleLookupFailsClosed",
+      "TestAudit11NotBeforeRespected"
+    ],
+    "log": "regressions-before.log"
+  },
+  "repetitions": {
+    "count": 10,
+    "tests": [
+      "TestRolloutDeliveryClaimAndPauseAreSerialized",
+      "TestRolloutPauseResumeKeepsIDsAndCAS",
+      "TestRolloutPublicationFailureIsAtomic",
+      "TestRolloutReopenRetainsFrozenWorkButReobserves"
+    ],
+    "result": "PASS"
+  },
+  "typescript": "tsc --noEmit PASS; not a separate vue-tsc claim",
+  "production_ui": "Vue/Vite build PASS",
+  "builds": {
+    "linux_amd64": 4,
+    "windows_amd64": 4,
+    "limitations": "Windows cross-compilation only. Local binaries have audit-local commit metadata and are not signed production releases."
+  },
+  "native_process": {
+    "passed": 2,
+    "uid": 65534,
+    "scope": "Compiled worker and service-host; real CPU/RAM, stop/restart/child respawn, upload outage and spool drain. Not systemd/SCM or real signed fleet rollout."
+  },
+  "browser": {
+    "status": "BLOCKED_BEFORE_LOGIN",
+    "error": "net::ERR_BLOCKED_BY_ADMINISTRATOR",
+    "passed_new_checks": 0,
+    "syntax": "PASS",
+    "scenario": "Real Go API and compiled Vue with synthetic no-credential agents and signed NON-executable fixture release. No fake update success."
+  },
+  "host_execution": {
+    "go": "1.27.1",
+    "go_top_level_pass": 280,
+    "go_test_and_subtest_pass": 352,
+    "tested_packages": 19,
+    "frontend_tests": 103,
+    "repetitions": "4 tests x 10 PASS",
+    "browser": {
+      "status": "HOST_PASS",
+      "playwright": "1.57.0",
+      "checks": 29,
+      "new_scenarios_executed": true,
+      "rollout": "canary preview, durable pause/reload/resume, pending cancel; non-executable fixture"
+    },
+    "native_process": {
+      "tests": 2,
+      "exit": 0,
+      "uid": 1000,
+      "note": "setuid 65534 only when euid=0"
+    },
+    "ssh_fixtures": 8
+  },
+  "not_run": [
+    "Native systemd/SCM install/boot",
+    "Actual signed multi-machine upgrades",
+    "Power-loss recovery",
+    "Physical TV/Yandex",
+    "Full v3 battery",
+    "Fleet capacity/long-retention",
+    "24h soak"
+  ],
+  "publication": {
+    "commit_created": false,
+    "main_updated": false,
+    "reason": "GitHub create_tree source write was blocked by the OpenAI tool after one intermediate tree object. No partial source commit."
+  },
+  "remaining_implementation": [
+    "Independent service-host self-update/recovery",
+    "Protected full-controller restore/reconciliation",
+    "Generic linked selected-target retry",
+    "Application/SLO rollout health gates",
+    "Immutable-release GC/quotas with reference accounting",
+    "Long-term aggregate history"
+  ]
+}

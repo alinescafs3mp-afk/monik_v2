@@ -234,6 +234,7 @@ func (a *App) Run(ctx context.Context) error {
 		ErrorLog:          slog.NewLogLogger(a.Log.Handler(), slog.LevelWarn),
 	}
 	go a.background(ctx)
+	go a.rolloutBackground(ctx)
 	ln, err := net.Listen("tcp", a.Cfg.Listen)
 	if err != nil {
 		return err

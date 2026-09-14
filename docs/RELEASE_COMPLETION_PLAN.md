@@ -1,3 +1,23 @@
+# Completion plan after Audit 11
+
+Baseline `b110c2de7688d8d2d28f6c5498bb276c8825a1f8`. The bounded WORKER canary/batch/pause/resume slice is now implemented and tested as specified in `AUDIT_REVIEW_11_2026-09-14.md`. Do not treat older text below saying all cohort behavior or `update.resume` is unimplemented as the current state. Generic `operation.retry_selected` remains guarded. Independent service-host replacement remains guarded.
+
+Current completed bounds: one deterministic sequential canary per platform; frozen membership; 1..10-sized later waves; 15..300-second worker-identity/fresh-contact observation; durable pause with no recall of claimed jobs; same-job resume only from manual pause; automatic block on failed/unknown results; pending cancellation; versioned controls and restart-safe observation. This does not implement application/SLO gates or native fleet recovery.
+
+## Next completion order
+
+1. **Protected full-state recovery:** backup/restore of identity, trust, encryption keys, config, DB and referenced immutable releases; validate clean restore; reconcile newer agents and held/claimed/completed rollout jobs without replay. Never downgrade the controller during a live v11 plan.
+2. **Independent service-host recovery:** actual systemd/SCM installation, rights, boot and failure-boundary rollback under an independent native mechanism. Existing worker process tests do not prove this.
+3. **Real fleet rollout acceptance:** exact signed executable release on disposable Linux/Windows machines; canary failure, short/long controller outage, interrupted transfer/activation, manual pause then resume, offline expiry and unknown effects. Do not execute the non-executable browser fixture as a release.
+4. **Remaining release controls:** quotas/GC respecting queued and rollback references, root/key rotation, protected trust recovery, download/control fairness and real byte progress. Optional explicit canary choice and application-health gates require documented criteria. An operator override must not erase a failed/unknown result.
+5. **Long-term observability:** aggregates/coverage/version anchors, measured storage/load, backup/retention fairness, viewer-only TV credentials. Keep working request editor, selection, red-frame priority, names, read markers, enrollment and separate SSH gateway intact.
+
+Audit 11 does not add a blanket generic retry, force-resume failed waves, new agent shell permissions, production deployment, TLS bypass or mandatory external services. The state machine is bounded, but its full-fleet capacity is not measured here. Read the current validation ledger before release claims.
+
+---
+
+## Earlier completion context (new status above takes precedence)
+
 # Completion plan after Audit 10
 
 Baseline ce602d0. The immutable release publication slice is implemented: verified separate object directories, transactional catalogue/trust/outcome, authenticated release-specific reads, pinned worker download and complete-job publication. Prior gate 2 language calling this wholly unimplemented is superseded by `AUDIT_REVIEW_10_2026-09-14.md`; the rest of that gate remains mandatory.
