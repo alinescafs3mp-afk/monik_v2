@@ -1,0 +1,29 @@
+name: Terminal dependency snapshot
+on:
+  push:
+    paths: ['.github/workflows/terminal-dependencies.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download exact public packages without lifecycle scripts
+        run: |
+          mkdir -p "$RUNNER_TEMP/terminal-deps"
+          cd "$RUNNER_TEMP/terminal-deps"
+          npm pack --ignore-scripts @xterm/xterm@6.0.0
+          npm pack --ignore-scripts @xterm/addon-fit@0.11.0
+          npm view @xterm/xterm@6.0.0 dist --json > xterm-dist.json
+          npm view @xterm/addon-fit@0.11.0 dist --json > fit-dist.json
+          sha256sum *.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terminal-dependencies
+          path: ${{ runner.temp }}/terminal-deps/
+          retention-days: 3
