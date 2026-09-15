@@ -21,7 +21,7 @@ function measure(){if(root.value)capacity.value=serviceColumnCapacity(root.value
 onMounted(()=>{measure();if(typeof ResizeObserver!=='undefined'){observer=new ResizeObserver(measure);if(root.value)observer.observe(root.value);}window.addEventListener('resize',measure);});
 onUnmounted(()=>{observer?.disconnect();window.removeEventListener('resize',measure);});
 watch(()=>props.columns,()=>{expanded.value=false;measure();});
-const visible = computed(() => { const sorted = orderedServices(activeServices.value); const limit=props.columns&&!expanded.value?capacity.value:props.limit;return limit?sorted.slice(0,limit):sorted; });
+const visible = computed(() => { const sorted = orderedServices(activeServices.value,state); const limit=props.columns&&!expanded.value?capacity.value:props.limit;return limit?sorted.slice(0,limit):sorted; });
 </script>
 <template>
   <div ref="root" class="service-list" :class="{'service-list-compact': compact,'service-columns':columns,'service-columns-expanded':expanded}" :style="columns?{'--service-columns':capacity/3}:undefined">

@@ -1,0 +1,86 @@
+{
+  "audit": "17",
+  "date": "2026-09-15",
+  "baseline_commit": "35fccbb0265777b12c2893667ef2fea33e953928",
+  "baseline_tree": "aa0cdf94c9b07a60df715463b863cfe0721052f0",
+  "auditor_result_tree": "5eea57c01f8ffe86c2fbbd2225d2bc9d0bb99332",
+  "full_release_accepted": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.27.0",
+    "node": "v22.23.2",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "auditor": {
+    "browser": "BLOCKED_BEFORE_LOGIN",
+    "native_uid": 65534
+  },
+  "executed": {
+    "package_verify": {"status": "PASS", "files": 48},
+    "preflight": {"status": "PASS", "applied_tree": "5eea57c01f8ffe86c2fbbd2225d2bc9d0bb99332"},
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_tests_and_fuzz_targets": 395,
+      "test_and_seed_results": 555,
+      "tested_packages": 26
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS"},
+    "v15_shuffled_repeats": {"status": "PASS", "count": 10, "packages": 7},
+    "v16_shuffled_repeats": {"status": "PASS", "count": 10, "packages": 3, "filter": "TestV16|TestRolloutFreshnessAndIdentityGate"},
+    "frontend": {"status": "PASS", "node_tests": 158, "tsc": true, "vite": true},
+    "v17_regressions_before": {"status": "FAIL_AS_REQUIRED", "passed": 0, "failed": 7, "baseline": "35fccbb0265777b12c2893667ef2fea33e953928"},
+    "v17_regressions_after": {"status": "PASS", "passed": 7, "failed": 0},
+    "v17_repeats": {"status": "PASS", "runs": 10, "tests_per_run": 21, "failed": 0},
+    "linux_windows_build": {"status": "PASS", "note": "four Linux amd64 and four Windows amd64; installer templates amd64+arm64 rebuilt after commit"},
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "loopback_icmp": {
+      "status": "PASS",
+      "target": "127.0.0.1",
+      "env": "MONIK_NATIVE_PING=1",
+      "not": "systemd AmbientCapabilities or 8.8.8.8"
+    },
+    "browser": {
+      "status": "PASS",
+      "checks": 39,
+      "errors": 0,
+      "includes": [
+        "V17 pointer drag, keyboard, Escape, persisted width and cross-row alignment",
+        "V17 service columns of three; TV preferences isolated; phone reflow; reset restores defaults",
+        "four passive inventory refreshes preserve scroll/focus/draft",
+        "manual Refresh does not blink during background I/O",
+        "history 503 surfaces on charts tab and does not hide the service editor",
+        "single-file installer path",
+        "inactive inventory hide/show",
+        "pending old-check",
+        "404/no-store"
+      ]
+    }
+  },
+  "not_run": {
+    "clean_systemd_install_boot": "no disposable VM/nspawn; first remote Linux machine remains the native gate",
+    "managed_unit_icmp_repair": "repair-icmp-linux.sh was not executed here",
+    "windows_service_boot": "still pending",
+    "physical_tv_full_fleet_soak": "not executed",
+    "protected_complete_restore": "still open",
+    "independent_service_host_recovery": "still fail-closed"
+  },
+  "unchanged": [
+    "production Go, SQLite schema and agent protocol",
+    "saved agent/controller URL and identity",
+    "go.mod/go.sum/package lock versions",
+    "fail-closed operation.retry_selected and service-host self-update"
+  ],
+  "host_extras": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/audit/validation-review17-2026-09-15.json"
+  ]
+}

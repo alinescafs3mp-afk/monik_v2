@@ -449,3 +449,37 @@ code{overflow-wrap:anywhere}
 @media(max-width:420px){.host-line .metric-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
 
 .host-line .metric-grid dd {font-size:1.05rem;white-space:nowrap;}
+
+/* V17: shared measured columns; dragging changes geometry, never browser zoom.
+   Constant borders prevent problem highlighting from shifting aligned tracks. */
+:root .columns-adjustable .host-line,:root .columns-adjustable .tv-machine,
+:root .columns-adjustable .overview-column-header {
+  position:relative; display:grid; grid-template-columns:var(--overview-columns);
+  column-gap:var(--overview-gap); padding-left:var(--overview-inset);padding-right:var(--overview-inset);
+  border:1px solid var(--line); min-width:0; width:100%;
+}
+.overview-column-header {padding-top:.45rem;padding-bottom:.45rem;align-items:center;border-color:transparent;color:var(--muted);font-size:.8rem;}
+.overview-column-header>span {min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.columns-adjustable .host-line {align-items:start;row-gap:.4rem;}
+.columns-adjustable .host-line .metric-grid {display:contents;}
+.columns-adjustable .host-line .metric-grid>div {border:0;padding:0;min-width:0;}
+.columns-adjustable .host-line .host-service-cell,.columns-adjustable .host-line .host-line-actions {grid-column:auto;grid-row:auto;}
+.columns-adjustable .host-line .metric-grid dd,.columns-adjustable .tv-metric>strong {font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere;}
+.columns-adjustable .metric-grid small,.columns-adjustable .tv-metric>small {white-space:normal;overflow-wrap:anywhere;}
+.columns-adjustable .host-card.has-problem,.columns-adjustable .tv-machine.has-problem {border:1px solid var(--crit);box-shadow:inset 3px 0 var(--crit);}
+.column-dividers {position:absolute;inset:0;pointer-events:none;grid-column:auto;grid-row:auto;min-width:0;}
+.column-divider {position:absolute;top:0;bottom:0;width:12px;transform:translateX(-50%);cursor:col-resize;pointer-events:auto;touch-action:none;z-index:2;}
+.column-divider::after {content:'';position:absolute;left:5px;top:15%;bottom:15%;width:1px;background:var(--line);}
+.column-divider:hover::after,.column-divider:focus::after,.is-resizing .column-divider::after {width:2px;background:var(--accent);}
+.column-divider:focus-visible {outline:2px solid var(--focus);outline-offset:-2px;}
+.is-resizing {user-select:none;cursor:col-resize;}
+@media(max-width:700px){:root:not([data-display="tv"]) .overview-column-header {display:none;}}
+@media(max-width:600px){.tv-mode .overview-column-header {display:none;}}
+/* Fit by the actual content width, including a large user font/sidebar. */
+.host-rows:not(.columns-adjustable) .host-line {grid-template-columns:minmax(0,1fr) 2rem;}
+.host-rows:not(.columns-adjustable) .host-line .metric-grid {grid-column:1/-1;grid-row:2;grid-template-columns:repeat(4,minmax(0,1fr));}
+.host-rows:not(.columns-adjustable) .host-line .host-service-cell {grid-column:1/-1;grid-row:3;}
+.host-rows:not(.columns-adjustable) .host-line .host-line-actions {grid-column:2;grid-row:1;}
+.tv-board:not(.columns-adjustable) .tv-machine {grid-template-columns:repeat(4,minmax(0,1fr));}
+.tv-board:not(.columns-adjustable) .tv-identity,.tv-board:not(.columns-adjustable) .tv-services {grid-column:1/-1;}
+@media(max-width:420px){.host-rows:not(.columns-adjustable) .host-line .metric-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}

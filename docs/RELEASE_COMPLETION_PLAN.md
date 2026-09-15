@@ -1,6 +1,6 @@
-# Monik: authoritative completion gates after V16
+# Monik: authoritative completion gates after V17
 
-Baseline reviewed: `c671137d16269e568061a478b12fe3d4f3e7c82f`. V16 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `35fccbb0265777b12c2893667ef2fea33e953928`. V17 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
 
 ## Working features to preserve
 
@@ -12,7 +12,11 @@ V14 separates complete local-socket presence from HTTP identification, reconcile
 
 V15 implements owner-prepared one-file Linux managed installation, exact source/bundle validation, single-use download authorization and evidence-based readiness. The initial V15 auditor had a limited Go 1.23 environment; host integration later passed full source/browser/process checks. V16 has its own full Go 1.27.0 source results. Native systemd/capability inheritance and service boot remain separate unproven gates; do not inflate source/build results into them.
 
-## V16 acceptance priority
+## V17 acceptance priority
+
+Finish actual drag/keyboard geometry acceptance before claiming the resizable interface is ready on a physical device. All rows and the common header share widths; service columns adapt and mobile fallback preserves wide-screen preferences. Mode-local storage, cancelled gestures, fresh telemetry with held order, latest graph-point responses and truthful export status are implemented. Source-only CSS guards and fake layout APIs are not visual evidence. Preserve V16's silent refresh/scroll fixes. No production Go/schema/protocol changes are introduced by V17.
+
+## Previous V16 first-host acceptance priority
 
 The owner has started a real first machine. Do not interpret helper/build PASS as a clean unattended install/boot test. Finish the exact browser/ping pilot corrections before expanding the fleet: stable editor scroll/focus through four background polls, nonblinking manual refresh affordance, green default 2xx/3xx versus configured failures, finite server-anchored freshness, 3-row service columns at real mobile/TV sizes, and actual service-account ICMP replies. V16 source tests and process fixtures are separate from blocked browser/kernel checks. Existing V15 units need explicit capability configuration as well as a worker update; do not re-enroll them. See V16 guide. Historical V15 toolchain limitations do not describe V16: the current audit used Go 1.27.0.
 

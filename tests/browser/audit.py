@@ -22,6 +22,7 @@ from rollout_scenarios import exercise_rollouts
 from navigation_scenarios import exercise_navigation_failure
 from inventory_scenarios import exercise_inventory_profiles
 from seamless_scenarios import exercise_seamless_updates
+from column_scenarios import exercise_columns
 
 
 def run(binary: Path, output: Path) -> None:
@@ -494,6 +495,7 @@ def run(binary: Path, output: Path) -> None:
                     expect(page.get_by_role("heading", name="Состояние машин", exact=True)).to_be_visible()
                     results.append("password change ends browser sessions and new password signs in; agent keys untouched")
                     exercise_inventory_profiles(page, context, base, directory, output, results)
+                    exercise_columns(context, base, output, results)
                     exercise_navigation_failure(context, base, output, results)
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")

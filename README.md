@@ -1,8 +1,12 @@
-## Current audit: V15 one-file Linux installation
+## Current audit: V17
+
+Shared resizable overview columns, keyboard controls, per-device/mode persistence, adaptive service layout and latest-selection history fixes. Read [usage](docs/V17_COLUMNS_RU.md), [actual audit boundaries](docs/AUDIT_REVIEW_17_2026-09-15.md) and [acceptance ledger](ACCEPTANCE_LEDGER.md). Run `scripts/verify-audit17.sh --with-browser` before host acceptance. Agents/schema/protocol are unchanged; preserve deployed state and rebuild matching server/UI and installer templates. Historical notes below are not current acceptance evidence.
+
+## Historical V15 one-file Linux installation
 
 Source for an owner-prepared single executable is implemented. See [the short user flow](docs/V15_ONE_FILE_AGENT_RU.md) and [validation boundaries](docs/AUDIT_REVIEW_15_2026-09-15.md). The auditor ran standalone installer/format tests, not the full Go 1.27 application or native systemd installation. Run `scripts/verify-audit15.sh --with-browser` and a clean-VM managed install/boot before distributing it. Preserve all existing controller/agent identity and trust. Previous audit sections below are historical.
 
-## Current stabilization audit: V14
+## Historical V14 stabilization
 
 Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote connection guide](docs/V14_DISCOVERY_AND_CONNECTION_RU.md) and [acceptance](ACCEPTANCE_LEDGER.md). Current inventory no longer grows forever with closed, unmonitored temporary ports. Expected/selected failures remain visible and history is retained. New external profiles can use the public origin independently of saved LAN routes. Run `scripts/verify-audit14.sh --with-browser` in a permitted environment; it does not install system services or deploy.
 
@@ -10,7 +14,7 @@ Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote 
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: V15 one-file installer audit, PRE-RELEASE, full integration/native acceptance pending.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_14_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: V17 resizable Overview and frontend reliability, PRE-RELEASE, visual/native release acceptance pending.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_17_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
 The corrected new-profile bootstrap URL is `https://46.150.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 
@@ -50,7 +54,7 @@ make dist
 
 Server/UI first, then compatible agents, preserving identities, protected state, keys and the actual selected endpoint. Take a complete protected backup before schema/index changes and test on a populated copy. Do not blindly run setup over an existing enrollment. Use CLI help for the chosen build and paths rather than assuming a sample data path matches your service account.
 
-Linux service-account/ownership provisioning, Windows restricted identities/ACLs, native boot and independent service-host self-update recovery remain incomplete/not accepted. A running old supervisor is not proof a replacement will boot. Worker update and rebind contain tested partial implementations, not a finished fleet rollout. Immutable publication is now implemented; native cohort acceptance, service-host recovery, full controller restore/reconciliation and long-term aggregates remain release blockers. Bounded worker canaries/batches/pause/resume are now implemented; see docs/V11_ROLLOUTS_RU.md. Some corresponding APIs deliberately reject unfinished actions; do not remove guards to make buttons green.
+Linux service-account/ownership provisioning and one-file installer code exist; actual native install/boot must be accepted separately. Windows restricted identities/ACLs and independent service-host self-update recovery remain incomplete/not accepted. A running old supervisor is not proof a replacement will boot. Worker update and rebind contain tested partial implementations, not a finished fleet rollout. Immutable publication is now implemented; native cohort acceptance, service-host recovery, full controller restore/reconciliation and long-term aggregates remain release blockers. Bounded worker canaries/batches/pause/resume are now implemented; see docs/V11_ROLLOUTS_RU.md. Some corresponding APIs deliberately reject unfinished actions; do not remove guards to make buttons green.
 
 No shell through the monitoring agent, host reboot or unrelated application/container control. The separately owner-authorized fixed-target SSH console remains optional and isolated from agent authority. External Telegram/email notifications remain deferred. Keep signing private keys and production runtime state out of this repository and ordinary diagnostics.
 

@@ -1,22 +1,33 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from "vue";
-import { get, submitOp } from "../api";
+import { computed, onUnmounted, ref, watch } from "vue";
+import { get, submitOp, serverNow } from "../api";
 import { usePolling } from "../composables/usePolling";
 import { pingDetail, bytes, number, stateLabel } from "../format";
 import { worstDisk, readPreference, savePreference, matchesMachine, overviewPriority, orderOverview } from "../presentation";
+import {serviceState} from '../display';
 import TVBoard from "../components/TVBoard.vue";
 import {useDisplay} from "../composables/useDisplay";
 const {mode}=useDisplay();
+import {useOverviewColumns} from '../composables/useOverviewColumns';
+import OverviewColumnHeader from '../components/OverviewColumnHeader.vue';
+import ColumnDividers from '../components/ColumnDividers.vue';
+import {keepVisibleOrder} from '../overviewColumns';
 import ServiceList from "../components/ServiceList.vue";
 const emit = defineEmits<{ toast: [string, string?] }>();
 const data = ref<any>(null), problemsOnly = ref(false), pending = ref<string[]>([]), query = ref("");
 const layout = ref(readPreference('monik:overview-layout', 'rows') === 'cards' ? 'cards' : 'rows');
+const rowRoot=ref<HTMLElement|null>(null);
+const columns=useOverviewColumns(rowRoot,()=>mode.value,()=>layout.value==='rows'&&mode.value!=='tv');
+const frozenOrder=ref<string[]>([]);
 const now = ref(Date.now()); let fetchedAt = performance.now();
 const timer = window.setInterval(() => { now.value = Date.now(); }, 2000); onUnmounted(() => clearInterval(timer));
 const { loading, error, refreshing, updated, refresh } = usePolling(async () => { data.value = await get("/api/v1/overview"); fetchedAt = performance.now(); now.value = Date.now(); });
 function fresh(c: any) { void now.value; return c.metrics_fresh && (c.age_seconds || 0) + Math.max(0, performance.now()-fetchedAt)/1000 <= (c.fresh_for_seconds || 20); }
-const cards = computed(() => orderOverview((data.value?.cards || []).filter((c:any)=>c.pinned && (!problemsOnly.value || overviewPriority(c,fresh(c))>0) && matchesMachine(c,query.value)), fresh));
+function priority(c:any){return overviewPriority(c,fresh(c),s=>serviceState(s,serverNow()));}
+const sortedCards = computed(() => orderOverview((data.value?.cards || []).filter((c:any)=>c.pinned && (!problemsOnly.value || priority(c)>0) && matchesMachine(c,query.value)), fresh, s=>serviceState(s,serverNow())));
 
+const cards=computed(()=>keepVisibleOrder(sortedCards.value,frozenOrder.value));
+watch(()=>columns.resizing,value=>{frozenOrder.value=value?cards.value.map((c:any)=>String(c.id)):[];},{flush:'sync'});
 function breach(c: any, metric: string) { return fresh(c) && (c.breaches || []).some((b: any) => b.metric === metric); }
 function chooseLayout(value: string) { layout.value = value; if (!savePreference('monik:overview-layout', value)) emit('toast', 'Вид изменён. Браузер не разрешил сохранить выбор.'); }
 async function pin(c: any) {
@@ -30,14 +41,16 @@ async function pin(c: any) {
   <div class="overview">
     <header v-if="mode!=='tv'" class="bar"><div><h2>Состояние машин</h2></div><button :disabled="refreshing" @click="refresh">{{ refreshing ? 'Обновляем…' : 'Обновить' }}</button></header>
     <div class="bar overview-counts"><span>На связи <b>{{ data?.agents_reporting ?? '…' }}/{{ data?.agents_total ?? '…' }}</b></span><span>Сервисов <b>{{ data?.services ?? '…' }}</b></span><router-link to="/problems?acknowledgement=unread" title="Открытые непрочитанные инциденты; прочитанные остаются в истории">Инцидентов {{ data?.unread_incidents ?? '…' }}</router-link><small v-if="data&&data.actionable_incidents!==data.unread_incidents">Вне обслуживания: {{data.actionable_incidents}}</small><router-link to="/operations?filter=attention">Требуют внимания {{ data?.operations_attention ?? '…' }}</router-link></div>
-    <div class="bar overview-tools" :class="{'tv-tools':mode==='tv'}"><div class="row"><input v-model="query" type="search" placeholder="Машина, сервис или HTTP-код" aria-label="Поиск в обзоре"/><label><input v-model="problemsOnly" type="checkbox"/> Только проблемы</label><router-link to="/machines">Выбрать машины для обзора</router-link></div><div v-if="mode!=='tv'" class="row" role="group" aria-label="Вид обзора"><button :aria-pressed="layout==='rows'" @click="chooseLayout('rows')">Строки</button><button :aria-pressed="layout==='cards'" @click="chooseLayout('cards')">Карточки</button></div></div>
+    <div class="bar overview-tools" :class="{'tv-tools':mode==='tv'}"><div class="row"><input v-model="query" type="search" placeholder="Машина, сервис или HTTP-код" aria-label="Поиск в обзоре"/><label><input v-model="problemsOnly" type="checkbox"/> Только проблемы</label><router-link to="/machines">Выбрать машины для обзора</router-link></div><div v-if="mode!=='tv'" class="row" role="group" aria-label="Вид обзора"><button v-if="layout==='rows'" type="button" @click="columns.reset">Сбросить ширину</button><button :aria-pressed="layout==='rows'" @click="chooseLayout('rows')">Строки</button><button :aria-pressed="layout==='cards'" @click="chooseLayout('cards')">Карточки</button></div></div>
     <p v-if="error" role="alert" class="panel err">{{ error }}. Показанные ранее данные могут быть устаревшими.</p>
     <div v-if="loading" class="skeleton" aria-label="Загрузка машин"/>
     <p v-else-if="data && !data.agents_total" class="panel">Машин пока нет. <router-link to="/add">Подключить первую</router-link></p>
     <p v-else-if="data && !cards.length" class="panel">Нет выбранных машин, соответствующих фильтрам. <router-link to="/machines">Отметьте «Показывать в обзоре» во вкладке «Машины»</router-link>.</p>
-    <TVBoard v-if="mode==='tv'" :cards="cards" :fresh="fresh"/>
-    <div v-else :class="layout==='rows' ? 'host-rows' : 'cards host-cards'">
-      <article v-for="c in cards" :key="c.id" class="card host-card" :class="{ 'host-line':layout==='rows', 'has-problem': overviewPriority(c,fresh(c))>0, 'measurements-stale':!fresh(c) }">
+    <p v-if="columns.notice && mode!=='tv'" class="muted" role="status">{{columns.notice}}</p>
+    <TVBoard v-if="mode==='tv'" :cards="cards" :fresh="fresh" :priority="priority"/>
+    <div v-else ref="rowRoot" :class="[layout==='rows' ? 'host-rows' : 'cards host-cards', {'columns-adjustable':columns.enabled,'is-resizing':columns.resizing}]" :style="columns.style">
+      <OverviewColumnHeader :layout="columns"/>
+      <article v-for="c in cards" :key="c.id" class="card host-card" :class="{ 'host-line':layout==='rows', 'has-problem': priority(c)>0, 'measurements-stale':!fresh(c) }">
         <div class="host-ident">
           <router-link class="card-main" :to="`/machines/${encodeURIComponent(c.id)}`"><h3 class="truncate" :title="c.name">{{ c.name }}</h3><small class="muted">{{ c.os }} / {{ c.arch }}</small></router-link>
           <span class="badge"><span class="dot" :class="fresh(c) ? c.state : (c.state==='ok' ? 'stale' : c.state)"/>{{ stateLabel(c.state==='ok' && !fresh(c) ? 'stale' : c.state) }}</span>
@@ -52,6 +65,7 @@ async function pin(c: any) {
         </dl>
         <div class="host-service-cell"><router-link :to="`/machines/${encodeURIComponent(c.id)}#services`" class="service-heading">Выбрано сервисов {{ c.services?.length || 0 }}/{{c.services_total||0}}</router-link><p v-if="!c.services?.length" class="muted service-empty">Отметьте сервисы для обзора во вкладке «Сервисы».</p><small v-if="c.unselected_service_problems" class="err">Проблем вне выбранных: {{c.unselected_service_problems}}</small><ServiceList v-if="c.services?.length" :services="c.services || []" :limit="layout==='rows' ? undefined : 4" :columns="layout==='rows'" :compact="layout==='rows'"/><router-link v-if="layout==='cards' && c.services?.length > 4" :to="`/machines/${encodeURIComponent(c.id)}#services`">Все сервисы →</router-link></div>
         <div class="host-line-actions"><router-link :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`" title="Открыть SSH-консоль">⌘</router-link><button :disabled="pending.includes(c.id)" :aria-label="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" :title="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" @click="pin(c)"><span aria-hidden="true">{{ pending.includes(c.id) ? '…' : c.pinned ? '★' : '☆' }}</span></button><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`" title="Графики и параметры">↗</router-link></div>
+        <ColumnDividers :layout="columns"/>
       </article>
     </div>
     <p v-if="mode!=='tv'" class="muted"><small>{{ cards.length }} машин показано · {{ updated ? `Данные получены ${updated.toLocaleTimeString()}` : 'Ожидаем данные сервера' }}. Ошибки сервисов показаны первыми.</small></p>

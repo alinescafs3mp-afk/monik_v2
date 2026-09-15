@@ -29,9 +29,11 @@ async function configureService(id:string){
  await router.replace({query:{...route.query,service:id},hash:'#check-editor'});
 }
 const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;
-let generation=0;
+let generation=0, pointGeneration=0;
+const pointLoading=ref(false);
 async function load() {
  const ticket=++generation,id=String(route.params.id),historical=mode.value==='history';
+ const pointTicket=pointGeneration,pointCursor=cursor.value;
  const to=historical?new Date(end.value):new Date();if(!Number.isFinite(to.getTime()))throw new Error('Укажите корректные дату и время');
  const from=new Date(to.getTime()-hours.value*3600000),q=new URLSearchParams({agent_id:id,from:from.toISOString(),to:to.toISOString()});
  const current=()=>ticket===generation&&id===String(route.params.id);
@@ -42,27 +44,40 @@ async function load() {
  const [d,h,p]=await Promise.allSettled([inventory,needHistory?get(`/api/v1/history/series?${q}`):Promise.resolve(history.value),historical&&needHistory?get(`/api/v1/history/point?${new URLSearchParams({agent_id:id,at:cursor.value || to.toISOString()})}`):Promise.resolve(null)]);
  if(!current())return;
  if(d.status==='rejected')throw d.reason;
- history.value=h.status==='fulfilled'?h.value:null;point.value=p.status==='fulfilled'?p.value:null;
- historyError.value=[h,p].filter(v=>v.status==='rejected').map(v=>(v as PromiseRejectedResult).reason?.message||'Не удалось прочитать историю').join('; ');
+ history.value=h.status==='fulfilled'?h.value:null;
+ if(pointTicket===pointGeneration && pointCursor===cursor.value && !pointLoading.value)point.value=p.status==='fulfilled'?p.value:null;
+ historyError.value=[h,...(pointTicket===pointGeneration&&pointCursor===cursor.value?[p]:[])].filter(v=>v.status==='rejected').map(v=>(v as PromiseRejectedResult).reason?.message||'Не удалось прочитать историю').join('; ');
  if(!historical&&!endEditing.value)end.value=localDateValue(to);
 }
 const {loading,refreshing,error,updated,refresh}=usePolling(load,()=>mode.value==='live');
-watch([hours,mode,()=>route.params.id],(v,old)=>{++generation; exportURL.value='';if(v[0]!==old[0]||v[2]!==old[2])cursor.value='';if(v[2]!==old[2]){detail.value=null;history.value=null;point.value=null;}void refresh();});
+watch([hours,mode,()=>route.params.id],(v,old)=>{++generation;++pointGeneration;pointLoading.value=false; exportURL.value='';if(v[0]!==old[0]||v[2]!==old[2])cursor.value='';if(v[2]!==old[2]){detail.value=null;history.value=null;point.value=null;}void refresh();},{flush:'sync'});
 watch(tab,value=>{if(value==='summary')void refresh();});
 const host=computed(()=>mode.value==='history'?point.value?.host:detail.value?.host);
 const rows=computed<any[]>(()=>history.value?.host || []);
 const secretName=ref(''); const secretHeader=ref('Authorization'); const secretValue=ref('');
+watch(()=>route.params.id,()=>{secretName.value='';secretValue.value='';secretHeader.value='Authorization';},{flush:'sync'});
 function series(key:string,divisor=1){return rows.value.map(p=>({t:p.observed_at,v:finite(p[key])?p[key]/divisor:null,min:finite(p.min?.[key])?p.min[key]/divisor:undefined,max:finite(p.max?.[key])?p.max[key]/divisor:undefined}));}
 const diskMounts=computed<string[]>(()=>[...new Set(rows.value.flatMap(p=>(p.payload?.disks || []).map((d:any)=>d.mount)))]);
 const sensors=computed<string[]>(()=>[...new Set(rows.value.flatMap(p=>(p.payload?.temperatures || []).map((t:any)=>`${t.source}: ${t.label}`)))]);
 function diskSeries(mount:string){return series('disk:'+mount);}
 function tempSeries(sensor:string){return series('temperature:'+sensor);}
-async function fixed(){if(!Number.isFinite(Date.parse(end.value))){error.value='Укажите корректную дату';return;}cursor.value='';mode.value='history';await router.replace({query:{hours:hours.value,at:new Date(end.value).toISOString()}});await refresh();}
-async function select(at:string){if(mode.value==='live')end.value=localDateValue(new Date());mode.value='history';cursor.value=at;try{point.value=await get(`/api/v1/history/point?${new URLSearchParams({agent_id:String(route.params.id),at})}`);}catch(e){error.value=(e as Error).message;}}
+async function fixed(){++generation;++pointGeneration;pointLoading.value=false;point.value=null;if(!Number.isFinite(Date.parse(end.value))){error.value='Укажите корректную дату';return;}cursor.value='';mode.value='history';await router.replace({query:{hours:hours.value,at:new Date(end.value).toISOString()}});await refresh();}
+async function select(at:string){
+ if(!Number.isFinite(Date.parse(at))){error.value='Укажите корректную дату';return;}
+ if(mode.value==='live')end.value=localDateValue(new Date());
+ mode.value='history';cursor.value=at;
+ // The mode watcher is synchronous so its invalidation precedes this ticket.
+ const ticket=++pointGeneration,id=String(route.params.id);
+ point.value=null;pointLoading.value=true;error.value='';
+ const current=()=>ticket===pointGeneration&&id===String(route.params.id)&&mode.value==='history'&&cursor.value===at;
+ try{const value=await get(`/api/v1/history/point?${new URLSearchParams({agent_id:id,at})}`);if(current())point.value=value;}
+ catch(e){if(current())error.value=(e as Error).message;}
+ finally{if(current())pointLoading.value=false;}
+}
 async function exportRange(){
  if(!history.value?.from || !history.value?.to || pending.value)return;
  pending.value='history.export'; exportURL.value='';
- try{const r=await submitOp('history.export',{agent_id:String(route.params.id),from:history.value.from,to:history.value.to});exportURL.value=exportDownload(r.op)||'';emit('toast','Экспорт выбранного интервала подготовлен. В файле только реально сохранённые измерения.',`/operations/${r.op?.operation_id}`);}
+ try{const r=await submitOp('history.export',{agent_id:String(route.params.id),from:history.value.from,to:history.value.to});exportURL.value=exportDownload(r.op)||'';emit('toast',exportURL.value?'Экспорт выбранного интервала подготовлен. В файле только реально сохранённые измерения.':'Запрос экспорта сохранён. Файл пока не подтверждён; результат доступен в операции.',`/operations/${r.op?.operation_id}`);}
  catch{/* Global operation feedback handles errors. */}finally{pending.value='';}
 }
 async function action(name:string, params:Record<string,unknown>={}){pending.value=name;try{const r=await submitOp(name,params,[String(route.params.id)]);emit('toast','Операция сохранена. Ждём результат агента.',`/operations/${r.op?.operation_id}`);}finally{pending.value='';}}
@@ -86,7 +101,7 @@ async function replaceSecret(){
    <p v-if="historyError" class="panel err" role="alert">История: {{historyError}}. Настройки текущей машины доступны. <button @click="refresh">Повторить историю</button></p>
    <TimeBar v-model:mode="mode" v-model:hours="hours"/><div class="row"><button :disabled="!!pending||!history" @click="exportRange">{{ pending==='history.export'?'Готовим экспорт…':'Экспорт интервала в JSON' }}</button><a v-if="exportURL" :href="exportURL" download>Скачать экспорт</a></div>
    <form class="row time-form" @submit.prevent="fixed"><label>Конец интервала <input v-model="end" type="datetime-local" step="1" required @focus="endEditing=true" @blur="endEditing=false"/></label><button :disabled="refreshing">Открыть дату</button><small class="muted">{{ zone }} · {{ mode==='live'?'Окно обновляется':'HISTORY: окно закреплено' }}</small></form>
-   <p v-if="mode==='history'" class="panel data-warning">Срез {{ cursor || end }}. {{ point?.found ? `Измерено ${point.age_seconds.toFixed(0)} с до выбранного момента` : 'Измерений нет' }}. {{ point?.fresh ? '' : 'Нет свежего подтверждения состояния в этой точке.' }} Сведения об агенте и список сервисов ниже относятся к текущему инвентарю, не к прошлому.</p>
+   <p v-if="mode==='history'" class="panel data-warning">Срез {{ cursor || end }}. {{ pointLoading ? 'Загружаем выбранный срез…' : point?.found ? `Измерено ${point.age_seconds.toFixed(0)} с до выбранного момента` : 'Измерений нет' }}. {{ point?.fresh ? '' : 'Нет свежего подтверждения состояния в этой точке.' }} Сведения об агенте и список сервисов ниже относятся к текущему инвентарю, не к прошлому.</p>
    </template>
    <section v-if="tab==='summary'" class="panel">
     <dl class="metric-grid"><div><dt>CPU</dt><dd>{{ number(host?.cpu_percent,'%',1) }}</dd><small>{{ host?.cpu_model }}</small></div><div><dt>RAM</dt><dd>{{ bytes(host?.ram_used_bytes) }}</dd><small>Всего {{ bytes(host?.ram_total_bytes) }} · доступно {{ bytes(host?.ram_available_bytes) }}</small></div><div><dt>Средний ping</dt><dd>{{ number(host?.ping?.mean_ms,' мс',1) }}</dd><small>Потери {{ number(host?.ping?.loss_percent,'%') }} · {{ host?.ping?.target || '8.8.8.8' }}</small><small v-if="pingDetail(host?.ping)">{{pingDetail(host?.ping)}}</small></div><div><dt>Uptime машины</dt><dd>{{ number(host?.system_uptime_seconds ? host.system_uptime_seconds/3600 : host?.system_uptime_seconds,' ч',1) }}</dd></div></dl>
