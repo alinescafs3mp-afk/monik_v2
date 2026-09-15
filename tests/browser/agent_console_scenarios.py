@@ -1,5 +1,6 @@
 """V18 real browser controls against disposable loopback server; no live SSH."""
 from playwright.sync_api import expect
+from tv_profile_scenarios import settled
 
 def exercise_agent_console_and_remote(context, base, output, results):
     page=context.new_page()
@@ -8,7 +9,9 @@ def exercise_agent_console_and_remote(context, base, output, results):
         page.goto(base+'/?display=tv',wait_until='domcontentloaded')
         button=page.get_by_role('button',name='Ширина колонок · пульт',exact=True)
         expect(button).to_be_visible()
+        expect(page.get_by_label('Плотность ТВ',exact=True)).to_be_enabled()
         page.get_by_role('button',name='Сбросить ширину',exact=True).click()
+        settled(page)
         button.click()
         pad=page.get_by_role('group',name='Настройка ширины с пульта',exact=True)
         expect(pad).to_be_focused()
@@ -27,6 +30,7 @@ def exercise_agent_console_and_remote(context, base, output, results):
             changed=before-16
         expect(handle).to_have_attribute('aria-valuenow',str(changed))
         pad.press('Enter')
+        settled(page)
         page.reload(wait_until='domcontentloaded')
         expect(handle).to_have_attribute('aria-valuenow',str(changed))
         button.click();pad.press('ArrowLeft' if grow else 'ArrowRight');pad.press('Escape')
@@ -35,6 +39,7 @@ def exercise_agent_console_and_remote(context, base, output, results):
         button.click();minus=pad.get_by_role('button',name='− Уже',exact=True);minus.focus();minus.press('Enter')
         expect(handle).to_have_attribute('aria-valuenow',str(changed-8))
         pad.get_by_role('button',name='Применить',exact=True).click()
+        settled(page)
         link=page.locator('.tv-machine-actions').first.get_by_role('link',name='Консоль',exact=False)
         expect(link).to_be_visible()
         rect=link.bounding_box();assert rect and rect['x']>=0 and rect['x']+rect['width']<=961

@@ -1,0 +1,74 @@
+{
+  "audit": "19",
+  "date": "2026-09-15",
+  "baseline_commit": "776076273d677046b3a765e30d781f37b44957d5",
+  "baseline_tree": "61f3e23e62937654f65273aabb4f9ca53e288f4f",
+  "auditor_result_tree": "bd8d7e3061d2b0d6e1a704a14cb8bb7536f23bc6",
+  "full_release_accepted": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.27.0",
+    "node": "v22.23.2",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "auditor": {
+    "browser": "BLOCKED_BEFORE_LOGIN",
+    "native_uid": 65534
+  },
+  "executed": {
+    "package_verify": {"status": "PASS", "files": 50},
+    "preflight": {"status": "PASS", "applied_tree": "bd8d7e3061d2b0d6e1a704a14cb8bb7536f23bc6"},
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_tests_and_fuzz_targets": 442,
+      "test_and_seed_results": 628,
+      "tested_packages": 27
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS"},
+    "frontend": {"status": "PASS", "node_tests": 185, "tsc": true, "vite": true},
+    "v19_repeats": {"status": "PASS", "go_count": 5, "filter": "TestV19", "packages": 2, "node_runs": 10, "node_tests_each": 36},
+    "linux_windows_build": {"status": "PASS", "note": "four Linux amd64 and four Windows amd64; installer templates amd64+arm64 rebuilt after commit"},
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "browser": {
+      "status": "PASS",
+      "passed": 45,
+      "includes": [
+        "two independent cookie contexts share TV geometry, density and autoplay",
+        "lost POST acknowledgement reconciled by request identity with one write",
+        "five-second fallback without SSE",
+        "stale concurrent edit is a conflict, not last-write-wins",
+        "display mode stays local; 390px TV viewport does not overflow"
+      ],
+      "not": "physical TV/Yandex"
+    }
+  },
+  "host_extras": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/history/ACCEPTANCE_LEDGER_THROUGH_V18.md",
+    "docs/history/IMPLEMENTATION_STATUS_THROUGH_V18.md",
+    "docs/audit/validation-review19-2026-09-15.json",
+    "web/src/styles.css wrap for 390px TV profile/pager",
+    "web/src/components/TVProfilePanel.vue min-width constraint"
+  ],
+  "not_run": [
+    "MONIK_V18_UID_FIXTURE",
+    "native systemd/Windows SCM boot",
+    "physical TV / Yandex",
+    "24h soak / 50-agent capacity",
+    "independent service-host self-update",
+    "protected full restore"
+  ],
+  "fail_closed_preserved": [
+    "operation.retry_selected",
+    "independent service-host self-update"
+  ]
+}

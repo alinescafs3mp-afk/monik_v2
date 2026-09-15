@@ -23,6 +23,7 @@ from navigation_scenarios import exercise_navigation_failure
 from inventory_scenarios import exercise_inventory_profiles
 from seamless_scenarios import exercise_seamless_updates
 from column_scenarios import exercise_columns
+from tv_profile_scenarios import exercise_tv_profile, settled
 from agent_console_scenarios import exercise_agent_console_and_remote
 
 
@@ -432,6 +433,7 @@ def run(binary: Path, output: Path) -> None:
                     assert max(boxes)<540, boxes
                     page.screenshot(path=str(output/"overview-tv-960.png"),full_page=True)
                     page.get_by_label("Плотность ТВ",exact=True).select_option("12")
+                    settled(page)
                     page.reload(wait_until="domcontentloaded")
                     expect(page.get_by_label("Режим экрана",exact=True)).to_have_value("tv")
                     expect(page.get_by_label("Плотность ТВ",exact=True)).to_have_value("12")
@@ -441,7 +443,7 @@ def run(binary: Path, output: Path) -> None:
                     page.reload(wait_until="domcontentloaded")
                     expect(page.get_by_label("Режим экрана",exact=True)).to_have_value("auto")
                     page.set_viewport_size({"width":1440,"height":1000})
-                    results.append("two machines fit a 960x540 TV viewport without browser zoom; device density persists")
+                    results.append("two machines fit a 960x540 TV viewport without browser zoom; shared TV density persists")
                     page.goto(base + "/services", wait_until="domcontentloaded")
                     page.locator(".service-group-header").filter(has_text="Audit host").click()
                     page.get_by_role("button", name="Переименовать: API", exact=True).click()
@@ -500,6 +502,7 @@ def run(binary: Path, output: Path) -> None:
                     exercise_inventory_profiles(page, context, base, directory, output, results)
                     exercise_columns(context, base, output, results)
                     exercise_agent_console_and_remote(context, base, output, results)
+                    exercise_tv_profile(browser, context, base, {**access, "password":new_password}, output, results)
                     exercise_navigation_failure(context, base, output, results)
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")

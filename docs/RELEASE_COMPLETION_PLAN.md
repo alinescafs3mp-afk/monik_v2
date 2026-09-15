@@ -1,6 +1,6 @@
-# Monik: authoritative completion gates after V18
+# Monik: authoritative completion gates after V19
 
-Baseline reviewed: `afdbbd2573b68d99eb3115032f62f6b33681a5cd`. V18 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `776076273d677046b3a765e30d781f37b44957d5`. V19 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
 
 ## Working features to preserve
 
@@ -12,6 +12,12 @@ V14 separates complete local-socket presence from HTTP identification, reconcile
 
 V15 implements owner-prepared one-file Linux managed installation, exact source/bundle validation, single-use download authorization and evidence-based readiness. The initial V15 auditor had a limited Go 1.23 environment; host integration later passed full source/browser/process checks. V16 has its own full Go 1.27.0 source results. Native systemd/capability inheritance and service boot remain separate unproven gates; do not inflate source/build results into them.
 
+## V19 shared TV acceptance
+
+TV widths, density and autoplay now use one bounded controller profile with versioned saves, atomic audit/SSE and stale-write rejection. Ordinary/compact preferences, current display mode and all authentication/console state remain local/separate. Startup/reconnect never publish cached settings; the first shared profile requires explicit publication or a completed user edit. Lost responses reconcile without a POST replay queue. Adapt to each viewport rather than promise identical physical pixel geometry.
+
+The corrected V19 core is covered by actual HTTPS/SQLite dual-session SSE tests and Vue lifecycle tests. Require the new two-context Playwright scenarios and physical-TV check before visual acceptance. This does not create a read-only TV credential, extend console privileges, complete restore, or close any native service/boot gate below.
+
 ## V18 network-console acceptance priority
 
 The owner explicitly authorized an agent terminal. Implemented: separate outbound WSS, ephemeral nonreplayed input, recent-owner/Cookie/CSRF/channel-bound ticket, per-machine relay, local root-approved systemd Unix socket, separate non-root monik-console UID, fixed PTY shell, no capabilities/sudo, bounded resources and disconnect/revocation handling. Direct pinned SSH remains explicit and now includes protected owner configuration. This is NOT an arbitrary admin/root shell, ConPTY support, a generic durable runner or full isolation from a compromised controller/kernel.
@@ -22,7 +28,7 @@ The TV remote has explicit OK/arrow mode plus native +/- buttons. Real Playwrigh
 
 ## V17 acceptance history
 
-Finish actual drag/keyboard geometry acceptance before claiming the resizable interface is ready on a physical device. All rows and the common header share widths; service columns adapt and mobile fallback preserves wide-screen preferences. Mode-local storage, cancelled gestures, fresh telemetry with held order, latest graph-point responses and truthful export status are implemented. Source-only CSS guards and fake layout APIs are not visual evidence. Preserve V16's silent refresh/scroll fixes. V17 itself did not change production Go/schema/protocol; V18 adds the explicitly authorized isolated console channel.
+Finish actual drag/keyboard geometry acceptance before claiming the resizable interface is ready on a physical device. All rows and the common header share widths; service columns adapt and mobile fallback preserves wide-screen preferences. Mode-local storage (TV preferences superseded by the V19 shared profile), cancelled gestures, fresh telemetry with held order, latest graph-point responses and truthful export status are implemented. Source-only CSS guards and fake layout APIs are not visual evidence. Preserve V16's silent refresh/scroll fixes. V17 itself did not change production Go/schema/protocol; V18 adds the explicitly authorized isolated console channel.
 
 ## Previous V16 first-host acceptance priority
 

@@ -1,8 +1,9 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from 'vue';
 import { columnDefaults, columnMinima, decodeColumns, fitColumns, moveColumn, type ColumnMode } from '../overviewColumns';
 
-/** Shared by every row on this surface. No server/configuration mutation. */
-export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => ColumnMode, active: () => boolean = () => true) {
+export type SharedColumns = {widths:()=>number[];begin:()=>boolean;commit:(w:number[])=>void;cancel:()=>void;reset:()=>void};
+/** One grid for every row. Optional shared presentation persistence for TV. */
+export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => ColumnMode, active: () => boolean = () => true, shared?: SharedColumns) {
   const preferred = ref<number[]>(columnDefaults(mode()));
   const remoteIndex = ref(-1);
   let remoteSaved: number[] | null = null;
@@ -24,17 +25,19 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
   const positions = computed(() => enabled.value ? widths.value!.slice(0, 5).map((_, i) =>
     inset.value + widths.value!.slice(0, i + 1).reduce((a, b) => a + b, 0) + gap.value * (i + .5)) : []);
   function read() {
+    if(shared){preferred.value=[...shared.widths()];return;}
     try { preferred.value = decodeColumns(localStorage.getItem(storageKey()), mode()); }
     catch { preferred.value = columnDefaults(mode()); notice.value = 'Ширина действует в этой вкладке: браузер не разрешил чтение настроек.'; }
   }
   function save() {
+    if(shared){shared.commit([...preferred.value]);return;}
     try { localStorage.setItem(storageKey(), JSON.stringify({ version: 1, widths: preferred.value })); notice.value = ''; }
     catch { notice.value = 'Ширина изменена, но не сохранена: хранилище браузера недоступно.'; }
   }
   function end(cancel = false) {
     const session = drag; if (!session) return;
     drag = null;
-    if (cancel) preferred.value = session.saved; else save();
+    if (cancel) {preferred.value = session.saved;shared?.cancel();} else save();
     resizing.value = remoteIndex.value >= 0;
     if (session.element.hasPointerCapture?.(session.pointer)) session.element.releasePointerCapture(session.pointer);
   }
@@ -55,6 +58,7 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
     element.focus({ preventScroll: true });
     try { element.setPointerCapture(event.pointerId); }
     catch { notice.value = 'Перетаскивание недоступно. Используйте стрелки влево/вправо на разделителе.'; return; }
+    if(shared&&!shared.begin()){if(element.hasPointerCapture?.(event.pointerId))element.releasePointerCapture(event.pointerId);return;}
     drag = { pointer: event.pointerId, start: event.clientX, widths: [...widths.value!], saved: [...preferred.value], index, element };
     resizing.value = true;
   }
@@ -66,13 +70,13 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
   function finish(event: PointerEvent, cancel = false) { if (drag?.pointer === event.pointerId) end(cancel); }
   function remoteEnd(cancel = false) {
     if (remoteIndex.value < 0) return;
-    if (cancel && remoteSaved) preferred.value = remoteSaved; else save();
+    if (cancel && remoteSaved) {preferred.value = remoteSaved;shared?.cancel();} else save();
     remoteIndex.value = -1; remoteSaved = null; resizing.value = !!drag;
   }
   function remoteBegin(index = 0) {
     if (!enabled.value) return;
     end(true);
-    if (remoteIndex.value < 0) remoteSaved = [...preferred.value];
+    if (remoteIndex.value < 0) {if(shared&&!shared.begin())return;remoteSaved = [...preferred.value];}
     remoteIndex.value = Math.max(0,Math.min(4,index)); resizing.value = true;
   }
   function remoteSelect(delta: number) { if (remoteIndex.value >= 0) remoteIndex.value = (remoteIndex.value + delta + 5) % 5; }
@@ -92,7 +96,7 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
       else remoteEnd(true);
     }
   }
-  function reset() { end(true); remoteEnd(true); preferred.value = columnDefaults(mode()); save(); }
+  function reset() { end(true); remoteEnd(true); if(shared){shared.reset();return;} preferred.value = columnDefaults(mode()); save(); }
   function key(event: KeyboardEvent, index: number) {
     if (remoteIndex.value >= 0) { remoteKey(event); return; }
     if (['Enter','Select','OK',' '].includes(event.key)) { event.preventDefault(); event.stopPropagation?.(); if(!event.repeat) remoteBegin(index); return; }
@@ -103,6 +107,7 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
       event.key === 'Home' ? minimum.value[index] - w[index] : event.key === 'End' ? w[index + 1] - minimum.value[index + 1] : null;
     if (delta === null) return;
     event.preventDefault();
+    if(shared&&!shared.begin())return;
     preferred.value = moveColumn(w, minimum.value, index, delta).slice(0, 5).map(n => n / font.value); save();
   }
   const cancel = () => { end(true); remoteEnd(true); };
@@ -114,6 +119,7 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
   const hidden = () => { if (document.hidden) cancel(); };
   watch([mode, active], () => { cancel(); read(); measure(); }, { flush: 'sync' });
   watch(root, (el, old) => { if (old) observer?.unobserve(old); if (el) observer?.observe(el); measure(); });
+  if(shared){watch(shared.widths,()=>{if(!resizing.value)read();});watch(resizing,value=>{if(!value)read();});}
   onMounted(() => {
     read(); measure(); window.addEventListener('resize', measure); window.addEventListener('blur', cancel);
     document.addEventListener('visibilitychange', hidden);

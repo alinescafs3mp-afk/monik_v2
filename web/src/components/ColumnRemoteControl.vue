@@ -2,12 +2,12 @@
 import { columnLabels } from '../overviewColumns';
 import type { OverviewColumns } from '../composables/useOverviewColumns';
 import {nextTick,ref,watch} from 'vue';
-const props=defineProps<{layout:OverviewColumns}>();
+const props=defineProps<{layout:OverviewColumns;disabled?:boolean}>();
 const entry=ref<HTMLButtonElement|null>(null),pad=ref<HTMLElement|null>(null);
 watch(()=>props.layout.remoteIndex,async(value,old)=>{await nextTick();if(value>=0&&old<0)pad.value?.focus({preventScroll:true});else if(value<0&&old>=0)entry.value?.focus({preventScroll:true});});
 </script>
 <template><div class="remote-column-controls">
- <button ref="entry" v-if="layout.remoteIndex<0" type="button" :disabled="!layout.enabled" @click="layout.remoteBegin()">Ширина колонок · пульт</button>
+ <button ref="entry" v-if="layout.remoteIndex<0" type="button" :disabled="disabled||!layout.enabled" @click="layout.remoteBegin()">Ширина колонок · пульт</button>
  <div v-else ref="pad" tabindex="0" class="remote-column-pad" role="group" aria-label="Настройка ширины с пульта" @keydown="layout.remoteKey" @contextmenu.prevent>
   <b role="status">{{columnLabels[layout.remoteIndex]}}: {{Math.round(layout.widths?.[layout.remoteIndex]||0)}} px</b>
   <span>← → ширина · ↑ ↓ граница · OK сохранить · Назад отменить</span>

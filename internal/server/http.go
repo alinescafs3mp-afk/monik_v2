@@ -48,6 +48,8 @@ func (a *App) routes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/v1/me", a.needAuth(a.handleMe))
 	mux.HandleFunc("GET /api/v1/overview", a.needAuth(a.handleOverview))
+	mux.HandleFunc("GET /api/v1/display/tv", a.needAuth(a.handleTVProfile))
+	mux.HandleFunc("POST /api/v1/display/tv", a.needAuth(a.handleTVProfileSave))
 	mux.HandleFunc("GET /api/v1/agents", a.needAuth(a.handleAgents))
 	mux.HandleFunc("GET /api/v1/agents/{id}", a.needAuth(a.handleAgent))
 	mux.HandleFunc("GET /api/v1/services", a.needAuth(a.handleServices))

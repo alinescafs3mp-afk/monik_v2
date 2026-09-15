@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import {useTVProfile} from '../composables/useTVProfile';
+import TVProfilePanel from './TVProfilePanel.vue';
+import {columnDefaults} from '../overviewColumns';
 import {useOverviewColumns} from '../composables/useOverviewColumns';
 import OverviewColumnHeader from './OverviewColumnHeader.vue';
 import ColumnRemoteControl from './ColumnRemoteControl.vue';
@@ -10,8 +13,10 @@ import {pingDetail,bytes,number,stateLabel} from '../format';
 import {worstDisk} from '../presentation';
 import {boardCapacity,pageSlice} from '../display';
 const props=defineProps<{cards:any[];fresh:(c:any)=>boolean;priority:(c:any)=>number}>();
-const board=ref<HTMLElement|null>(null),size=ref(4),page=ref(0),autoplay=ref(false),hovered=ref(false),now=ref(Date.now());
-const columns=useOverviewColumns(board,()=> 'tv');
+const board=ref<HTMLElement|null>(null),size=ref(4),page=ref(0),hovered=ref(false),now=ref(Date.now());
+const tv=useTVProfile();
+const autoplay=computed({get:()=>tv.state.value.autoplay,set:value=>{void tv.sync.update({autoplay:value});}});
+const columns=useOverviewColumns(board,()=> 'tv',()=>true,{widths:()=>tv.state.value.widths,begin:tv.sync.begin,commit:widths=>{void tv.sync.update({widths:widths.map((n,i)=>Math.max([6.5,3,5,4.5,5][i],Math.round(n*1000000)/1000000))});},cancel:tv.sync.cancel,reset:()=>{void tv.sync.update({widths:columnDefaults('tv')});}});
 const frozenOrder=ref<string[]>([]);let pendingProblemJump=false;
 const screen=computed(()=>pageSlice(keepVisibleOrder(props.cards,frozenOrder.value),page.value,size.value));
 watch(()=>columns.resizing,value=>{frozenOrder.value=value?props.cards.map(c=>String(c.id)):[];if(!value&&pendingProblemJump){pendingProblemJump=false;page.value=0;lastPage=Date.now();}},{flush:'sync'});
@@ -27,7 +32,7 @@ function measure(){
   largestRow=Math.max(largestRow,...heights);const rowHeight=largestRow||84;
   const head=el.querySelector('.tv-columns')?.getBoundingClientRect().height||24;
   const occupied=(selector:string)=>{const node=el.querySelector<HTMLElement>(selector);if(!node)return 0;const style=getComputedStyle(node);return node.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);};
-  const footer=occupied('.tv-pager')+occupied('.column-notice')+8;
+  const footer=occupied('.tv-pager')+occupied('.column-notice')+occupied('.tv-profile-panel')+8;
   size.value=boardCapacity(window.innerHeight,el.getBoundingClientRect().top+head,rowHeight+4,footer);
  });
 }
@@ -65,5 +70,6 @@ onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconne
   <ColumnDividers :layout="columns"/>
  </article>
  <p v-if="columns.notice" class="muted column-notice" role="status">{{columns.notice}}</p>
- <footer class="tv-pager"><ColumnRemoteControl :layout="columns"/><button type="button" @click="columns.reset">Сбросить ширину</button><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" type="checkbox"/> Листать каждые 20 с</label></footer>
+ <TVProfilePanel/>
+ <footer class="tv-pager"><ColumnRemoteControl :layout="columns" :disabled="!tv.sync.canChange()"/><button type="button" :disabled="!tv.sync.canChange()" @click="columns.reset">Сбросить ширину</button><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" :disabled="!tv.sync.canChange()||tv.state.phase==='editing'" type="checkbox"/> Листать каждые 20 с</label></footer>
 </section></template>

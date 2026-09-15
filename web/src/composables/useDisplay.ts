@@ -1,9 +1,12 @@
-import {ref,watchEffect} from 'vue';
+import {computed,ref,watchEffect} from 'vue';
+import {useTVProfile} from './useTVProfile';
 import {readPreference,savePreference} from '../presentation';
 import {displayMode,tvDensity,type DisplayMode} from '../display';
 const query=new URLSearchParams(window.location.search).get('display');
 const mode=ref<DisplayMode>(displayMode(query||readPreference('monik:display','auto')));
-const density=ref(tvDensity(readPreference('monik:tv-font:v8','10'))),notice=ref('');
+const notice=ref('');
+const tv=useTVProfile();
+const density=computed(()=>tv.state.value.density);
 if(query && ['auto','compact','tv'].includes(query))savePreference('monik:display',mode.value);
 watchEffect(()=>{
  document.documentElement.dataset.display=mode.value;
@@ -15,5 +18,5 @@ function choose(value:string){
  // An explicit deep link must not undo a subsequent user choice on reload.
  try{const url=new URL(window.location.href);if(url.searchParams.has('display')){url.searchParams.set('display',mode.value);window.history.replaceState(window.history.state,'',url);}}catch{/* The in-memory choice remains usable in restricted browsers. */}
 }
-function size(value:string){density.value=tvDensity(value);notice.value=savePreference('monik:tv-font:v8',density.value)?'':'Плотность изменена, но браузер не сохранил выбор.';}
+function size(value:string){void tv.sync.update({density:tvDensity(value)});}
 export function useDisplay(){return{mode,density,notice,choose,size};}

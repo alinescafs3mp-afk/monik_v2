@@ -6,10 +6,14 @@ import { readPreference, savePreference } from "../presentation";
 import DisplayControls from "./DisplayControls.vue";
 import {useDisplay} from "../composables/useDisplay";
 const {mode,notice:displayNotice}=useDisplay();
+import {useTVProfile} from '../composables/useTVProfile';
+const tv=useTVProfile();
 import NavIcon from "./NavIcon.vue";
 
-defineProps<{ me: Record<string, unknown> | null; stream: string }>();
+const props=defineProps<{ me: Record<string, unknown> | null; stream: string }>();
 defineEmits<{ logout: [] }>();
+
+watch(()=>props.me,me=>{if(me?.controller_id&&me?.username)tv.start(String(me.controller_id),String(me.username),me.role==='owner');else tv.stop();},{immediate:true});
 
 const route = useRoute();
 const collapsed = ref(readPreference('monik:sidebar-collapsed', 'false') === 'true');
@@ -77,12 +81,15 @@ function connectSSE() {
   es.onopen = () => {
     conn.value = "live";
     setStream("live");
+    window.dispatchEvent(new Event("monik:display-refresh"));
   };
   es.onerror = () => {
     conn.value = "paused";
     setStream("paused");
   };
   for (const type of ["metrics","discovery","agent","incident","operation","enrollment","preference","resnapshot"]) es.addEventListener(type,()=>window.dispatchEvent(new Event("monik:refresh")));
+  es.addEventListener("display",()=>window.dispatchEvent(new Event("monik:display-refresh")));
+  es.addEventListener("resnapshot",()=>window.dispatchEvent(new Event("monik:display-refresh")));
   es.addEventListener("operation", () => {
     void refreshOps();
   });
@@ -99,6 +106,7 @@ onMounted(() => {
   }, 8000);
 });
 onUnmounted(() => {
+  tv.stop();
   disposed=true;window.removeEventListener("monik:refresh", refreshOps);
   if(media.removeEventListener)media.removeEventListener("change", resizeMenu);else media.removeListener(resizeMenu);
   window.removeEventListener("keydown", escapeMenu);

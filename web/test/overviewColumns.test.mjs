@@ -48,7 +48,7 @@ const hookSrc=await readFile(new URL('../src/composables/useOverviewColumns.ts',
 const vueURL=new URL('../node_modules/vue/dist/vue.runtime.esm-bundler.js',import.meta.url).href;
 const hook=await import(uri(hookSrc.replace("from 'vue'",`from '${vueURL}'`).replace("from '../overviewColumns'",`from '${geometryURL}'`)));
 const renderer=createRenderer({createElement:()=>({}),createText:()=>({}),createComment:()=>({}),setElementText(){},setText(){},parentNode(){},nextSibling(){},insert(){},remove(){},patchProp(){}});
-async function harness(run){
+async function harness(run,options={}){
  const old={};for(const name of ['window','document','localStorage','getComputedStyle','requestAnimationFrame','cancelAnimationFrame','ResizeObserver'])old[name]=globalThis[name];
  const saved=new Map(),listeners=new Map(),frames=new Map();let frame=0,font=16,rect=1300,writes=0,throws=false;
  globalThis.window={innerWidth:1550,addEventListener:(k,fn)=>listeners.set(k,fn),removeEventListener:k=>listeners.delete(k)};
@@ -57,8 +57,8 @@ async function harness(run){
  globalThis.getComputedStyle=()=>({fontSize:String(font)});
  globalThis.requestAnimationFrame=fn=>{frames.set(++frame,fn);return frame;};globalThis.cancelAnimationFrame=id=>frames.delete(id);
  globalThis.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
- let layout;const mode=ref('auto'),active=ref(true),root=ref({getBoundingClientRect:()=>({width:rect})});
- const app=renderer.createApp({setup(){layout=hook.useOverviewColumns(root,()=>mode.value,()=>active.value);return()=>null;}});app.mount({});
+ let layout;const mode=ref(options.mode||'auto'),active=ref(true),root=ref({getBoundingClientRect:()=>({width:rect})});
+ const app=renderer.createApp({setup(){layout=hook.useOverviewColumns(root,()=>mode.value,()=>active.value,options.shared);return()=>null;}});app.mount({});
  const flush=async()=>{for(const [id,fn] of [...frames]){frames.delete(id);fn();}await nextTick();};await flush();
  let captured=null;const element={isConnected:true,focus(){},setPointerCapture:id=>{captured=id;},hasPointerCapture:id=>captured===id,releasePointerCapture(){captured=null;}};
  const event=(x,pointer=1)=>({isPrimary:true,button:0,pointerId:pointer,clientX:x,currentTarget:element,preventDefault(){},stopPropagation(){}});
@@ -132,4 +132,26 @@ test('V18 remote virtual controls, keyCode D-pad and resize cancellation stay bo
 test('V18 TV has native remote-control buttons and a dedicated visible console action',async()=>{
  const tv=await readFile(new URL('../src/components/TVBoard.vue',import.meta.url),'utf8'),pad=await readFile(new URL('../src/components/ColumnRemoteControl.vue',import.meta.url),'utf8');
  assert.match(tv,/ColumnRemoteControl/);assert.match(tv,/tv-machine-actions/);assert.match(pad,/Ширина колонок · пульт/);assert.match(pad,/@click="layout.remoteStep\(-8\)"/);assert.match(pad,/@keydown="layout.remoteKey"/);
+});
+
+
+test('V19 actual Vue shared columns apply remote preferences without publishing or writing local storage',async()=>{
+ const sharedWidths=ref(c.columnDefaults('tv'));let permitted=false,starts=0;const commits=[];
+ const shared={widths:()=>sharedWidths.value,begin:()=>{starts++;return permitted;},commit:w=>{commits.push([...w]);sharedWidths.value=[...w]},cancel(){},reset:()=>{sharedWidths.value=c.columnDefaults('tv')}};
+ await harness(async h=>{
+  const before=[...h.layout.widths];h.layout.start(h.event(100),1);assert.equal(h.layout.resizing,false);assert.equal(commits.length,0);
+  sharedWidths.value=[12,4,7,6,8];await h.flush();assert.notDeepEqual(h.layout.widths,before);assert.equal(commits.length,0);assert.equal(h.writes,0);
+  permitted=true;const selected=[...h.layout.widths];h.layout.start(h.event(100),1);h.layout.move(h.event(124));assert.equal(h.layout.widths[1],selected[1]+24);
+  assert.equal(commits.length,0);h.layout.finish(h.event(124));await h.flush();assert.equal(commits.length,1);assert.equal(h.writes,0);
+  sharedWidths.value=[13,5,7,6,8];await h.flush();assert.equal(h.layout.widths[0],13*16);assert.equal(commits.length,1);
+ },{mode:'tv',shared});assert.equal(starts,2);
+});
+test('V19 cancellation and component unmount do not publish a draft or overwrite remote changes',async()=>{
+ const sharedWidths=ref(c.columnDefaults('tv'));let writes=0,cancels=0;
+ const shared={widths:()=>sharedWidths.value,begin:()=>true,commit:()=>writes++,cancel:()=>cancels++,reset(){}};
+ await harness(async h=>{
+  h.layout.remoteBegin(1);h.layout.remoteStep(16);const draft=[...h.layout.widths];sharedWidths.value=[13,4,7,6,8];await h.flush();assert.deepEqual(h.layout.widths,draft);
+  h.layout.remoteEnd(true);await h.flush();assert.equal(h.layout.widths[0],13*16);assert.equal(writes,0);assert.equal(h.writes,0);
+  h.layout.start(h.event(0),1);h.layout.move(h.event(12)); // unmount must cancel, not save.
+ },{mode:'tv',shared});assert.equal(writes,0);assert.equal(cancels,2);
 });

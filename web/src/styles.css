@@ -490,3 +490,14 @@ code{overflow-wrap:anywhere}
 .column-divider.remote-selected{background:var(--accent,#78b9ff);opacity:1;outline:2px solid currentColor}
 .column-divider{-webkit-user-drag:none;-webkit-touch-callout:none}
 @media(max-width:600px){.tv-machine-actions{flex-direction:row;flex-wrap:wrap}.remote-column-controls{width:100%}}
+
+/* V19: shared profile status and remote-pad copy must wrap on a 390px TV/phone viewport. */
+.tv-profile-panel,.tv-profile-panel>*,.tv-pager,.tv-pager>*,.remote-column-controls,.remote-column-pad,.remote-column-pad span,.tv-mode .connection-warning {
+  min-width:0;max-width:100%;overflow-wrap:anywhere;
+}
+.tv-mode .connection-warning,.tv-profile-panel {box-sizing:border-box;}
+@media(max-width:600px){
+ .tv-pager{align-items:stretch;}
+ .remote-column-pad .row{justify-content:flex-start;}
+ .tv-mode .overview-tools input[type=search]{max-width:100%;}
+}

@@ -4,6 +4,7 @@ Synthetic cards are only a layout fixture. No agent actions or deployments.
 """
 import json
 from playwright.sync_api import expect
+from tv_profile_scenarios import settled
 
 
 def exercise_columns(context, base, output, results):
@@ -79,12 +80,16 @@ def exercise_columns(context, base, output, results):
             assert max(b['right'] for b in boxes)<=listing.bounding_box()['x']+listing.bounding_box()['width']+1
         # Mode-specific preferences do not overwrite desktop widths.
         page.get_by_label('Режим экрана',exact=True).select_option('tv')
+        expect(page.get_by_label('Плотность ТВ',exact=True)).to_be_enabled()
         page.get_by_label('Плотность ТВ',exact=True).select_option('10')
+        settled(page)
         page.set_viewport_size({'width':960,'height':540})
         expect(page.locator('.tv-board .overview-column-header')).to_be_visible()
         page.get_by_role('button',name='Сбросить ширину',exact=True).click()
         tv_handle=page.locator('.tv-board .overview-column-header').get_by_role('separator',name='Ширина RAM',exact=True)
+        settled(page)
         tv_handle.focus(); page.keyboard.press('ArrowRight')
+        settled(page)
         tv_head=page.locator('.tv-board .overview-column-header > span').evaluate_all('els=>els.map(e=>e.getBoundingClientRect().left)')
         tv_row=page.locator('.tv-machine').first.locator(':scope > .tv-identity, :scope > .tv-metric, :scope > .tv-services').evaluate_all('els=>els.map(e=>e.getBoundingClientRect().left)')
         assert len(tv_row)==6 and all(abs(a-b)<1 for a,b in zip(tv_head,tv_row)), (tv_head,tv_row)
@@ -104,8 +109,8 @@ def exercise_columns(context, base, output, results):
         expect(page.locator('.overview-column-header').get_by_role('separator',name='Ширина CPU',exact=True)).to_have_attribute('aria-valuenow',str(original+16))
         page.get_by_role('button',name='Сбросить ширину',exact=True).click()
         expect(page.locator('.overview-column-header').get_by_role('separator',name='Ширина CPU',exact=True)).to_have_attribute('aria-valuenow',str(original))
-        results.append('V17 service columns of three adapt; TV preferences isolated; phone reflows; reset restores defaults')
+        results.append('V17 service columns of three adapt; TV and desktop profiles separate; phone reflows; reset restores defaults')
         assert not faults, faults
-        assert not mutations, mutations
+        assert all(url.endswith('/api/v1/display/tv') for url in mutations), mutations
     finally:
         page.close()
