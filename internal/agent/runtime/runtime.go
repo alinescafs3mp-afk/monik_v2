@@ -14,7 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +25,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/spool"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/clock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/processlock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
@@ -48,6 +49,7 @@ type Agent struct {
 	cfgHash            string
 	mu                 sync.Mutex
 	client             *http.Client
+	receiptCursor      string
 	jobs               map[string]protocol.JobReceipt
 	started            time.Time
 	selfBin            string
@@ -129,10 +131,17 @@ func Open(cfgPath string) (*Agent, error) {
 				if e := configfile.SaveAppliedConfig(st.File.StateDir, cfg, revision, st.File.AppliedHash); e != nil {
 					return nil, e
 				}
+			} else {
+				return nil, fmt.Errorf("applied configuration is older than its identity mirror; restore the matching protected state")
 			}
+		}
+		if st.File.AppliedHash != "" && st.File.AppliedRevision == revision && configfile.HashConfig(cfg) != st.File.AppliedHash {
+			return nil, fmt.Errorf("applied configuration disagrees with its identity mirror")
 		}
 	} else if !os.IsNotExist(e) {
 		return nil, fmt.Errorf("applied config journal: %w", e)
+	} else if st.File.AppliedHash != "" {
+		return nil, fmt.Errorf("applied configuration is missing for an initialized worker; restore protected state, do not reset defaults")
 	}
 
 	pool, err := tlsutil.PoolFromPEM([]byte(st.File.CACertPEM))
@@ -320,18 +329,7 @@ drained:
 			}
 		}
 	}
-	// Keep the journal bounded; no automatic resurrection of expired actions.
-	ids := make([]string, 0, len(a.jobs))
-	for id := range a.jobs {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		if len(rep.JobReceipts) >= 64 {
-			break
-		}
-		rep.JobReceipts = append(rep.JobReceipts, a.jobs[id])
-	}
+	rep.JobReceipts = a.receiptBatchLocked(64)
 	if err := a.saveJobsLocked(); err != nil {
 		rep.JobReceipts = nil
 	}
@@ -362,7 +360,7 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 	a.mu.Lock()
 	sentURL, controllerID, agentID, cred, client := a.State.File.ControllerURL, a.State.File.ControllerID, a.State.File.AgentID, a.Cred, a.client
 	a.mu.Unlock()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, sentURL+"/api/v1/agent/report", bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(sentURL, "/")+"/api/v1/agent/report", bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
@@ -379,7 +377,7 @@ func (a *Agent) send(ctx context.Context, rep protocol.AgentReport) error {
 		return fmt.Errorf("report status %d %s", resp.StatusCode, slurp)
 	}
 	var cr protocol.ControlResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&cr); err != nil {
+	if err := jsonutil.ReadObject(resp.Body, 4<<20, &cr); err != nil {
 		return err
 	}
 	if cr.ControllerID != controllerID || cr.Ack == nil || !cr.Ack.Committed || cr.Ack.UpToSequence != rep.Sequence {
@@ -422,6 +420,8 @@ func (a *Agent) applyControl(cr protocol.ControlResponse, sentReceipts ...[]prot
 			sent[rec.JobID] = rec
 		}
 	}
+	// Keep the durable replay guard until the replacement journal succeeds.
+	removed := map[string]protocol.JobReceipt{}
 	for _, id := range cr.ReceiptAcks {
 		job, ok := a.jobs[id]
 		if !ok {
@@ -433,12 +433,17 @@ func (a *Agent) applyControl(cr protocol.ControlResponse, sentReceipts ...[]prot
 		}
 		switch transmitted.Status {
 		case protocol.TargetSucceeded, protocol.TargetFailed, protocol.TargetRejected, protocol.TargetUnsupported, protocol.TargetExpired, protocol.TargetRolledBack, protocol.TargetUnknownResult:
+			removed[id] = job
 			delete(a.jobs, id)
 		}
 		// An ACK for acceptance is not an ACK for completion. Keep pending
 		// work durable until its actual result has been sent and acknowledged.
 	}
-	_ = a.saveJobsLocked()
+	if err := a.saveJobsLocked(); err != nil {
+		for id, rec := range removed {
+			a.jobs[id] = rec
+		}
+	}
 	a.mu.Unlock()
 	for _, job := range cr.Jobs {
 		a.handleJob(job)

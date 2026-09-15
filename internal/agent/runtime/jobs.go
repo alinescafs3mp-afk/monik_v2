@@ -21,6 +21,7 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/checks"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
@@ -450,7 +451,7 @@ func (a *Agent) fetchSecret(id string) (header, value string, version int, err e
 		Value   string `json:"value"`
 		Version int    `json:"version"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
+	if err := jsonutil.ReadObject(resp.Body, 1<<20, &body); err != nil {
 		return "", "", 0, err
 	}
 	if body.Value == "" || body.Header == "" {

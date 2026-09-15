@@ -1,0 +1,164 @@
+{
+  "audit": "Monik V13",
+  "date": "2026-09-15",
+  "repository": "alinescafs3mp-afk/monik_v2",
+  "baseline_commit": "5fef10f15b610ff79b036f040d45037175b28866",
+  "baseline_tree": "82c6300e389bbd4401c60e02cf6dfeff61daa713",
+  "scope": "Focused cross-layer reliability audit, source corrections and full regression execution. No GitHub writes or production deployment.",
+  "toolchain": {
+    "go": "go1.27.0 linux/amd64",
+    "node": "v22.16.0",
+    "dependencies": "Existing locked toolkit packages; no product dependency or lockfile change",
+    "runtime_timestamps": "Preserved as generated; package date follows conversation/session date"
+  },
+  "baseline": {
+    "clean_race": "PASS",
+    "top_level": 305,
+    "test_subtest_seed_pass_events": 401,
+    "packages": 21,
+    "remote_ci_run": 34903169529,
+    "remote_ci_job": 104173631459,
+    "remote_ci_result": "success (baseline only)",
+    "initial_harness_failure": "Go embed setup overlapped first UI build; not a product defect; corrected order passed"
+  },
+  "go": {
+    "status": "PASS",
+    "command": "go test -race -count=1 -json ./...",
+    "top_level_pass_events": 326,
+    "includes_fuzz_targets": 2,
+    "test_subtest_seed_pass_events": 442,
+    "packages": 22,
+    "skipped_opt_in_native_tests": [
+      "TestAudit8NativeWorkerRestartAndRejectedUpload",
+      "TestAudit8NativeSupervisorRestartsWorker",
+      "TestV12NativeSignedUpdateAndFailedCandidateRecovery"
+    ],
+    "fail_events": 0,
+    "log": "sealed-go.jsonl"
+  },
+  "native_processes": {
+    "status": "PASS",
+    "tests": [
+      "TestAudit8NativeWorkerRestartAndRejectedUpload",
+      "TestAudit8NativeSupervisorRestartsWorker",
+      "TestV12NativeSignedUpdateAndFailedCandidateRecovery"
+    ],
+    "uid": 65534,
+    "kind": "Real compiled Linux worker/supervisor, loopback HTTPS + SQLite, actual signed replacement and bad-candidate recovery",
+    "limit": "Not native OS-service installation/boot, cross-schema future release, remote multi-host fleet or power-cut evidence",
+    "log": "sealed-native.log"
+  },
+  "frontend": {
+    "status": "PASS",
+    "tests": 108,
+    "failed": 0,
+    "test_types": "Node helpers, request logic and source-structure checks",
+    "typecheck": "tsc --noEmit (not vue-tsc)",
+    "bundle": "Production Vue/Vite build",
+    "log": "final-web.log"
+  },
+  "repeat": {
+    "status": "PASS",
+    "count": 10,
+    "shuffle": true,
+    "scope": "All TestV13 in runtime, spool, storage, server, jsonutil, checks",
+    "log": "sealed-repeat.log"
+  },
+  "fuzz": {
+    "status": "PASS",
+    "target": "FuzzV13StrictJSON",
+    "requested_duration_seconds": 15,
+    "executions": 152494,
+    "workers": 2,
+    "max_input_bytes": 65536,
+    "log": "sealed-fuzz.log",
+    "scope": "Bounded malformed/ambiguous JSON handling, not proof of exhaustive parser correctness"
+  },
+  "builds": {
+    "linux_amd64": "4 commands PASS",
+    "windows_amd64": "4 commands cross-build PASS; not native execution",
+    "build_label": "0.1.0-audit13 / 5fef10f-audit13, test-only unsigned artifacts",
+    "log": "sealed-build.log"
+  },
+  "vet": "PASS",
+  "module_integrity": "PASS",
+  "baseline_regressions": {
+    "count": 13,
+    "test_names": [
+      "TestV13AppliedConfigCannotSilentlyFallBackAfterDataLoss",
+      "TestV13ControlOnlyReportPreservesObservedAddresses",
+      "TestV13ControlResponseMustBeCompleteBeforeAnyEffect",
+      "TestV13ControllerRootSlashKeepsReportRouteAndIdentity",
+      "TestV13DuplicateJSONFieldsCannotManufactureHealth",
+      "TestV13HealthyDrainExpiresAgedQueueWithoutANewFailure",
+      "TestV13HistoricalTelemetryDoesNotDependOnExpiredJobHistory",
+      "TestV13LossEvidenceSurvivesRestart",
+      "TestV13OldCheckResultsCannotDescribeNewConfiguration",
+      "TestV13PendingReceiptBatchCannotStarveCompletion",
+      "TestV13ReceiptRemovalRequiresDurableJournal",
+      "TestV13SecretResponseRequiresOneCompleteObject",
+      "TestV13SpoolRejectsChangedPayloadForSameIdentity"
+    ],
+    "logs": [
+      "regressions-before.log",
+      "receipt-starvation-before.log",
+      "loss-address-before.log",
+      "root-url-before.log",
+      "secret-envelope-before.log"
+    ],
+    "interpretation": "Before/after scenarios, not thirteen independent security vulnerabilities"
+  },
+  "new_code_self_review": {
+    "case": "Pending retirement directory symlink could escape intended folder in first ledger draft",
+    "fixed": true,
+    "regression": "TestV13PendingLossDoesNotFollowDirectorySymlink",
+    "logs": [
+      "ledger-self-review-before.log",
+      "ledger-self-review-after.log"
+    ]
+  },
+  "browser": {
+    "status": "BLOCKED_BEFORE_LOGIN",
+    "error": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "scenario_syntax": "PASS",
+    "log": "browser-attempt.log",
+    "results": "browser/results.json",
+    "new_case": "Prior revision check data remains pending/fresh=false after config change; source fixture explicitly sends its fixed revision",
+    "not_executed": true
+  },
+  "host_execution": {
+    "date": "2026-09-15",
+    "go": {"status": "PASS", "top_level_pass_events": 326, "test_subtest_seed_pass_events": 442, "packages": 22, "fail_events": 0},
+    "frontend": {"status": "PASS", "tests": 108, "typecheck": "tsc --noEmit", "bundle": "production Vue/Vite"},
+    "native_processes": {"status": "PASS", "count": 3, "uid": 1000},
+    "repeat": {"status": "PASS", "count": 10, "shuffle": true},
+    "fuzz": {"status": "PASS", "target": "FuzzV13StrictJSON", "requested_duration_seconds": 15, "executions": 2353331, "workers": 2},
+    "vet": "PASS",
+    "module_integrity": "PASS",
+    "browser": {
+      "status": "PASS",
+      "checks": 31,
+      "auditor": "BLOCKED_BEFORE_LOGIN",
+      "note": "Host ran the revised Playwright scenario. Services table is not .service-row; pending text is asserted there and on Machine ServiceList after navigation. Assertions were not weakened."
+    }
+  },
+  "not_accepted": [
+    "native systemd/Windows SCM installation and boot",
+    "independent service-host self-update recovery",
+    "complete protected controller backup/restore/reconciliation",
+    "physical TV/Yandex and actual SSH shell/browser",
+    "power-loss durability especially Windows directory operations",
+    "multi-host native signed rollout",
+    "long-term aggregated history and coverage",
+    "full v3 battery",
+    "fleet capacity and 24-hour soak"
+  ],
+  "compatibility": [
+    "Server/UI and worker/service-host should be built from matching source",
+    "No re-enrollment, identity/key reset, configured endpoint change or new agent privileges",
+    "Wire schema and dependency lockfiles unchanged",
+    "spool/loss-ledger-v1.meta is new private metadata; preserve with queue",
+    "Old workers cannot maintain new loss accounting",
+    "Do not downgrade a controller during active V11+ rollout"
+  ]
+}

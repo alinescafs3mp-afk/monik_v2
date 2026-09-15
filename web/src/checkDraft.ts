@@ -48,6 +48,8 @@ export function applyPreset(f:CheckForm,preset:string):CheckForm {
  }
 }
 export function serviceHint(s:any):string {
+ if(s?.state==='pending')return 'Ожидаем ответ для актуальной конфигурации. Предыдущий ответ не подтверждает новый запрос.';
+ if(['paused','ignored','not_monitored'].includes(s?.state))return 'Регулярная проверка выключена. Предыдущий ответ не является текущим состоянием.';
  const o=s?.observation||s||{};if(o.transport==='refused')return 'TCP-соединение отклонено до отправки HTTP. Проверьте слушающий процесс, адрес, IPv4/IPv6, порт контейнера. Другой путь или тело запроса это не исправят.';
  if(o.transport==='tls_error')return 'TLS не подтверждён. Проверьте имя сервера и доверие сертификату. Автоподбор не отключает проверку TLS.';
  if(o.transport==='timeout')return 'Истёк таймаут. Проверьте доступность и стоимость запроса; увеличивайте таймаут осмысленно.';

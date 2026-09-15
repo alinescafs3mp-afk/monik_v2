@@ -53,7 +53,6 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 	out := make([]serviceSummary, 0, len(rows))
 	contacts := map[string]string{}
 	desiredChecks := map[string]protocol.CheckDefinition{}
-	appliedRev := map[string]int64{}
 	desiredRev := map[string]int64{}
 	globalPaused := map[string]bool{}
 	configConfirmed := map[string]bool{}
@@ -77,7 +76,6 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			for _, d := range cfg.Checks {
 				desiredChecks[d.ServiceID] = d
 			}
-			appliedRev[sv.AgentID] = ag.AppliedRevision
 			desiredRev[sv.AgentID] = ag.DesiredRevision
 		}
 		obs, err := a.Store.LatestCheckObs(sv.ID)
@@ -142,11 +140,10 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			item.Summary = "Обнаружен; периодическая проверка не настроена"
 			item.Fresh = false
 		}
-		if obs != nil && (appliedRev[sv.AgentID] < desiredRev[sv.AgentID] || obs.ConfigRev < appliedRev[sv.AgentID]) {
-			item.Summary += " · ожидаем результат актуальной конфигурации"
-			if item.State == "ok" {
-				item.State = "pending"
-			}
+		if obs != nil && hasCheck && (!configConfirmed[sv.AgentID] || obs.ConfigRev != desiredRev[sv.AgentID] || obs.CheckID != d.ID) {
+			item.State = "pending"
+			item.Fresh = false
+			item.Summary = "Ожидаем результат актуальной конфигурации; предыдущий ответ не оценивает новый запрос"
 		}
 		if globalPaused[sv.AgentID] || sv.Paused || sv.Ignored || d.Paused || d.Ignored {
 			if configConfirmed[sv.AgentID] {

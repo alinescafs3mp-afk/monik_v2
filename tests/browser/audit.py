@@ -395,6 +395,18 @@ def run(binary: Path, output: Path) -> None:
                     assert next(c for c in detail["desired_config"]["checks"] if c["service_id"]=="audit-api")["paused"]
                     assert "127.0.0.1:28000" in detail["desired_config"]["discovery_disabled_targets"]
                     expect(service_pin).to_be_checked()
+                    # The fixture deliberately keeps reporting config 1. A new
+                    # desired revision must not relabel that response as fresh.
+                    old_response = next(s for s in detail["services"] if s["id"] == "audit-auth")
+                    assert old_response["state"] == "pending" and not old_response["fresh"]
+                    assert old_response["observation"]["config_revision"] == 1
+                    # /services uses a table; .service-row is Machine ServiceList.
+                    listed = page.locator("tr").filter(has=page.locator("strong", has_text="Protected panel"))
+                    expect(listed).to_contain_text("актуальной конфигурации")
+                    page.goto(base+"/machines/audit-host", wait_until="domcontentloaded")
+                    protected = page.locator(".service-row").filter(has=page.locator("strong", has_text="Protected panel"))
+                    expect(protected).to_contain_text("актуальной конфигурации")
+                    results.append("old check result stays pending and is never fresh after configuration changes")
                     results.append("service pin and monitoring are independent; pause changes desired config without fake agent acknowledgement")
                     page.goto(base+"/machines",wait_until="domcontentloaded")
                     offline_pin=page.get_by_role("checkbox",name="Показывать в обзоре: Offline fixture",exact=True)

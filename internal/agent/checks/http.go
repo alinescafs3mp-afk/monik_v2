@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 )
@@ -275,7 +276,7 @@ func RunRequest(ctx context.Context, def protocol.CheckDefinition, locals []net.
 		var v any
 		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.UseNumber()
-		if decoder.Decode(&v) != nil || decoder.Decode(new(any)) != io.EOF {
+		if jsonutil.Validate(body) != nil || decoder.Decode(&v) != nil || decoder.Decode(new(any)) != io.EOF {
 			obs.AppResult = "fail"
 			obs.AppReason = "response is not json"
 		} else if !matchJSON(v, def.ExpectJSONPath, def.ExpectJSONValue, def.ExpectJSONType) {
@@ -420,7 +421,7 @@ func healthToken(body []byte, contentType string) (string, string) {
 	}
 	if contentType == "application/json" || strings.HasSuffix(contentType, "+json") || (contentType == "" && strings.HasPrefix(strings.TrimSpace(string(body)), "{")) {
 		var fields map[string]any
-		if json.Unmarshal(body, &fields) != nil {
+		if jsonutil.Unmarshal(body, &fields) != nil {
 			return "", ""
 		}
 		var result, source string

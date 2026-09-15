@@ -44,11 +44,7 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 		return out, fmt.Errorf("observation outside accepted clock/retention window")
 	}
 	// IsLive and ReportedAt change when a buffered envelope is replayed.
-	normalized := rep
-	normalized.IsLive = false
-	normalized.ReportedAt = time.Time{}
-	normalized.JobReceipts = nil
-	raw, err := json.Marshal(normalized)
+	raw, err := protocol.ObservationPayload(rep)
 	if err != nil {
 		return out, err
 	}
@@ -90,7 +86,13 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 				return fmt.Errorf("invalid agent vantage")
 			}
 		}
-		for _, r := range rep.JobReceipts {
+		// Backfill is telemetry only. Its obsolete receipts are neither
+		// executed nor acknowledged and must not poison the data queue.
+		liveReceipts := rep.JobReceipts
+		if !rep.IsLive {
+			liveReceipts = nil
+		}
+		for _, r := range liveReceipts {
 			var opID string
 			if err := tx.QueryRow(`SELECT operation_id FROM agent_jobs WHERE job_id=? AND agent_id=?`, r.JobID, rep.AgentID).Scan(&opID); err != nil {
 				return fmt.Errorf("job does not belong to reporting agent")

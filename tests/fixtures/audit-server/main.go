@@ -84,7 +84,7 @@ func main() {
 		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "audit-host", SessionID: "fixture-live", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "audit-fixture", Capabilities: map[string]protocol.Capability{"http_custom_v1": {Status: "supported"}, "selective_monitor_v1": {Status: "supported"}}, Host: host(at, int(seq))}
 		for _, sv := range services {
 			code := sv.code
-			rep.Checks = append(rep.Checks, protocol.CheckObservation{ServiceID: sv.id, CheckID: "check-" + sv.id, ObservedAt: at, Vantage: "agent/local", Transport: "ok", HTTPStatus: &code, LatencyMS: ptr(12), AppResult: sv.result, AppReason: sv.reason, Quality: protocol.QualityOK})
+			rep.Checks = append(rep.Checks, protocol.CheckObservation{ServiceID: sv.id, CheckID: "check-" + sv.id, ConfigRev: 1, ObservedAt: at, Vantage: "agent/local", Transport: "ok", HTTPStatus: &code, LatencyMS: ptr(12), AppResult: sv.result, AppReason: sv.reason, Quality: protocol.QualityOK})
 		}
 		_, err := app.Store.AcceptReport(rep)
 		must(err)

@@ -2,9 +2,7 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/checks"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 )
 
@@ -159,7 +158,7 @@ func fetchRequestSecret(ctx context.Context, client *http.Client, base, cred, ag
 		Value   string `json:"value"`
 		Version int    `json:"version"`
 	}
-	if err := json.NewDecoder(io.LimitReader(res.Body, 128<<10)).Decode(&body); err != nil {
+	if err := jsonutil.ReadObject(res.Body, 128<<10, &body); err != nil {
 		return result, err
 	}
 	if body.Header == "" || len(body.Value) > protocol.MaxRequestBody {

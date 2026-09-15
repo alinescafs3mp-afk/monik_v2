@@ -370,10 +370,10 @@ func (s *Store) TouchAgent(id, session string, seq int64, live bool, host *proto
 		liveSQL = `last_seen_at=?, last_live_at=?`
 		args = append(args, now)
 	}
-	args = append(args, session, seq, capJSON, addrJSON, hn, osn, arch, dn,
+	args = append(args, session, seq, capJSON, host != nil, addrJSON, hn, osn, arch, dn,
 		versions["worker"], versions["worker_digest"], versions["service_host"], versions["service_host_digest"],
 		versions["managed"], id)
-	_, err := s.db().Exec(`UPDATE agents SET `+liveSQL+`, session_id=?, last_seq=?, capabilities=?, addresses=?,
+	_, err := s.db().Exec(`UPDATE agents SET `+liveSQL+`, session_id=?, last_seq=?, capabilities=?, addresses=CASE WHEN ? THEN ? ELSE addresses END,
 		hostname=COALESCE(NULLIF(?,''),hostname), os=COALESCE(NULLIF(?,''),os), arch=COALESCE(NULLIF(?,''),arch),
 		display_name=COALESCE(NULLIF(display_name,''),NULLIF(?,''),''),
 		worker_version=COALESCE(NULLIF(?,''),worker_version), worker_digest=COALESCE(NULLIF(?,''),worker_digest),

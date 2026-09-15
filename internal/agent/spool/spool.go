@@ -1,6 +1,7 @@
 package spool
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,11 +21,12 @@ import (
 const maxReportBytes = 8 << 20
 
 type Store struct {
-	dir       string
-	mu        sync.Mutex
-	dropped   int64
-	from, to  *time.Time
-	lastError string
+	dir         string
+	mu          sync.Mutex
+	dropped     int64
+	from, to    *time.Time
+	lastError   string
+	pendingLoss []string
 }
 type record struct {
 	path string
@@ -36,7 +38,20 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(dir, "records-v2"), 0700); err != nil {
 		return nil, err
 	}
-	return &Store{dir: dir}, nil
+	for _, path := range []string{dir, filepath.Join(dir, "records-v2")} {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("spool directory must not be a symbolic link")
+		}
+	}
+	s := &Store{dir: dir}
+	if err := s.loadLossLocked(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 func stamp(t time.Time) string { return t.UTC().Format("20060102T150405.000000000") }
 func recordName(r protocol.AgentReport) string {
@@ -67,7 +82,9 @@ func (s *Store) Push(rep protocol.AgentReport) (err error) {
 	// Old workers cannot drain v2 records; upgrading again recovers them.
 	path := filepath.Join(s.dir, "records-v2", recordName(rep))
 	if old, e := readRecord(path); e == nil {
-		if !sameReport(old, rep) {
+		prior, e := protocol.ObservationPayload(old)
+		current, ce := protocol.ObservationPayload(rep)
+		if !sameReport(old, rep) || e != nil || ce != nil || !bytes.Equal(prior, current) {
 			return fmt.Errorf("spool identity conflict")
 		}
 		return s.trimLocked() // Keep the original immutable observation on retry.
@@ -137,6 +154,12 @@ func (s *Store) List() ([]protocol.AgentReport, error) { return s.ListLimit(0) }
 func (s *Store) ListLimit(limit int) ([]protocol.AgentReport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A long-offline worker may reconnect successfully and never Push again.
+	// Enforce retention on reads too, otherwise an expired head can wedge drain.
+	if err := s.trimLocked(); err != nil {
+		s.lastError = "spool retention failed"
+		return nil, err
+	}
 	entries, err := s.recordsLocked()
 	if err != nil {
 		s.lastError = "spool directory read failed"
@@ -200,9 +223,22 @@ func (s *Store) Status() protocol.SpoolStatus {
 	for _, e := range entries {
 		bytes += e.size
 	}
-	return protocol.SpoolStatus{Bytes: bytes, Items: len(entries), Dropped: s.dropped, DropFrom: s.from, DropTo: s.to, Error: s.lastError}
+	// Return copies: callers must not mutate the durable internal interval.
+	var from, to *time.Time
+	if s.from != nil {
+		v := *s.from
+		from = &v
+	}
+	if s.to != nil {
+		v := *s.to
+		to = &v
+	}
+	return protocol.SpoolStatus{Bytes: bytes, Items: len(entries), Dropped: s.dropped, DropFrom: from, DropTo: to, Error: s.lastError}
 }
 func (s *Store) trimLocked() error {
+	if err := s.finishLossLocked(); err != nil {
+		return err
+	}
 	entries, err := s.recordsLocked()
 	if err != nil {
 		return err
@@ -213,22 +249,19 @@ func (s *Store) trimLocked() error {
 		total += e.size
 	}
 	cut := time.Now().Add(-protocol.SpoolMaxAge)
+	var retiring []record
 	for _, e := range entries {
 		if total <= protocol.SpoolMaxBytes && e.mod.After(cut) {
 			break
 		}
-		if err = os.Remove(e.path); err != nil {
-			return err
-		}
 		total -= e.size
-		s.dropped++
-		t := e.mod
-		if s.from == nil || t.Before(*s.from) {
-			s.from = &t
-		}
-		if s.to == nil || t.After(*s.to) {
-			s.to = &t
+		retiring = append(retiring, e)
+		if len(retiring) == lossBatchLimit {
+			if err = s.retireLossLocked(retiring); err != nil {
+				return err
+			}
+			retiring = nil
 		}
 	}
-	return nil
+	return s.retireLossLocked(retiring)
 }

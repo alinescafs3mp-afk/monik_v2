@@ -315,7 +315,9 @@ func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
 			return
 		}
 		for _, d := range cfg.Checks {
-			if d.ServiceID == c.ServiceID && (d.Paused || d.Ignored) {
+			if d.ServiceID == c.ServiceID && (d.Paused || d.Ignored || d.ID != c.CheckID || c.ConfigRev != ag.DesiredRevision) {
+				// A late completion/backlog belongs to its old request. Retain
+				// history, but never reopen/resolve today's incident from it.
 				return
 			}
 		}

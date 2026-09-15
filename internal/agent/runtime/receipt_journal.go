@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // Comparing the request's immutable snapshot prevents an acceptance ACK from
@@ -113,4 +114,26 @@ func (a *Agent) restoreIntentReceipt() error {
 		return a.saveJobsLocked()
 	}
 	return nil
+}
+
+// receiptBatchLocked fairly rotates the bounded report window. A stable prefix
+// of accepted jobs must not starve a later completed receipt indefinitely.
+// The cursor is scheduling state only; all evidence remains in the durable map.
+func (a *Agent) receiptBatchLocked(limit int) []protocol.JobReceipt {
+	if limit <= 0 || len(a.jobs) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(a.jobs))
+	for id := range a.jobs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	start := sort.Search(len(ids), func(i int) bool { return ids[i] > a.receiptCursor })
+	out := make([]protocol.JobReceipt, 0, min(limit, len(ids)))
+	for n := 0; n < limit && n < len(ids); n++ {
+		id := ids[(start+n)%len(ids)]
+		out = append(out, a.jobs[id])
+		a.receiptCursor = id
+	}
+	return out
 }

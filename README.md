@@ -1,15 +1,12 @@
-> **Audit 11:** persisted per-platform worker canaries, bounded batches, pause/resume and failure gates are implemented. This is not full native release acceptance. See [the current audit](docs/AUDIT_REVIEW_11_2026-09-14.md) and [rollout guide](docs/V11_ROLLOUTS_RU.md). Older completion statements below are historical where superseded.
+## Current stabilization audit: V13
 
-## Current stabilization audit: V12
-
-Read [the V12 audit](docs/AUDIT_REVIEW_12_2026-09-15.md), [deployment gates](docs/V12_DEPLOYMENT_GATE_RU.md) and the current [acceptance ledger](ACCEPTANCE_LEDGER.md) before deployment. A real non-root signed Linux worker-upgrade/failed-candidate recovery test now passes. Native OS-service boot, Windows provisioning, full protected restore and independent supervisor recovery are still separate open gates. Run `scripts/verify-audit12.sh --with-browser` in a permitted test environment; it does not install services or deploy production.
-
+Read [the V13 audit](docs/AUDIT_REVIEW_13_2026-09-15.md), [deployment notes](docs/V13_RELIABILITY_RU.md) and [current acceptance](ACCEPTANCE_LEDGER.md). Thirteen before/after regression scenarios cover delivery, configuration, health provenance and queue losses; this is not thirteen independent vulnerability claims or full native acceptance. Run `scripts/verify-audit13.sh --with-browser` in a permitted test environment. It does not install services or deploy.
 
 # Monik
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: Audit 11, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_11_2026-09-14.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: V13 reliability audit, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_13_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
 The configurable bootstrap URL remains `https://46.120.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 
