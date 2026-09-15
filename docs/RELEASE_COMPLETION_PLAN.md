@@ -1,6 +1,6 @@
-# Monik: authoritative completion gates after V14
+# Monik: authoritative completion gates after V15
 
-Baseline reviewed: `b969c6a34d3852687bd3aa3c73212ec4e183f55f`. V14 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `ae6c5822843ec74fd4a0838913f1291849691d00`. V15 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
 
 ## Working features to preserve
 
@@ -10,11 +10,13 @@ V12 added exact receipt ACKs, local process locks, joined shutdown, corruption r
 
 V14 separates complete local-socket presence from HTTP identification, reconciles missing discoveries without losing watched outages/history, batches new checks into one revision, and adds external enrollment-profile selection plus explicit same-CA offline SAN extension. It does not change enrolled routes. Windows IPv6 parsing is corrected with byte fixtures, not native OS evidence.
 
+V15 implements owner-prepared one-file Linux managed installation, exact source/bundle validation, single-use download authorization and evidence-based readiness. Only standalone standard-library code and frontend unit tests were executed in the auditor's Go 1.23 environment; full Go 1.27 integration, Vue/browser and native service/boot acceptance remain mandatory and NOT RUN here. Do not inflate prior V14 results into current V15 evidence.
+
 ## Gates before broad release, in order
 
 ### G1. First-host native installation and recovery
 
-Paths: `internal/install`, `internal/servicehost`, CLI, agent setup. For the first remote pilot use the selected external profile origin, verify SAN/trust from the remote host, keep independent access, and confirm `listener_inventory_v1`. Do not rewrite working LAN agents or generate a replacement CA. Confirm Linux account/permissions, native systemd install/start/stop/restart/boot without interactive login. Complete Windows restricted service identity, ACLs, correlated bounded local IPC, native SCM/boot. Make partial install/reinstall recovery explicit. Preserve identity, URLs, journals and both queue formats. Existing process fixtures do not count as service-boot evidence.
+Paths: `internal/install`, `internal/servicehost`, `internal/installerbundle`, `cmd/monik-installer`, controller installer endpoints, CLI, agent setup. First run the full V15 suite and build/deploy matching credential-free templates. Give the owner the prepared downloadable executable, not raw build/install instructions. Confirm one-file launch, committed managed readiness, close-terminal survival and native boot on a disposable pilot. For the first remote pilot use the selected external profile origin, verify SAN/trust from the remote host, keep independent access, and confirm `listener_inventory_v1`. Do not rewrite working LAN agents or generate a replacement CA. Confirm Linux account/permissions, native systemd install/start/stop/restart/boot without interactive login. Complete Windows restricted service identity, ACLs, correlated bounded local IPC, native SCM/boot. Make partial install/reinstall recovery explicit. Preserve identity, URLs, journals and both queue formats. Existing process fixtures do not count as service-boot evidence.
 
 Independently recoverable replacement of the service-host remains mandatory. A supervisor that crashes before its own recovery code cannot be its only recovery mechanism. Keep current explicit guard until actual OS-backed recovery passes bad-entrypoint, interrupted activation, write denial/full disk, network loss and re-upgrade tests.
 

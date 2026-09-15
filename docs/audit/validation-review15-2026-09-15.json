@@ -1,0 +1,100 @@
+{
+  "audit": "15",
+  "date": "2026-09-15",
+  "baseline_commit": "ae6c5822843ec74fd4a0838913f1291849691d00",
+  "baseline_tree": "ad4cff70f1264e2ce578e947b1407f9886f031f5",
+  "auditor_result_tree": "774ec9347833fc889e7b8c38d45cafb8e0e5fe84",
+  "full_release_accepted": false,
+  "production_or_repository_modified": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.23.2",
+    "production_go_requirement": "go1.27.0",
+    "node": "v22.23.2",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "executed": {
+    "package_verify": {
+      "status": "PASS",
+      "files": 31
+    },
+    "preflight": {
+      "status": "PASS",
+      "baseline_tree": "ad4cff70f1264e2ce578e947b1407f9886f031f5",
+      "applied_tree": "774ec9347833fc889e7b8c38d45cafb8e0e5fe84"
+    },
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_tests_and_fuzz_targets": 388,
+      "test_and_seed_results": 536,
+      "tested_packages": 26,
+      "log": "audit-output/go-tests.jsonl"
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS"},
+    "v15_shuffled_repeats": {
+      "status": "PASS",
+      "count": 10,
+      "packages": 7,
+      "log": "audit-output/audit15-repeat.log"
+    },
+    "bundle_fuzz": {
+      "status": "PASS",
+      "executions": 11469734,
+      "requested_seconds": 15,
+      "workers": 24,
+      "note": "host without race detector; race-enabled fuzz also PASS at 4348 execs"
+    },
+    "frontend": {
+      "status": "PASS",
+      "node_tests": 123,
+      "tsc": true,
+      "vite": true
+    },
+    "linux_windows_build": {
+      "status": "PASS",
+      "note": "four Linux amd64 and four Windows amd64 application binaries; installer templates rebuilt after commit"
+    },
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "browser": {
+      "status": "PASS",
+      "checks": 34,
+      "errors": 0,
+      "includes": [
+        "single-file primary path",
+        "missing template disabled",
+        "advanced enrollment collapsed",
+        "inactive inventory hide/show",
+        "independent profile origin",
+        "TLS mismatch blocks download",
+        "pending old-check",
+        "404/no-store",
+        "390px Add-machine"
+      ]
+    }
+  },
+  "not_run": {
+    "clean_systemd_install_boot": "no disposable VM/nspawn on this host; first remote Linux machine is the native gate",
+    "windows_service_boot": "single-file installer unsupported on Windows; existing SCM acceptance still pending",
+    "physical_tv_full_fleet_soak": "not executed",
+    "protected_complete_restore": "still open",
+    "independent_service_host_recovery": "still fail-closed"
+  },
+  "required_before_fleet_spread": [
+    "matching live server and installer-template commit",
+    "one clean Linux native one-file install + terminal-close + reboot on the first remote host"
+  ],
+  "source_only_delivery": false,
+  "host_extras": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/audit/validation-review15-2026-09-15.json"
+  ]
+}

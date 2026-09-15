@@ -86,9 +86,13 @@ func main() {
 			code := sv.code
 			rep.Checks = append(rep.Checks, protocol.CheckObservation{ServiceID: sv.id, CheckID: "check-" + sv.id, ConfigRev: 1, ObservedAt: at, Vantage: "agent/local", Transport: "ok", HTTPStatus: &code, LatencyMS: ptr(12), AppResult: sv.result, AppReason: sv.reason, Quality: protocol.QualityOK})
 		}
-		_, err := app.Store.AcceptReport(rep)
-		must(err)
-		must(app.Store.AppendEvent("metrics", "agent", "audit-host", seq, map[string]any{"fixture": true}))
+		must(retryFixture(context.Background(), 5*time.Second, func() error {
+			_, err := app.Store.AcceptReport(rep)
+			return err
+		}))
+		must(retryFixture(context.Background(), 5*time.Second, func() error {
+			return app.Store.AppendEvent("metrics", "agent", "audit-host", seq, map[string]any{"fixture": true})
+		}))
 	}
 	feed(1)
 	// Signed but deliberately non-executable payload for controller/browser tests.

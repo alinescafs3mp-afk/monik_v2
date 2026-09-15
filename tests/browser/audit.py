@@ -314,6 +314,7 @@ def run(binary: Path, output: Path) -> None:
                     with sqlite3.connect(Path(directory) / "monik.db", timeout=5) as db:
                         db.execute("UPDATE admin_sessions SET recent_auth_until='2000-01-01T00:00:00.000000000Z'")
                     page.goto(base + "/add", wait_until="domcontentloaded")
+                    page.locator(".advanced-enrollment > summary").click()
                     admission = page.locator(".admission-panel")
                     expect(admission).to_contain_text("Закрыт")
                     operation_keys = []

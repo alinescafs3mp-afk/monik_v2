@@ -52,3 +52,7 @@ dist: linux windows
 
 clean:
 	rm -rf $(DIST) $(UI)/dist
+
+.PHONY: installer-templates
+installer-templates:
+	GO="$(GO)" VERSION="$(VERSION)" COMMIT="$(COMMIT)" bash scripts/build-installer-templates.sh

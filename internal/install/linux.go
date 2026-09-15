@@ -1,9 +1,12 @@
 package install
 
 import (
+	"bytes"
 	"context"
+	"debug/elf"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -95,6 +98,28 @@ func InstallLinux(opts Options) error {
 		}
 		defer unlock()
 	}
+
+	// Validate and retain both source byte sequences BEFORE stopping a healthy
+	// existing service. A missing/broken source is not permission to cause outage.
+	hostBytes, err := readInstallSource(opts.HostSrc)
+	if err != nil {
+		return fmt.Errorf("read supervisor before installation: %w", err)
+	}
+	workerBytes, err := readInstallSource(opts.WorkerSrc)
+	if err != nil {
+		return fmt.Errorf("read worker before installation: %w", err)
+	}
+	if !opts.SkipSystemctl {
+		if err = validateLinuxBinary(hostBytes, runtime.GOARCH); err != nil {
+			return err
+		}
+		if err = validateLinuxBinary(workerBytes, runtime.GOARCH); err != nil {
+			return err
+		}
+	}
+	if opts.UnitPath == "" {
+		opts.UnitPath = "/etc/systemd/system/monik-agent.service"
+	}
 	var systemctl string
 	var state *configfile.State
 	var uid, gid int
@@ -168,10 +193,10 @@ func InstallLinux(opts Options) error {
 	}
 	hostDst := filepath.Join(opts.Prefix, "monik-service-host")
 	workerDst := filepath.Join(opts.Prefix, "monik-agent")
-	if err := copyFile(opts.HostSrc, hostDst, 0o755); err != nil {
+	if err := secure.AtomicWrite(hostDst, hostBytes, 0o755); err != nil {
 		return err
 	}
-	if err := copyFile(opts.WorkerSrc, workerDst, 0o755); err != nil {
+	if err := secure.AtomicWrite(workerDst, workerBytes, 0o755); err != nil {
 		return err
 	}
 	if opts.ConfigPath == "" {
@@ -183,10 +208,6 @@ func InstallLinux(opts Options) error {
 	// The immutable supervisor stays in the root-owned prefix. Its worker slot
 	// lives in private service state so signed worker replacement needs no root.
 	activeWorker := filepath.Join(opts.StateDir, "bin", "monik-agent")
-	workerBytes, err := os.ReadFile(workerDst)
-	if err != nil {
-		return err
-	}
 	if err := writePrivateState(opts.StateDir, "bin/monik-agent", workerBytes, 0755); err != nil {
 		return err
 	}
@@ -433,4 +454,43 @@ func readPrivateConfig(dir, name string) (configfile.File, error) {
 	}
 	e = json.Unmarshal(b, &f)
 	return f, e
+}
+
+func readInstallSource(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	i, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !i.Mode().IsRegular() || i.Size() > 64<<20 {
+		return nil, fmt.Errorf("invalid executable source")
+	}
+	b, err := io.ReadAll(io.LimitReader(f, (64<<20)+1))
+	if len(b) > 64<<20 {
+		return nil, fmt.Errorf("executable exceeds size limit")
+	}
+	return b, err
+}
+func validateLinuxBinary(b []byte, arch string) error {
+	f, err := elf.NewFile(bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("source is not a Linux ELF executable")
+	}
+	defer f.Close()
+	want := elf.EM_X86_64
+	switch arch {
+	case "amd64":
+	case "arm64":
+		want = elf.EM_AARCH64
+	default:
+		return fmt.Errorf("installer architecture not validated")
+	}
+	if f.Machine != want || f.Class != elf.ELFCLASS64 || (f.Type != elf.ET_EXEC && f.Type != elf.ET_DYN) {
+		return fmt.Errorf("binary architecture/type mismatch")
+	}
+	return nil
 }

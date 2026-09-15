@@ -110,3 +110,29 @@ export async function markOperationsRead(targets: Array<{operation_id:string;att
  window.dispatchEvent(new Event("monik:refresh"));
  return result;
 }
+
+// A prepared executable is a secret-bearing download, not a new fleet command.
+// Only a definite recent-auth rejection is retried. A lost download is NOT
+// repeated automatically; an unused one-machine code expires server-side.
+export async function downloadInstaller(platform:string,controllerURL:string):Promise<{blob:Blob;expires:string}> {
+ if(!['linux-amd64','linux-arm64'].includes(platform))throw {message:'Неподдерживаемая платформа установщика.'};
+ const request=async()=>{
+  const ctl=new AbortController(), timer=setTimeout(()=>ctl.abort(),120000);
+  try{
+   const r=await fetch(`/api/v1/installers/${platform}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify({controller_url:controllerURL}),signal:ctl.signal});
+   if(!r.ok){let data:any;try{data=await r.json();}catch{data={};}throw {status:r.status,error:data.error||'http',message:data.message||'Не удалось подготовить установщик.'};}
+   const length=Number(r.headers.get('Content-Length'));
+   if(r.headers.get('Content-Type')?.split(';')[0]!=='application/octet-stream'||!Number.isSafeInteger(length)||length<64||length>193*1024*1024)throw {error:'invalid_download',message:'Некорректный размер или тип установщика.'};
+   const expires=r.headers.get('X-Monik-Profile-Expires')||'';
+   if(!Number.isFinite(Date.parse(expires)))throw {message:'Срок профиля не подтверждён.'};
+   const blob=await r.blob();if(blob.size!==length)throw {message:'Файл получен не полностью. Установка не готова.'};
+   return {blob,expires};
+  }catch(e){if(e instanceof TypeError || (e as Error).name==='AbortError')throw {error:'network',message:'Загрузка прервалась. Готовый файл не подтверждён; автоматического повтора нет.'};throw e;}
+  finally{clearTimeout(timer);}
+ };
+ try{return await request();}catch(e){
+  if((e as ApiError).error==='recent_auth_required'&&[401,403].includes((e as ApiError).status)&&reauthHandler){
+   if(!await reauthHandler('Скачать установщик для одной машины'))throw {message:'Загрузка отменена.'};return request();
+  }throw e;
+ }
+}

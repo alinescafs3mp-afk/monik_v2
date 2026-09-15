@@ -1,3 +1,7 @@
+## Current audit: V15 one-file Linux installation
+
+Source for an owner-prepared single executable is implemented. See [the short user flow](docs/V15_ONE_FILE_AGENT_RU.md) and [validation boundaries](docs/AUDIT_REVIEW_15_2026-09-15.md). The auditor ran standalone installer/format tests, not the full Go 1.27 application or native systemd installation. Run `scripts/verify-audit15.sh --with-browser` and a clean-VM managed install/boot before distributing it. Preserve all existing controller/agent identity and trust. Previous audit sections below are historical.
+
 ## Current stabilization audit: V14
 
 Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote connection guide](docs/V14_DISCOVERY_AND_CONNECTION_RU.md) and [acceptance](ACCEPTANCE_LEDGER.md). Current inventory no longer grows forever with closed, unmonitored temporary ports. Expected/selected failures remain visible and history is retained. New external profiles can use the public origin independently of saved LAN routes. Run `scripts/verify-audit14.sh --with-browser` in a permitted environment; it does not install system services or deploy.
@@ -6,7 +10,7 @@ Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote 
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: V14 inventory/profile audit, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_14_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: V15 one-file installer audit, PRE-RELEASE, full integration/native acceptance pending.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_14_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
 The corrected new-profile bootstrap URL is `https://46.150.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 

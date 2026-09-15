@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
@@ -145,7 +146,7 @@ func AnnounceOnce(ctx context.Context, st *configfile.State) (string, error) {
 		return "", fmt.Errorf("invalid bounded announcement response")
 	}
 	var out protocol.AnnouncementResponse
-	if json.Unmarshal(raw, &out) != nil || out.Fingerprint != protocol.RegistrationFingerprint(st.File.AgentID, cred) {
+	if jsonutil.Unmarshal(raw, &out) != nil || out.Fingerprint != protocol.RegistrationFingerprint(st.File.AgentID, cred) {
 		return "", fmt.Errorf("announcement proof mismatch")
 	}
 	switch out.State {

@@ -57,6 +57,8 @@ jobs:
         run: go vet ./...
       - name: Build Linux and Windows binaries
         run: make dist
+      - name: Build same-source single-file Linux installer templates
+        run: make installer-templates
       - name: Verify compiled Linux agent and supervisor lifecycle
         run: |
           set -o pipefail

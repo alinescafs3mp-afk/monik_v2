@@ -15,6 +15,7 @@ import (
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/agent/configfile"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/idgen"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
@@ -120,7 +121,7 @@ func Enroll(p *Profile) (*configfile.State, error) {
 		return nil, fmt.Errorf("enrollment rejected (HTTP %d); check the code and server version; redirects are not followed", resp.StatusCode)
 	}
 	var er protocol.EnrollResponse
-	if err = json.Unmarshal(slurp, &er); err != nil {
+	if err = jsonutil.Unmarshal(slurp, &er); err != nil {
 		return nil, fmt.Errorf("invalid enrollment response")
 	}
 	if er.AgentID != intent.AgentID || er.Credential != intent.Credential || er.ControllerID == "" || er.EndpointGeneration < 1 {

@@ -39,17 +39,18 @@ type Config struct {
 }
 
 type App struct {
-	controlMu sync.Mutex
-	console   consoleState
-	Cfg       Config
-	Store     *storage.Store
-	TLS       *tlsutil.Bundle
-	Log       *slog.Logger
-	Clock     clock.Clock
-	Master    []byte
-	HTTP      *http.Server
-	mu        sync.Mutex
-	limiters  map[string]*rateBucket
+	controlMu   sync.Mutex
+	installerMu sync.Mutex
+	console     consoleState
+	Cfg         Config
+	Store       *storage.Store
+	TLS         *tlsutil.Bundle
+	Log         *slog.Logger
+	Clock       clock.Clock
+	Master      []byte
+	HTTP        *http.Server
+	mu          sync.Mutex
+	limiters    map[string]*rateBucket
 }
 
 func Open(cfg Config) (*App, error) {

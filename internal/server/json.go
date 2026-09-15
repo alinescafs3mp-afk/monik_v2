@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 )
 
 // Read exactly one bounded JSON object. A valid prefix must never conceal a
@@ -22,7 +24,7 @@ func parseJSONLimit(r *http.Request, v any, max int64) error {
 	if len(b) == 0 || b[0] != '{' {
 		return fmt.Errorf("JSON object required")
 	}
-	return json.Unmarshal(b, v)
+	return jsonutil.Unmarshal(b, v)
 }
 func parseJSON(r *http.Request, v any) error { return parseJSONLimit(r, v, 8<<20) }
 

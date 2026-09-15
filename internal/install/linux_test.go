@@ -144,3 +144,24 @@ func TestAudit8PrivatePublicationDoesNotFollowEscapingDirectory(t *testing.T) {
 		t.Fatal("wrote outside private state", e)
 	}
 }
+
+func TestV15MissingSourceDoesNotReplaceAnyInstalledBinary(t *testing.T) {
+	root, src := t.TempDir(), t.TempDir()
+	prefix := filepath.Join(root, "prefix")
+	os.MkdirAll(prefix, 0755)
+	dst := filepath.Join(prefix, "monik-service-host")
+	os.WriteFile(dst, []byte("old healthy supervisor"), 0755)
+	host := filepath.Join(src, "host")
+	os.WriteFile(host, []byte("new supervisor"), 0755)
+	o := Options{Prefix: prefix, StateDir: filepath.Join(root, "state"), UnitPath: filepath.Join(root, "monik-agent.service"), HostSrc: host, WorkerSrc: filepath.Join(src, "missing"), SkipSystemctl: true}
+	if e := InstallLinux(o); e == nil {
+		t.Fatal("missing source accepted")
+	}
+	got, e := os.ReadFile(dst)
+	if e != nil || string(got) != "old healthy supervisor" {
+		t.Fatal("failed preflight modified a working binary", string(got), e)
+	}
+	if _, e := os.Stat(o.StateDir); !os.IsNotExist(e) {
+		t.Fatal("failed preflight mutated state", e)
+	}
+}

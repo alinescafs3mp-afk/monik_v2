@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,11 +12,13 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/alinescafs3mp-afk/monik_v2/internal/jsonutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"gopkg.in/yaml.v3"
 )
 
 type Profile struct {
+	SchemaVersion  int    `json:"schema_version,omitempty" yaml:"schema_version,omitempty"`
 	AutoDiscover   bool   `json:"auto_discover" yaml:"auto_discover"`
 	ControllerURL  string `json:"controller_url" yaml:"controller_url"`
 	CACertPEM      string `json:"ca_cert_pem" yaml:"ca_cert_pem"`
@@ -26,14 +29,42 @@ type Profile struct {
 }
 
 func LoadProfile(path string) (*Profile, error) {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, (128<<10)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > 128<<10 {
+		return nil, fmt.Errorf("enrollment profile exceeds limit")
+	}
 	p := &Profile{}
-	if json.Unmarshal(b, p) != nil {
-		if err := yaml.Unmarshal(b, p); err != nil {
+	if bytes.HasPrefix(bytes.TrimSpace(b), []byte("{")) {
+		// Malformed JSON must not fall through to a more permissive YAML parser.
+		if err = jsonutil.Validate(b); err != nil {
 			return nil, err
+		}
+		d := json.NewDecoder(bytes.NewReader(b))
+		d.DisallowUnknownFields()
+		if err = d.Decode(p); err != nil {
+			return nil, fmt.Errorf("invalid enrollment JSON profile")
+		}
+	} else {
+		var document yaml.Node
+		if err = yaml.Unmarshal(b, &document); err != nil || len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("enrollment YAML must be a mapping")
+		}
+		d := yaml.NewDecoder(bytes.NewReader(b))
+		d.KnownFields(true)
+		if err = d.Decode(p); err != nil {
+			return nil, fmt.Errorf("invalid enrollment YAML profile")
+		}
+		var extra any
+		if err = d.Decode(&extra); err != io.EOF {
+			return nil, fmt.Errorf("multiple enrollment documents are not accepted")
 		}
 	}
 	return p, nil

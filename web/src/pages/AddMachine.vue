@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
+import InstallerDownload from "../components/InstallerDownload.vue";
 import AdmissionPanel from "../components/AdmissionPanel.vue";
 import { get, submitOp } from "../api";
 import {discoveryProfile as makeDiscoveryProfile,normalizedProfileURL} from "../inventory";
@@ -7,6 +8,7 @@ const emit = defineEmits<{ toast: [string, string?] }>();
 const info = ref<Record<string, unknown> | null>(null);
 const created = ref<Record<string, unknown> | null>(null);
 const pending = ref(false), error = ref(''), autoProfile = ref(false);
+const installerBusy=ref(false);
 const profileURL=ref(''), checking=ref(false), validation=ref<any>(null);
 watch(profileURL,()=>validation.value=null);
 function discoveryProfile(){
@@ -76,17 +78,19 @@ async function copyYaml() {
 
 <template>
   <div>
-    <AdmissionPanel/>
     <section class="panel profile-address"><h2>Адрес в профиле нового агента</h2>
-    <label>Доступный агенту HTTPS-адрес <input v-model="profileURL" :disabled="pending||checking" type="url" autocomplete="off" spellcheck="false"/></label>
-    <div class="row"><button :disabled="!info||checking||pending" @click="profileURL=String(info?.bootstrap_default||'');validation=null">Внешний адрес по умолчанию</button><button :disabled="!info||checking||pending" @click="profileURL=String(info?.advertised_url||'');validation=null">Адрес из настроек сервера</button><button :disabled="!info||checking||pending" @click="checkAddress">{{checking?'Проверяем сертификат…':'Проверить сертификат профиля'}}</button></div>
+    <label>Доступный агенту HTTPS-адрес <input v-model="profileURL" :disabled="pending||checking||installerBusy" type="url" autocomplete="off" spellcheck="false"/></label>
+    <div class="row"><button :disabled="!info||checking||pending||installerBusy" @click="profileURL=String(info?.bootstrap_default||'');validation=null">Внешний адрес по умолчанию</button><button :disabled="!info||checking||pending||installerBusy" @click="profileURL=String(info?.advertised_url||'');validation=null">Адрес из настроек сервера</button><button :disabled="!info||checking||pending||installerBusy" @click="checkAddress">{{checking?'Проверяем сертификат…':'Проверить сертификат профиля'}}</button></div>
     <p class="muted">Настройки действующего контроллера: {{info?.advertised_url}}. Выбор выше меняет только новый профиль, не LAN-агентов и не маршрут работающего парка. Все профили используют прежнюю CA.</p>
     <p v-if="validation?.tls?.matches" role="status">Сертификат подходит адресу {{validation.profile_url}}. Внешний маршрут и firewall ещё не проверены.</p>
     <p v-if="validation && !validation.tls?.matches" class="data-warning">SAN: {{validation.tls?.ip_addresses?.join(', ')}} {{validation.tls?.dns_names?.join(', ')}}. Добавление имени не требует замены CA.</p>
     </section>
     <p v-if="error" class="panel err" role="alert">{{error}}</p>
+    <InstallerDownload :controller-url="profileURL" @busy="installerBusy=$event"/>
+    <details class="panel advanced-enrollment"><summary>Другие способы подключения: профиль, код, Windows</summary>
+    <AdmissionPanel/>
     <section class="panel"><h2>Автоматическое появление машины</h2><p>Один доверенный профиль можно раздать своим машинам. Он не содержит кода регистрации или общего API-ключа. Откройте приём выше. Каждый агент создаёт собственную идентичность и после запуска появляется в «Машинах» для подтверждения.</p>
-    <button :disabled="!info||checking||pending" @click="downloadProfile">Скачать профиль автообнаружения</button><button :disabled="!info" @click="autoProfile=!autoProfile">Показать профиль</button><pre v-if="autoProfile">{{discoveryProfile()}}</pre>
+    <button :disabled="!info||checking||pending||installerBusy" @click="downloadProfile">Скачать профиль автообнаружения</button><button :disabled="!info" @click="autoProfile=!autoProfile">Показать профиль</button><pre v-if="autoProfile">{{discoveryProfile()}}</pre>
     <p>Linux, установка от администратора с парой бинарников agent + service-host:</p><pre>sudo ./monik-agent setup --profile monik-discovery.json
 sudo ./monik-agent service install</pre>
     <p>Windows, терминал с полномочиями администратора:</p><pre>.\monik-agent.exe setup --profile monik-discovery.json
@@ -98,7 +102,7 @@ sudo ./monik-agent service install</pre>
       <h2>Добавить машину</h2>
       <p>Адрес действующего контроллера: <code>{{ info?.advertised_url }}</code></p>
       <p class="muted">Агент проверяет TLS по CA контроллера. Не используйте -k.</p>
-      <button class="primary" :disabled="pending || checking || !info" @click="makeCode">Создать код регистрации</button>
+      <button class="primary" :disabled="pending || checking || !info || installerBusy" @click="makeCode">Создать код регистрации</button>
     </section>
     <section v-if="created" class="panel">
       <p>Код: <strong>{{ created.code }}</strong> до {{ created.expires_at }}</p>
@@ -107,5 +111,6 @@ sudo ./monik-agent service install</pre>
       <p>Linux: <code>monik-agent setup --profile enrollment.yaml && monik-agent service install</code></p>
       <p>Windows: <code>monik-agent.exe setup --profile enrollment.yaml</code></p>
     </section>
+    </details>
   </div>
 </template>

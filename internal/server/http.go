@@ -69,6 +69,9 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/rollouts", a.needAuth(a.handleRollouts))
 	mux.HandleFunc("POST /api/v1/releases/import", a.needAuth(a.handleReleaseImport))
 	mux.HandleFunc("GET /api/v1/enrollment", a.needAuth(a.handleEnrollmentGet))
+	mux.HandleFunc("GET /api/v1/installers", a.needAuth(a.handleInstallers))
+	mux.HandleFunc("POST /api/v1/installers/{platform}", a.needAuth(a.handleInstallerDownload))
+	mux.HandleFunc("GET /api/v1/agent/installation", a.handleInstallationStatus)
 	mux.HandleFunc("GET /api/v1/secrets", a.needAuth(a.handleSecrets))
 	mux.HandleFunc("GET /api/v1/backups", a.needAuth(a.handleBackups))
 	mux.HandleFunc("GET /api/v1/actions", a.needAuth(func(w http.ResponseWriter, r *http.Request, s *storage.Session) {
