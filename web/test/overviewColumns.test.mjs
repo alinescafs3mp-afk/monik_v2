@@ -113,3 +113,23 @@ test('V17 wide TV preferences survive reload and fit back into smaller content w
  const fitted=c.fitColumns(pixels,min,900);assert.ok(fitted);assert.ok(fitted[5]>=100-1e-6);
  assert.ok(Math.abs(fitted.reduce((a,b)=>a+b,0)-900)<1e-6);
 });
+test('V18 remote OK/joystick mode is independent of pointer capture and commits once',()=>harness(async h=>{
+ const before=[...h.layout.widths];h.key('Enter',1);assert.equal(h.layout.remoteIndex,1);assert.equal(h.layout.resizing,true);
+ h.key('ArrowRight',1);h.key('ArrowRight',1);assert.equal(h.layout.widths[1],before[1]+16);assert.equal(h.writes,0);
+ h.key('ArrowDown',1);assert.equal(h.layout.remoteIndex,2);h.key('ArrowLeft',2);h.key('Enter',2);
+ assert.equal(h.layout.remoteIndex,-1);assert.equal(h.layout.resizing,false);assert.equal(h.writes,1);
+}));
+test('V18 remote Back/Escape restores snapshot and repeated OK does not reopen',()=>harness(async h=>{
+ const before=[...h.layout.widths];h.layout.remoteBegin(1);h.layout.remoteStep(32);
+ h.layout.remoteKey({key:'BrowserBack',preventDefault(){},stopPropagation(){}});assert.deepEqual(h.layout.widths,before);assert.equal(h.writes,0);
+ h.layout.key({key:'Enter',repeat:true,preventDefault(){}},1);assert.equal(h.layout.remoteIndex,-1);
+}));
+test('V18 remote virtual controls, keyCode D-pad and resize cancellation stay bounded',()=>harness(async h=>{
+ h.layout.remoteBegin(0);h.layout.remoteSelect(-1);assert.equal(h.layout.remoteIndex,4);
+ for(let i=0;i<100;i++)h.layout.remoteKey({key:'',keyCode:37,preventDefault(){}});
+ assert.ok(h.layout.widths[4]>=h.layout.minimum[4]-1e-6);await h.resize(900);assert.equal(h.layout.remoteIndex,-1);assert.equal(h.layout.resizing,false);
+}));
+test('V18 TV has native remote-control buttons and a dedicated visible console action',async()=>{
+ const tv=await readFile(new URL('../src/components/TVBoard.vue',import.meta.url),'utf8'),pad=await readFile(new URL('../src/components/ColumnRemoteControl.vue',import.meta.url),'utf8');
+ assert.match(tv,/ColumnRemoteControl/);assert.match(tv,/tv-machine-actions/);assert.match(pad,/Ширина колонок · пульт/);assert.match(pad,/@click="layout.remoteStep\(-8\)"/);assert.match(pad,/@keydown="layout.remoteKey"/);
+});

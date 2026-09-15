@@ -21,6 +21,11 @@ import (
 )
 
 func (a *App) routes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/v1/agents/{id}/console-config", a.needAuth(a.handleConsoleConfigure))
+	mux.HandleFunc("GET /api/v1/agent/console-channel", a.handleAgentConsoleChannel)
+	mux.HandleFunc("GET /api/v1/agents/{id}/agent-console", a.needAuth(a.handleAgentConsoleInfo))
+	mux.HandleFunc("POST /api/v1/agents/{id}/agent-console-ticket", a.needAuth(a.handleAgentConsoleTicket))
+	mux.HandleFunc("GET /api/v1/agents/{id}/agent-console-stream", a.needAuth(a.handleAgentConsoleSocket))
 	mux.HandleFunc("GET /api/v1/agents/{id}/console", a.needAuth(a.handleConsoleInfo))
 	mux.HandleFunc("POST /api/v1/agents/{id}/console-ticket", a.needAuth(a.handleConsoleTicket))
 	mux.HandleFunc("GET /api/v1/agents/{id}/console-stream", a.needAuth(a.handleConsoleSocket))

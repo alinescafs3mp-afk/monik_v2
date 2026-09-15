@@ -201,6 +201,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.mu.Unlock()
 	}()
 	ctx = runCtx
+	a.startConsole(ctx)
 	t := a.Clock.NewTicker(protocol.ReportInterval)
 	defer t.Stop()
 	discEvery := time.Duration(a.cfg.Intervals.DiscoverySeconds) * time.Second
@@ -263,6 +264,10 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 	locals, _ := netutil.LocalInterfaceIPs()
 	if !a.cfg.Paused {
 		a.scheduleChecks(ctx, now, locals)
+	}
+	caps["agent_console_v1"] = protocol.Capability{Status: "supported", Reason: "Linux local opt-in required; live channel status is separate"}
+	if runtime.GOOS != "linux" {
+		caps["agent_console_v1"] = protocol.Capability{Status: "unsupported", Reason: "native PTY policy supported on Linux only; direct SSH remains separate"}
 	}
 	caps["http_custom_v1"] = protocol.Capability{Status: "supported", Reason: "bounded custom requests, typed assertions and per-check intervals"}
 	caps["immutable_release_v1"] = protocol.Capability{Status: "supported", Reason: "release-specific metadata and authenticated target URLs"}

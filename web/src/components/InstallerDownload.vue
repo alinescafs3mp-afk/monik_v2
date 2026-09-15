@@ -4,13 +4,14 @@ import {get,downloadInstaller} from '../api';
 const props=defineProps<{controllerUrl:string}>();
 const emit=defineEmits<{busy:[boolean]}>();
 const rows=ref<Array<{platform:string;ready:boolean;reason?:string;build?:string}>>([]);
+const enableConsole=ref(false);
 const loading=ref(false),pending=ref(''),error=ref(''),success=ref('');
 async function reload(){loading.value=true;error.value='';try{const r=await get<{installers:typeof rows.value}>('/api/v1/installers');if(!Array.isArray(r.installers)||r.installers.some(x=>!['linux-amd64','linux-arm64'].includes(x.platform)||typeof x.ready!=='boolean'))throw new Error('Сервер вернул некорректный список установщиков.');rows.value=r.installers;}catch(e){error.value=(e as Error).message;}finally{loading.value=false;}}
 onMounted(reload);
 async function download(platform:string){
  if(pending.value)return;const chosen=props.controllerUrl;pending.value=platform;error.value='';success.value='';emit('busy',true);
  try{
-  const result=await downloadInstaller(platform,chosen);
+  const result=await downloadInstaller(platform,chosen,enableConsole.value);
   const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download='monik-agent';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   success.value=`Файл подготовлен для ${chosen}. Регистрация одной новой машины до ${new Date(result.expires).toLocaleString()}. Это не подтверждение установки: запустите файл на нужном сервере.`;
  }catch(e){error.value=(e as Error).message||'Не удалось скачать установщик.';}finally{pending.value='';emit('busy',false);}
@@ -23,6 +24,7 @@ async function download(platform:string){
   <pre>chmod +x monik-agent &amp;&amp; sudo ./monik-agent</pre>
   <p>Внутри уже есть агент, супервизор, адрес и доверие контроллера. Служба включается автоматически; «ГОТОВО» появляется только после проверки запуска и свежих отчётов. После этого консоль можно закрыть.</p>
   <p class="data-warning">Каждый файл разрешает регистрацию только одной новой машины, в течение часа. Для следующей скачайте новый. Не публикуйте установщик и не пересылайте посторонним: до использования он содержит одноразовое разрешение на подключение.</p>
+  <label class="console-opt-in"><input v-model="enableConsole" type="checkbox" :disabled="!!pending"/> Разрешить консоль через агент. Отдельный пользователь monik-console, без root/sudo; без входящих сетевых портов.</label>
   <p v-if="loading" role="status">Проверяем наличие собранных установщиков…</p>
   <div v-for="r in rows" :key="r.platform" class="installer-option">
    <button class="primary" :disabled="!r.ready||!!pending||loading||!controllerUrl" @click="download(r.platform)">{{pending===r.platform?'Подготавливаем и скачиваем…':`Скачать агент: ${r.platform}`}}</button>

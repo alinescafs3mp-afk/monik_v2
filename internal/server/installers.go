@@ -110,7 +110,8 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 	}
 	defer a.installerMu.Unlock()
 	var body struct {
-		ControllerURL string `json:"controller_url"`
+		ControllerURL      string `json:"controller_url"`
+		EnableAgentConsole bool   `json:"enable_agent_console"`
 	}
 	if e := parseJSONStrictLimit(r, &body, 4096); e != nil {
 		a.writeErr(w, 400, "malformed", "invalid installer request")
@@ -137,7 +138,7 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 		return
 	}
 	defer f.Close()
-	p := &installerbundle.Profile{ControllerURL: strings.TrimRight(body.ControllerURL, "/"), ControllerID: a.ControllerID(), CACertPEM: string(a.CACertPEM()), EnrollmentCode: strings.Repeat("0", 32), ExpiresAt: a.Clock.Now().Add(time.Hour)}
+	p := &installerbundle.Profile{EnableAgentConsole: body.EnableAgentConsole, ControllerURL: strings.TrimRight(body.ControllerURL, "/"), ControllerID: a.ControllerID(), CACertPEM: string(a.CACertPEM()), EnrollmentCode: strings.Repeat("0", 32), ExpiresAt: a.Clock.Now().Add(time.Hour)}
 	if e = p.Validate(); e != nil {
 		a.writeErr(w, 409, "invalid_profile", e.Error())
 		return
@@ -145,6 +146,10 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 	code, expires, e := a.Store.CreateInstallerCode(s.Username, b.Manifest.Build, platform)
 	if e != nil {
 		a.writeErr(w, 409, "enrollment_unavailable", e.Error())
+		return
+	}
+	if _, e = a.Store.DB.ExecContext(r.Context(), `INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,?,?,?,?)`, a.Clock.Now().UTC().Format(time.RFC3339Nano), s.Username, "installer.console_consent", platform, fmt.Sprintf("local_agent_console=%t; no controller secrets or reusable permits in audit", body.EnableAgentConsole)); e != nil {
+		a.writeErr(w, 503, "audit_unavailable", "installer consent was not confirmed; unused enrollment expires")
 		return
 	}
 	p.EnrollmentCode = code

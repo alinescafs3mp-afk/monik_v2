@@ -39,18 +39,20 @@ type Config struct {
 }
 
 type App struct {
-	controlMu   sync.Mutex
-	installerMu sync.Mutex
-	console     consoleState
-	Cfg         Config
-	Store       *storage.Store
-	TLS         *tlsutil.Bundle
-	Log         *slog.Logger
-	Clock       clock.Clock
-	Master      []byte
-	HTTP        *http.Server
-	mu          sync.Mutex
-	limiters    map[string]*rateBucket
+	controlMu       sync.Mutex
+	installerMu     sync.Mutex
+	console         consoleState
+	consoleConfigMu sync.Mutex
+	agentConsole    agentConsoleState
+	Cfg             Config
+	Store           *storage.Store
+	TLS             *tlsutil.Bundle
+	Log             *slog.Logger
+	Clock           clock.Clock
+	Master          []byte
+	HTTP            *http.Server
+	mu              sync.Mutex
+	limiters        map[string]*rateBucket
 }
 
 func Open(cfg Config) (*App, error) {
@@ -148,7 +150,7 @@ func Open(cfg Config) (*App, error) {
 	return a, nil
 }
 
-func (a *App) Close() error { a.console.closeAll(); return a.Store.Close() }
+func (a *App) Close() error { a.agentConsole.closeAll(); a.console.closeAll(); return a.Store.Close() }
 
 func (a *App) ControllerID() string {
 	return a.Store.MustSetting("controller_id", "")
@@ -301,6 +303,7 @@ func (a *App) Run(ctx context.Context) error {
 	go func() {
 		defer close(shutdownDone)
 		<-runCtx.Done()
+		a.agentConsole.closeAll()
 		a.console.closeAll()
 		shctx, stop := context.WithTimeout(context.Background(), 8*time.Second)
 		defer stop()

@@ -74,6 +74,8 @@ func main() {
 		fmt.Printf("Monik installer %s %s/%s\n", b.Manifest.Build, b.Manifest.OS, b.Manifest.Arch)
 		if p := b.Manifest.Profile; p != nil {
 			fmt.Printf("Controller: %s\nProfile expires: %s\nOne machine. Enrollment credential is intentionally not printed.\n", p.ControllerURL, p.ExpiresAt.UTC().Format(time.RFC3339))
+
+			fmt.Printf("Agent console locally permitted: %t (separate unprivileged account)\n", p.EnableAgentConsole)
 		} else {
 			fmt.Println("Template only. No enrollment profile.")
 		}

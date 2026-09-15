@@ -23,6 +23,7 @@ from navigation_scenarios import exercise_navigation_failure
 from inventory_scenarios import exercise_inventory_profiles
 from seamless_scenarios import exercise_seamless_updates
 from column_scenarios import exercise_columns
+from agent_console_scenarios import exercise_agent_console_and_remote
 
 
 def run(binary: Path, output: Path) -> None:
@@ -468,8 +469,10 @@ def run(binary: Path, output: Path) -> None:
                     page.screenshot(path=str(output/"overview-tv-v8-nav.png"),full_page=True)
                     page.get_by_role("button",name="Свернуть меню",exact=True).click()
                     page.locator(".tv-machine").first.get_by_role("link",name="Консоль Audit host",exact=True).click()
-                    expect(page.get_by_role("heading",name="SSH-консоль",exact=True)).to_be_visible()
-                    expect(page.locator(".console-page")).to_contain_text("Консоль не настроена")
+                    expect(page.get_by_role("heading",name="Консоль машины",exact=True)).to_be_visible()
+                    expect(page.get_by_role("button",name="Через агент",exact=True)).to_have_attribute("aria-pressed","true")
+                    expect(page.get_by_role("button",name="Прямое SSH",exact=True)).to_be_visible()
+                    expect(page.locator(".console-page")).to_contain_text("Подключение пока недоступно")
                     assert page.evaluate("document.documentElement.scrollWidth<=window.innerWidth+1")
                     page.get_by_label("Режим экрана",exact=True).select_option("auto")
                     page.set_viewport_size({"width":1440,"height":1000})
@@ -496,6 +499,7 @@ def run(binary: Path, output: Path) -> None:
                     results.append("password change ends browser sessions and new password signs in; agent keys untouched")
                     exercise_inventory_profiles(page, context, base, directory, output, results)
                     exercise_columns(context, base, output, results)
+                    exercise_agent_console_and_remote(context, base, output, results)
                     exercise_navigation_failure(context, base, output, results)
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")

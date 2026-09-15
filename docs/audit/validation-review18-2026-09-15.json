@@ -1,0 +1,94 @@
+{
+  "audit": "18",
+  "date": "2026-09-15",
+  "baseline_commit": "afdbbd2573b68d99eb3115032f62f6b33681a5cd",
+  "baseline_tree": "82fef7293be36b76bb587682425a0ed0685230da",
+  "auditor_result_tree": "c365dfe8f74fdd69556ff63fa1979725edde156c",
+  "full_release_accepted": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.27.0",
+    "node": "v22.23.2",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "auditor": {
+    "browser": "BLOCKED_BEFORE_LOGIN",
+    "native_uid": 65534
+  },
+  "executed": {
+    "package_verify": {"status": "PASS", "files": 48},
+    "preflight": {"status": "PASS", "applied_tree": "c365dfe8f74fdd69556ff63fa1979725edde156c"},
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_tests_and_fuzz_targets": 431,
+      "test_and_seed_results": 610,
+      "tested_packages": 27
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS"},
+    "frontend": {"status": "PASS", "node_tests": 167, "tsc": true, "vite": true},
+    "v18_security_repeats": {"status": "PASS", "count": 5, "filter": "TestV18|TestV17Console", "packages": 3},
+    "fuzz": {"status": "PASS", "target": "FuzzV18TerminalFrames", "seconds": 15, "executions": 876765},
+    "linux_windows_build": {"status": "PASS", "note": "four Linux amd64 and four Windows amd64; installer templates amd64+arm64 rebuilt after commit"},
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "loopback_icmp": {
+      "status": "PASS",
+      "target": "127.0.0.1",
+      "env": "MONIK_NATIVE_PING=1",
+      "not": "systemd AmbientCapabilities or 8.8.8.8"
+    },
+    "systemd_unit_syntax": {
+      "status": "PASS",
+      "not": "socket activation, cgroup kill, or boot"
+    },
+    "browser": {
+      "status": "PASS",
+      "checks": 41,
+      "errors": 0,
+      "includes": [
+        "V18 TV remote OK/arrows/native +/- persist and cancel",
+        "V18 explicit agent/SSH transport; absent channel does not open a shell",
+        "V17 pointer drag, keyboard, Escape, persisted width and cross-row alignment",
+        "V17 service columns of three; TV preferences isolated; phone reflow; reset restores defaults",
+        "four passive inventory refreshes preserve scroll/focus/draft",
+        "manual Refresh does not blink during background I/O",
+        "history 503 surfaces on charts tab and does not hide the service editor",
+        "single-file installer path",
+        "inactive inventory hide/show",
+        "404/no-store"
+      ]
+    }
+  },
+  "not_run": {
+    "v18_uid_fixture": "MONIK_V18_UID_FIXTURE not run as root on the live controller",
+    "clean_systemd_console_pilot": "no disposable VM; console-enable was not executed on lan-host or the first remote",
+    "windows_conpty_scm_boot": "still pending",
+    "physical_tv_yandex": "not executed",
+    "protected_complete_restore": "still open",
+    "independent_service_host_recovery": "still fail-closed",
+    "full_fleet_soak": "not executed"
+  },
+  "unchanged": [
+    "saved agent/controller URL and identity",
+    "go.mod/go.sum/package lock versions",
+    "fail-closed operation.retry_selected and service-host self-update",
+    "existing enrolled agents not re-enrolled",
+    "console remains locally opt-in"
+  ],
+  "host_extras": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/history/ACCEPTANCE_LEDGER_THROUGH_V17.md",
+    "docs/history/IMPLEMENTATION_STATUS_THROUGH_V17.md",
+    "docs/audit/validation-review18-2026-09-15.json",
+    "tests/browser/audit.py heading and transport alignment",
+    "tests/browser/agent_console_scenarios.py adjacent-track remote direction and display isolation"
+  ]
+}

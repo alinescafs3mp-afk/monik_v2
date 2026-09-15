@@ -3,6 +3,7 @@ package server
 // The console is an owner-operated SSH gateway. It neither executes on the
 // controller nor grants the monitoring worker additional OS privileges.
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
@@ -12,8 +13,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +29,7 @@ type consoleTarget struct {
 	Port        int    `json:"port"`
 	Username    string `json:"username"`
 	Fingerprint string `json:"host_key_sha256"`
+	HostKeyType string `json:"host_key_type,omitempty"`
 }
 type consoleTicket struct {
 	Session, Agent, Target string
@@ -75,30 +75,9 @@ func (a *App) consoleTarget(id string) (consoleTarget, error) {
 	if agent.Revoked || agent.Archived {
 		return out, fmt.Errorf("machine access is revoked or archived")
 	}
-	path := filepath.Join(a.Cfg.DataDir, "console-targets.json")
-	f, err := os.Open(path)
+	cfg, _, err := a.readConsoleConfiguration()
 	if err != nil {
-		return out, fmt.Errorf("console disabled: configure protected console-targets.json on the controller")
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > 64<<10 {
-		return out, fmt.Errorf("invalid console configuration file")
-	}
-	if info.Mode().Perm()&0022 != 0 {
-		return out, fmt.Errorf("console configuration must not be group/world writable")
-	}
-	var cfg struct {
-		Targets map[string]consoleTarget `json:"targets"`
-	}
-	d := json.NewDecoder(io.LimitReader(f, (64<<10)+1))
-	d.DisallowUnknownFields()
-	if err = d.Decode(&cfg); err != nil {
-		return out, fmt.Errorf("invalid console configuration")
-	}
-	var extra any
-	if d.Decode(&extra) != io.EOF {
-		return out, fmt.Errorf("trailing console configuration")
+		return out, err
 	}
 	out, ok := cfg.Targets[id]
 	if !ok {
@@ -106,7 +85,11 @@ func (a *App) consoleTarget(id string) (consoleTarget, error) {
 	}
 	return out, validateConsoleTarget(out)
 }
+
 func validateConsoleTarget(t consoleTarget) error {
+	if _, ok := consoleHostKeyAlgorithms(t.HostKeyType); !ok {
+		return fmt.Errorf("unsupported SSH host key type")
+	}
 	ip, err := netip.ParseAddr(t.Host)
 	if err != nil || ip.Zone() != "" || ip.Unmap().IsUnspecified() || ip.Unmap().IsMulticast() || ip.Unmap().IsLinkLocalUnicast() || ip.Unmap().IsLinkLocalMulticast() {
 		return fmt.Errorf("console host must be an exact permitted unicast IP, not a hostname or metadata destination")
@@ -129,19 +112,54 @@ func validateConsoleTarget(t consoleTarget) error {
 	}
 	return nil
 }
+
+// A SHA256 fingerprint does not reveal the key type. Pin negotiation to the
+// independently checked key instead of accidentally choosing another host key.
+func consoleHostKeyAlgorithms(kind string) ([]string, bool) {
+	switch kind {
+	case "":
+		return nil, true // backwards-compatible protected files
+	case ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
+		return []string{kind}, true
+	case ssh.KeyAlgoRSA:
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}, true
+	default:
+		return nil, false
+	}
+}
+
 func targetIdentity(t consoleTarget) string { b, _ := json.Marshal(t); return string(b) }
 func (a *App) handleConsoleInfo(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	if s.Role != "owner" {
 		a.writeErr(w, 403, "forbidden", "owner role required")
 		return
 	}
-	t, e := a.consoleTarget(r.PathValue("id"))
+	id := r.PathValue("id")
+	agent, e := a.Store.Agent(id)
 	if e != nil {
-		a.writeJSON(w, 200, map[string]any{"enabled": false, "reason": e.Error()})
+		a.writeErr(w, 404, "not_found", "machine not found")
 		return
 	}
-	a.writeJSON(w, 200, map[string]any{"enabled": true, "target": t, "max_minutes": 60, "idle_minutes": 10, "transport": "ssh"})
+	if a.Cfg.RestoreMode || agent.Revoked || agent.Archived {
+		a.writeJSON(w, 200, map[string]any{"enabled": false, "configurable": false, "reason": "Доступ к машине отозван, архивирован или контроллер ожидает восстановления."})
+		return
+	}
+	cfg, revision, e := a.readConsoleConfiguration()
+	if e != nil {
+		a.writeJSON(w, 200, map[string]any{"enabled": false, "configurable": false, "reason": e.Error()})
+		return
+	}
+	t, enabled := cfg.Targets[id]
+	out := map[string]any{"enabled": enabled, "configurable": true, "config_revision": revision, "max_minutes": 60, "idle_minutes": 10, "transport": "ssh"}
+	if enabled {
+		out["target"] = t
+		out["target_revision"] = consoleConfigRevision([]byte(targetIdentity(t)))
+	} else {
+		out["reason"] = "SSH-консоль пока не настроена для этой машины. Укажите параметры подключения ниже."
+	}
+	a.writeJSON(w, 200, out)
 }
+
 func (a *App) handleConsoleTicket(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	if s.Role != "owner" {
 		a.writeErr(w, 403, "forbidden", "owner role required")
@@ -162,6 +180,22 @@ func (a *App) handleConsoleTicket(w http.ResponseWriter, r *http.Request, s *sto
 	target, err := a.consoleTarget(id)
 	if err != nil {
 		a.writeErr(w, 409, "console_disabled", err.Error())
+		return
+	}
+	// Bind credentials to what the owner actually saw, not merely the current
+	// server mapping. Older tabs must reload instead of connecting elsewhere.
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1025))
+	var request struct {
+		TargetRevision string `json:"target_revision"`
+	}
+	if err != nil || len(body) > 1024 || exactConsoleFields(body, "target_revision") != nil {
+		a.writeErr(w, 400, "invalid_request", "bounded ticket request required")
+		return
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || request.TargetRevision != consoleConfigRevision([]byte(targetIdentity(target))) {
+		a.writeErr(w, 409, "console_target_changed", "SSH-настройки изменились или вкладка устарела. Перечитайте настройки перед вводом SSH-пароля.")
 		return
 	}
 	token, err := idgen.Secret(32)
@@ -218,7 +252,7 @@ func consoleOrigin(r *http.Request) bool {
 	return r.TLS != nil && r.Header.Get("Origin") == "https://"+r.Host
 }
 func (a *App) handleConsoleSocket(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	if s.Role != "owner" || !recentOK(s, a.Clock.Now()) || !consoleOrigin(r) {
+	if s.Role != "owner" || !recentOK(s, a.Clock.Now()) || !consoleOrigin(r) || r.URL.RawQuery != "" {
 		a.writeErr(w, 403, "console_denied", "owner, recent authentication and same HTTPS origin required")
 		return
 	}
@@ -267,16 +301,16 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 	ws.MaxPayloadBytes = 64 << 10
 	_ = ws.SetReadDeadline(time.Now().Add(10 * time.Second))
 	var hello consoleMessage
-	if err := websocket.JSON.Receive(ws, &hello); err != nil || hello.Type != "authenticate" || !a.takeConsoleTicket(hello.Ticket, s, id, target) {
+	if err := readSSHMessage(ws, &hello); err != nil || hello.Type != "authenticate" || !a.takeConsoleTicket(hello.Ticket, s, id, target) {
 		return
 	}
-	if !consoleSize(hello.Cols, hello.Rows) || len(hello.Password) > 1024 || len(hello.PrivateKey) > 32<<10 || len(hello.Passphrase) > 1024 {
+	if hello.Data != "" || !consoleSize(hello.Cols, hello.Rows) || len(hello.Password) > 1024 || len(hello.PrivateKey) > 32<<10 || len(hello.Passphrase) > 1024 {
 		return
 	}
 	if (hello.Password == "") == (hello.PrivateKey == "") {
 		return
 	}
-	if a.Store.SessionStillValid(s.ID) != nil {
+	if !a.consoleOwnerCurrent(s) {
 		return
 	}
 	a.console.mu.Lock()
@@ -324,6 +358,10 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 		auth = append(auth, ssh.PublicKeys(key))
 	}
 	hello = consoleMessage{Cols: hello.Cols, Rows: hello.Rows}
+	if _, err := a.Store.DB.ExecContext(ctx, `INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,?,?,?,?)`, a.Clock.Now().UTC().Format(time.RFC3339Nano), s.Username, "console.connect.requested", id, "fixed SSH destination; credentials not recorded"); err != nil {
+		fail("Журнал недоступен. SSH-подключение не начато.")
+		return
+	}
 	addr := net.JoinHostPort(target.Host, fmt.Sprint(target.Port))
 	conn, err := (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -334,7 +372,12 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 	go func() { <-ctx.Done(); _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 	mismatch := false
-	cfg := &ssh.ClientConfig{User: target.Username, Auth: auth, HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+	algorithms, _ := consoleHostKeyAlgorithms(target.HostKeyType)
+	cfg := &ssh.ClientConfig{User: target.Username, Auth: auth, HostKeyAlgorithms: algorithms, HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+		current, e := a.consoleTarget(id)
+		if e != nil || targetIdentity(current) != targetIdentity(target) || !a.consoleOwnerCurrent(s) {
+			return fmt.Errorf("console authorization changed")
+		}
 		if subtle.ConstantTimeCompare([]byte(ssh.FingerprintSHA256(key)), []byte(target.Fingerprint)) != 1 {
 			mismatch = true
 			return fmt.Errorf("host key mismatch")
@@ -355,6 +398,9 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 	_ = conn.SetDeadline(time.Time{})
 	client := ssh.NewClient(clientConn, chans, reqs)
 	defer client.Close()
+	if !a.consoleOwnerCurrent(s) || ctx.Err() != nil {
+		return
+	}
 	// PTY and shell requests must not hang forever before the session watchdog starts.
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 	shell, err := client.NewSession()
@@ -375,6 +421,9 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 		fail("SSH-сервер отказал в интерактивном терминале.")
 		return
 	}
+	if !a.consoleOwnerCurrent(s) || ctx.Err() != nil {
+		return
+	}
 	if err = shell.Shell(); err != nil {
 		fail("SSH-сервер отказал в запуске интерактивной оболочки.")
 		return
@@ -392,13 +441,21 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 	go func() {
 		for {
 			var msg consoleMessage
-			if e := websocket.JSON.Receive(ws, &msg); e != nil {
+			if e := readSSHMessage(ws, &msg); e != nil {
 				done <- e
+				return
+			}
+			if msg.Ticket != "" || msg.Password != "" || msg.PrivateKey != "" || msg.Passphrase != "" {
+				done <- fmt.Errorf("unexpected authentication data")
+				return
+			}
+			if !a.consoleOwnerCurrent(s) {
+				done <- fmt.Errorf("owner access revoked")
 				return
 			}
 			switch msg.Type {
 			case "input":
-				if len(msg.Data) > 16<<10 {
+				if len(msg.Data) == 0 || len(msg.Data) > 4096 || msg.Cols != 0 || msg.Rows != 0 {
 					done <- fmt.Errorf("input limit")
 					return
 				}
@@ -407,7 +464,7 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 					return
 				}
 			case "resize":
-				if !consoleSize(msg.Cols, msg.Rows) {
+				if msg.Data != "" || !consoleSize(msg.Cols, msg.Rows) {
 					done <- fmt.Errorf("size limit")
 					return
 				}
@@ -445,7 +502,7 @@ func (a *App) consoleSession(ws *websocket.Conn, r *http.Request, s *storage.Ses
 				fail("Истекло время сеанса или ожидания ввода.")
 				return
 			}
-			if a.Store.SessionStillValid(s.ID) != nil {
+			if !a.consoleOwnerCurrent(s) {
 				fail("Вход отозван или истёк. Консоль закрыта.")
 				return
 			}
@@ -489,4 +546,35 @@ func (w *consoleOutput) Write(p []byte) (int, error) {
 		total += n
 	}
 	return total, nil
+}
+
+// Security boundary shared by the retained SSH path: no duplicate/case-folded
+// fields, no ambiguous JSON, and a strict bound before credential parsing.
+func readSSHMessage(ws *websocket.Conn, dst *consoleMessage) error {
+	var b []byte
+	if e := websocket.Message.Receive(ws, &b); e != nil {
+		return e
+	}
+	if len(b) > 64<<10 || exactConsoleFields(b, "type", "ticket", "password", "private_key", "passphrase", "data", "cols", "rows") != nil {
+		return fmt.Errorf("invalid SSH console frame")
+	}
+	return json.Unmarshal(b, dst)
+}
+
+// Recheck role as well as cookie lifetime. A long-lived terminal must not keep
+// owner authority after local account administration removes that role.
+func (a *App) consoleOwnerCurrent(s *storage.Session) bool {
+	if s == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var expires, role, userID string
+	e := a.Store.DB.QueryRowContext(ctx, `SELECT s.expires_at,u.role,s.user_id FROM admin_sessions s JOIN admin_users u ON u.id=s.user_id WHERE s.id=?`, s.ID).Scan(&expires, &role, &userID)
+	if e != nil || role != "owner" || userID != s.UserID {
+		return false
+	}
+	// RFC3339Nano has variable precision and offsets: text order is not time order.
+	deadline, e := time.Parse(time.RFC3339Nano, expires)
+	return e == nil && a.Clock.Now().Before(deadline)
 }

@@ -152,7 +152,16 @@ func runNative(ctx context.Context, b *installerbundle.Bundle, out io.Writer) er
 			}
 			return nil
 		},
-		ready: waitReady,
+		ready: func(ctx context.Context, c *installedConfig) error {
+			if b.Manifest.Profile != nil && b.Manifest.Profile.EnableAgentConsole {
+				fmt.Fprintln(out, "Проверяем отдельно разрешённую непривилегированную консоль…")
+				if err := command(ctx, "/usr/lib/monik/monik-service-host", "console-enable"); err != nil {
+					return fmt.Errorf("monitoring may be installed, but console permission NOT confirmed: %w", err)
+				}
+				fmt.Fprintln(out, "Локальная консоль разрешена. Её сетевой канал проверяется отдельно в веб-интерфейсе.")
+			}
+			return waitReady(ctx, c)
+		},
 	}
 	return execute(ctx, b, ops, out)
 }

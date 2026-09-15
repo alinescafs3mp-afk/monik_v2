@@ -483,3 +483,10 @@ code{overflow-wrap:anywhere}
 .tv-board:not(.columns-adjustable) .tv-machine {grid-template-columns:repeat(4,minmax(0,1fr));}
 .tv-board:not(.columns-adjustable) .tv-identity,.tv-board:not(.columns-adjustable) .tv-services {grid-column:1/-1;}
 @media(max-width:420px){.host-rows:not(.columns-adjustable) .host-line .metric-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* V18: dedicated TV actions and remote control, no long-press drag dependency. */
+.tv-machine-actions{display:flex;flex-direction:column;gap:.35rem;align-items:stretch;min-width:0;position:relative;z-index:3}
+.tv-machine-actions a{display:block;text-align:center;padding:.4rem;border:1px solid currentColor;border-radius:4px;white-space:normal}
+.column-divider.remote-selected{background:var(--accent,#78b9ff);opacity:1;outline:2px solid currentColor}
+.column-divider{-webkit-user-drag:none;-webkit-touch-callout:none}
+@media(max-width:600px){.tv-machine-actions{flex-direction:row;flex-wrap:wrap}.remote-column-controls{width:100%}}

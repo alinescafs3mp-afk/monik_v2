@@ -107,11 +107,11 @@ export async function submitOp(action: string, params: Record<string, unknown> =
 
 // Ticket creation has no remote effect. Only a definite recent-auth rejection
 // may be retried; never persist the SSH password/private key in pending jobs.
-export async function consoleTicket(path:string):Promise<{ticket:string}> {
- try{return await post(path,{});}catch(e){
-  if((e as ApiError).error==='recent_auth_required'&&reauthHandler){
-   if(!await reauthHandler('Открыть SSH-консоль'))throw {message:'Подключение отменено.'};
-   return await post(path,{});
+export async function consoleTicket(path:string,targetRevision:string):Promise<{ticket:string}> {
+ try{return await post(path,{target_revision:targetRevision});}catch(e){
+  if((e as ApiError).error==='recent_auth_required'&&[401,403].includes((e as ApiError).status)&&reauthHandler){
+   if(!await reauthHandler('Открыть консоль машины'))throw {message:'Подключение отменено.'};
+   return await post(path,{target_revision:targetRevision});
   }throw e;
  }
 }
@@ -127,12 +127,12 @@ export async function markOperationsRead(targets: Array<{operation_id:string;att
 // A prepared executable is a secret-bearing download, not a new fleet command.
 // Only a definite recent-auth rejection is retried. A lost download is NOT
 // repeated automatically; an unused one-machine code expires server-side.
-export async function downloadInstaller(platform:string,controllerURL:string):Promise<{blob:Blob;expires:string}> {
+export async function downloadInstaller(platform:string,controllerURL:string,enableAgentConsole=false):Promise<{blob:Blob;expires:string}> {
  if(!['linux-amd64','linux-arm64'].includes(platform))throw {message:'Неподдерживаемая платформа установщика.'};
  const request=async()=>{
   const ctl=new AbortController(), timer=setTimeout(()=>ctl.abort(),120000);
   try{
-   const r=await fetch(`/api/v1/installers/${platform}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify({controller_url:controllerURL}),signal:ctl.signal});
+   const r=await fetch(`/api/v1/installers/${platform}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify({controller_url:controllerURL,...(enableAgentConsole?{enable_agent_console:true}:{})}),signal:ctl.signal});
    if(!r.ok){let data:any;try{data=await r.json();}catch{data={};}throw {status:r.status,error:data.error||'http',message:data.message||'Не удалось подготовить установщик.'};}
    const length=Number(r.headers.get('Content-Length'));
    if(r.headers.get('Content-Type')?.split(';')[0]!=='application/octet-stream'||!Number.isSafeInteger(length)||length<64||length>193*1024*1024)throw {error:'invalid_download',message:'Некорректный размер или тип установщика.'};
@@ -148,4 +148,19 @@ export async function downloadInstaller(platform:string,controllerURL:string):Pr
    if(!await reauthHandler('Скачать установщик для одной машины'))throw {message:'Загрузка отменена.'};return request();
   }throw e;
  }
+}
+
+// Configure a fixed SSH destination, not a command. Only a definite pre-effect
+// authentication rejection is retried. Unknown saves require an explicit read.
+export async function saveConsoleConfiguration(id:string,body:unknown):Promise<void> {
+ const path=`/api/v1/agents/${encodeURIComponent(id)}/console-config`;
+ let result:{saved:boolean};
+ try{result=await post(path,body);}catch(e){
+  const err=e as ApiError;
+  if(err.error==='recent_auth_required'&&[401,403].includes(err.status)&&reauthHandler){
+   if(!await reauthHandler('Изменить SSH-настройки'))throw {error:'action_cancelled',message:'Изменение отменено. SSH-настройки не отправлялись.'};
+   result=await post(path,body);
+  }else throw e;
+ }
+ if(result?.saved!==true)throw {error:'outcome_unknown',status:0,message:'Подтверждение сохранения не получено. Перечитайте SSH-настройки; автоматического повтора нет.'};
 }

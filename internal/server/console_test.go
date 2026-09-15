@@ -135,7 +135,17 @@ func consoleLogin(t *testing.T, ts *httptest.Server) (string, string) {
 }
 func requestConsoleTicket(t *testing.T, ts *httptest.Server, cookie, csrf string) string {
 	t.Helper()
-	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/agents/h/console-ticket", bytes.NewBufferString(`{}`))
+	infoReq, _ := http.NewRequest("GET", ts.URL+"/api/v1/agents/h/console", nil)
+	infoReq.AddCookie(&http.Cookie{Name: "monik_session", Value: cookie})
+	infoRes, e := ts.Client().Do(infoReq)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var info map[string]any
+	json.NewDecoder(infoRes.Body).Decode(&info)
+	infoRes.Body.Close()
+	body, _ := json.Marshal(map[string]any{"target_revision": info["target_revision"]})
+	req, _ := http.NewRequest("POST", ts.URL+"/api/v1/agents/h/console-ticket", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-CSRF-Token", csrf)
 	req.AddCookie(&http.Cookie{Name: "monik_session", Value: cookie})

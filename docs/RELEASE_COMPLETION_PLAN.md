@@ -1,6 +1,6 @@
-# Monik: authoritative completion gates after V17
+# Monik: authoritative completion gates after V18
 
-Baseline reviewed: `35fccbb0265777b12c2893667ef2fea33e953928`. V17 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `afdbbd2573b68d99eb3115032f62f6b33681a5cd`. V18 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
 
 ## Working features to preserve
 
@@ -12,9 +12,17 @@ V14 separates complete local-socket presence from HTTP identification, reconcile
 
 V15 implements owner-prepared one-file Linux managed installation, exact source/bundle validation, single-use download authorization and evidence-based readiness. The initial V15 auditor had a limited Go 1.23 environment; host integration later passed full source/browser/process checks. V16 has its own full Go 1.27.0 source results. Native systemd/capability inheritance and service boot remain separate unproven gates; do not inflate source/build results into them.
 
-## V17 acceptance priority
+## V18 network-console acceptance priority
 
-Finish actual drag/keyboard geometry acceptance before claiming the resizable interface is ready on a physical device. All rows and the common header share widths; service columns adapt and mobile fallback preserves wide-screen preferences. Mode-local storage, cancelled gestures, fresh telemetry with held order, latest graph-point responses and truthful export status are implemented. Source-only CSS guards and fake layout APIs are not visual evidence. Preserve V16's silent refresh/scroll fixes. No production Go/schema/protocol changes are introduced by V17.
+The owner explicitly authorized an agent terminal. Implemented: separate outbound WSS, ephemeral nonreplayed input, recent-owner/Cookie/CSRF/channel-bound ticket, per-machine relay, local root-approved systemd Unix socket, separate non-root monik-console UID, fixed PTY shell, no capabilities/sudo, bounded resources and disconnect/revocation handling. Direct pinned SSH remains explicit and now includes protected owner configuration. This is NOT an arbitrary admin/root shell, ConPTY support, a generic durable runner or full isolation from a compromised controller/kernel.
+
+Require one real Linux/systemd pilot with verified socket credentials, file/namespace/cgroup policy, descendant cleanup, stop/restart/boot and monitoring/update regressions before enabling on the controller VM or fleet. Installer opt-in is unchecked and old installations are not silently enabled. Updating only the worker is insufficient for new helper commands. Keep independent service-host self-update fail-closed. See AUDIT_REVIEW_18_2026-09-15.md and SECURITY_ACCEPTANCE_V18.md.
+
+The TV remote has explicit OK/arrow mode plus native +/- buttons. Real Playwright and physical TV/Yandex confirmation remain separate from synthetic event tests. Preserve the main V17 column/graph corrections and V16 seamless refresh.
+
+## V17 acceptance history
+
+Finish actual drag/keyboard geometry acceptance before claiming the resizable interface is ready on a physical device. All rows and the common header share widths; service columns adapt and mobile fallback preserves wide-screen preferences. Mode-local storage, cancelled gestures, fresh telemetry with held order, latest graph-point responses and truthful export status are implemented. Source-only CSS guards and fake layout APIs are not visual evidence. Preserve V16's silent refresh/scroll fixes. V17 itself did not change production Go/schema/protocol; V18 adds the explicitly authorized isolated console channel.
 
 ## Previous V16 first-host acceptance priority
 
@@ -54,4 +62,4 @@ Browser acceptance must run the exact bundle, including pending old-check result
 
 ## Acceptance decision
 
-Return a coherent main commit after local integration, exact source/build hashes, platform matrix, test logs and unresolved gates. Distinguish build, helper, integration, real process, native service, boot, recovery and restore evidence. No 24-hour soak, 50-agent capacity or complete v3 claim until measured. No Redis/Kafka/LLM framework, mandatory cloud service, Telegram dependency, remote shell through the agent or TLS bypass is authorized by this completion plan.
+Return a coherent main commit after local integration, exact source/build hashes, platform matrix, test logs and unresolved gates. Distinguish build, helper, integration, real process, native service, boot, recovery and restore evidence. No 24-hour soak, 50-agent capacity or complete v3 claim until measured. No Redis/Kafka/LLM framework, mandatory cloud service, Telegram dependency, unrestricted/root remote shell through the agent or TLS bypass is authorized by this completion plan. Only the separately described opt-in limited V18 terminal is newly authorized.

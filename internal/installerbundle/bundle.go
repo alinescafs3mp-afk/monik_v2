@@ -37,11 +37,12 @@ type Part struct {
 }
 
 type Profile struct {
-	ControllerURL  string    `json:"controller_url"`
-	ControllerID   string    `json:"controller_id"`
-	CACertPEM      string    `json:"ca_cert_pem"`
-	EnrollmentCode string    `json:"enrollment_code"`
-	ExpiresAt      time.Time `json:"expires_at"`
+	EnableAgentConsole bool      `json:"enable_agent_console,omitempty"`
+	ControllerURL      string    `json:"controller_url"`
+	ControllerID       string    `json:"controller_id"`
+	CACertPEM          string    `json:"ca_cert_pem"`
+	EnrollmentCode     string    `json:"enrollment_code"`
+	ExpiresAt          time.Time `json:"expires_at"`
 }
 
 type Manifest struct {

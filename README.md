@@ -63,3 +63,15 @@ No shell through the monitoring agent, host reboot or unrelated application/cont
 `cmd/monik-server`, `cmd/monik-agent`, `cmd/monik-service-host` and `cmd/monik-release` build the four programs. `internal/` contains protocols, storage, checks and lifecycle modules. `web/` contains UI source. `tests/browser/` and `tests/fixtures/` provide the synthetic browser scenario.
 
 License: Apache-2.0; see LICENSE.
+
+## V18 optional agent terminal
+
+The Console page now offers a separate outbound agent/WSS transport alongside
+explicit pinned SSH. Linux/systemd support is opt-in at local installation;
+normal monitoring updates do not enable a shell. The agent terminal runs as a
+separate unprivileged `monik-console` user, not root or the monitoring account.
+Administrative tasks continue to use Direct SSH. See
+[`V18_AGENT_CONSOLE_AND_TV_RU.md`](docs/V18_AGENT_CONSOLE_AND_TV_RU.md) and
+[`SECURITY_ACCEPTANCE_V18.md`](docs/SECURITY_ACCEPTANCE_V18.md) for deployment,
+revocation, sandbox limits and the mandatory native pilot. TV width adjustment
+has an OK/arrow mode and native +/- buttons, independent of long-press dragging.

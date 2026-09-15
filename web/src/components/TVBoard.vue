@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {useOverviewColumns} from '../composables/useOverviewColumns';
 import OverviewColumnHeader from './OverviewColumnHeader.vue';
+import ColumnRemoteControl from './ColumnRemoteControl.vue';
 import ColumnDividers from './ColumnDividers.vue';
 import {keepVisibleOrder} from '../overviewColumns';
 import ServiceList from './ServiceList.vue';
@@ -51,7 +52,7 @@ onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconne
 <template><section ref="board" class="tv-board" :class="{'columns-adjustable':columns.enabled,'is-resizing':columns.resizing}" :style="columns.style" aria-label="Экран мониторинга" @mouseenter="hovered=true" @mouseleave="hovered=false">
  <OverviewColumnHeader :layout="columns" tv/>
  <article v-for="c in screen.rows" :key="c.id" class="tv-machine" :data-machine="c.id" :class="{'measurements-stale':!fresh(c),'has-problem':priority(c)>0}">
-  <div class="tv-identity"><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :title="c.name"><strong>{{c.name}}</strong></router-link><small>{{c.os}} / {{c.arch}} · <router-link :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`">Консоль</router-link></small><span class="badge"><span class="dot" :class="fresh(c)?c.state:'stale'"/>{{stateLabel(!fresh(c)&&c.state==='ok'?'stale':c.state)}}</span><small v-if="c.maintenance_active">Обслуживание</small></div>
+  <div class="tv-identity"><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :title="c.name"><strong>{{c.name}}</strong></router-link><small>{{c.os}} / {{c.arch}}</small><span class="badge"><span class="dot" :class="fresh(c)?c.state:'stale'"/>{{stateLabel(!fresh(c)&&c.state==='ok'?'stale':c.state)}}</span><small v-if="c.maintenance_active">Обслуживание</small></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='cpu')}"><span class="sr">CPU </span><strong>{{number(c.cpu,'%',0)}}</strong></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='ram')}"><span class="sr">RAM </span><strong>{{c.ram_total>0?number(c.ram_used/c.ram_total*100,'%',0):'Нет данных'}}</strong><small>{{bytes(c.ram_used)}} / {{bytes(c.ram_total)}}</small></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='disk')}"><span class="sr">DISK </span><strong>{{number(worstDisk(c.disks)?.used_percent,'%',0)}}</strong><small :title="worstDisk(c.disks)?.mount">{{worstDisk(c.disks)?.mount||'Нет данных'}}</small></div>
@@ -60,8 +61,9 @@ onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconne
    <router-link v-else :to="`/machines/${encodeURIComponent(c.id)}#services`">Выбрать сервисы</router-link>
    <small v-if="c.unselected_service_problems" class="err">Проблем вне списка: {{c.unselected_service_problems}}</small>
   </div>
+  <div class="tv-machine-actions"><router-link class="button" :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`">Консоль</router-link><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`">↗</router-link></div>
   <ColumnDividers :layout="columns"/>
  </article>
  <p v-if="columns.notice" class="muted column-notice" role="status">{{columns.notice}}</p>
- <footer class="tv-pager"><button type="button" @click="columns.reset">Сбросить ширину</button><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" type="checkbox"/> Листать каждые 20 с</label></footer>
+ <footer class="tv-pager"><ColumnRemoteControl :layout="columns"/><button type="button" @click="columns.reset">Сбросить ширину</button><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" type="checkbox"/> Листать каждые 20 с</label></footer>
 </section></template>

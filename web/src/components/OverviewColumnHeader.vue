@@ -7,6 +7,6 @@ defineProps<{layout:OverviewColumns; tv?:boolean}>();
 <template>
   <div v-if="layout.enabled" class="overview-column-header" :class="{'tv-columns':tv}" :style="layout.style" aria-label="Ширина колонок обзора">
     <span v-for="label in columnLabels" :key="label">{{label}}</span>
-    <ColumnDividers :layout="layout" keyboard/>
+    <span v-if="tv" class="sr">Действия</span><ColumnDividers :layout="layout" keyboard/>
   </div>
 </template>
