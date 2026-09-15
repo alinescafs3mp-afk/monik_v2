@@ -23,3 +23,13 @@ export function localDateValue(d: Date): string {
   const shifted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return shifted.toISOString().slice(0, 19);
 }
+
+export function pingDetail(p:any):string {
+ if(!p)return 'Ожидаем измерение ping от агента';
+ if(p.status==='disabled')return 'Ping выключен в конфигурации';
+ if(p.permission==='permission_denied'||p.status==='permission_denied')return 'ICMP запрещён службе агента';
+ if(p.status==='send_failed')return 'Не удалось отправить ICMP: проверьте маршрут и адрес';
+ if(p.status==='no_reply'||p.sent>0&&p.received===0)return 'ICMP отправлен, ответов нет';
+ if(p.status==='pending'||!p.sent&&!finite(p.mean_ms))return 'Ожидаем первое измерение ICMP';
+ return '';
+}

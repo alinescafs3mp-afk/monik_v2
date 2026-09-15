@@ -78,7 +78,7 @@ func AgentFreshness(lastLive *time.Time, now time.Time) (state, reason string) {
 		return "unreachable", "no live report for 30s"
 	}
 	if age > protocol.StaleContact {
-		return "stale", "no live report for 15s"
+		return "stale", "no live report for 20s"
 	}
 	return "ok", ""
 }

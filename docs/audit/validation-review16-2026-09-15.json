@@ -1,0 +1,84 @@
+{
+  "audit": "16",
+  "date": "2026-09-15",
+  "baseline_commit": "c671137d16269e568061a478b12fe3d4f3e7c82f",
+  "baseline_tree": "e4b29e07bce356322cd116bebd333841a50ac45a",
+  "auditor_result_tree": "fe89f860e196b5d71d566e62d0dae0917c3d8b50",
+  "full_release_accepted": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.27.0",
+    "node": "v22.23.2",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "auditor": {
+    "browser": "BLOCKED_BEFORE_LOGIN",
+    "kernel_icmp": "BLOCKED_SOCKET_PERMISSION",
+    "native_uid": 65534
+  },
+  "executed": {
+    "package_verify": {"status": "PASS", "files": 63},
+    "preflight": {"status": "PASS", "applied_tree": "fe89f860e196b5d71d566e62d0dae0917c3d8b50"},
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_tests_and_fuzz_targets": 395,
+      "test_and_seed_results": 555,
+      "tested_packages": 26
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS"},
+    "v15_shuffled_repeats": {"status": "PASS", "count": 10, "packages": 7},
+    "v16_shuffled_repeats": {"status": "PASS", "count": 10, "packages": 3, "filter": "TestV16|TestRolloutFreshnessAndIdentityGate"},
+    "frontend": {"status": "PASS", "node_tests": 137, "tsc": true, "vite": true},
+    "linux_windows_build": {"status": "PASS", "note": "four Linux amd64 and four Windows amd64; installer templates amd64+arm64 rebuilt after commit"},
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "loopback_icmp": {
+      "status": "PASS",
+      "target": "127.0.0.1",
+      "env": "MONIK_NATIVE_PING=1",
+      "not": "systemd AmbientCapabilities or 8.8.8.8"
+    },
+    "browser": {
+      "status": "PASS",
+      "checks": 37,
+      "errors": 0,
+      "includes": [
+        "four passive inventory refreshes preserve scroll/focus/draft",
+        "manual Refresh does not blink during background I/O",
+        "service columns of three at 1440/390/960/1920 without overflow",
+        "history 503 surfaces on charts tab and does not hide the service editor",
+        "single-file installer path",
+        "inactive inventory hide/show",
+        "pending old-check",
+        "404/no-store"
+      ]
+    }
+  },
+  "not_run": {
+    "clean_systemd_install_boot": "no disposable VM/nspawn; first remote Linux machine remains the native gate",
+    "managed_unit_icmp_repair": "lan-host is unmanaged; repair-icmp-linux.sh was not executed here",
+    "windows_service_boot": "still pending",
+    "physical_tv_full_fleet_soak": "not executed",
+    "protected_complete_restore": "still open",
+    "independent_service_host_recovery": "still fail-closed"
+  },
+  "unchanged": [
+    "wire schema 3 (additive optional fields only)",
+    "saved agent/controller URL and identity",
+    "rollout 15s freshness gate",
+    "go.mod/go.sum/package lock versions"
+  ],
+  "host_extras": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/audit/validation-review16-2026-09-15.json",
+    "tests/browser/audit.py (history failure asserted on charts tab; editor remains after return)"
+  ]
+}

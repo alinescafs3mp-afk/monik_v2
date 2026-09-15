@@ -352,7 +352,7 @@ func (a *App) refreshAgentStates() {
 			if age > protocol.UnreachableContact {
 				st, reason = "unreachable", "no live report for 30s"
 			} else if age > protocol.StaleContact {
-				st, reason = "stale", "no live report for 15s"
+				st, reason = "stale", "no live report for 20s"
 			} else {
 				st, reason = "ok", ""
 			}

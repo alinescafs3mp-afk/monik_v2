@@ -319,7 +319,7 @@ func (s *Store) releaseWaveTx(tx *sql.Tx, r *Rollout) error {
 		}
 		st := protocol.TargetQueued
 		live, err := time.Parse(time.RFC3339Nano, m.liveAt)
-		if err != nil || now.Sub(live) > protocol.StaleContact {
+		if err != nil || now.Sub(live) > protocol.RolloutFreshContact {
 			st = protocol.TargetWaitingOffline
 		}
 		if _, e = tx.Exec(`UPDATE agent_jobs SET status=?,envelope=?,deadline=? WHERE job_id=? AND status='rollout_held'`, st, string(b), env.Deadline.Format(dbTimeFormat), m.jobID); e != nil {
@@ -433,7 +433,7 @@ func (s *Store) advanceRolloutTx(tx *sql.Tx, r *Rollout) error {
 			return fmt.Errorf("invalid rollout observation evidence")
 		}
 		live, e := time.Parse(time.RFC3339Nano, m.liveAt)
-		if m.revoked || m.archived || e != nil || now.Sub(live) > protocol.StaleContact || live.After(now.Add(5*time.Second)) || m.digest == "" || m.digest != env.Params["sha256"] || m.session != rec.Evidence["session_id"] {
+		if m.revoked || m.archived || e != nil || now.Sub(live) > protocol.RolloutFreshContact || live.After(now.Add(5*time.Second)) || m.digest == "" || m.digest != env.Params["sha256"] || m.session != rec.Evidence["session_id"] {
 			if e = s.setRolloutStateTx(tx, r, "blocked", "Confirmed worker identity or fresh contact lost during wave observation: "+m.AgentID); e != nil {
 				return e
 			}

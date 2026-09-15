@@ -19,3 +19,29 @@ export function createRefreshQueue(load: () => Promise<void>) {
 export function isAuthenticationFailure(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'status' in error && error.status === 401;
 }
+
+
+/** Keep background I/O separate from a user's explicit refresh affordance. */
+export function createPollingController(load: () => Promise<void>, publish: (s: {loading:boolean;refreshing:boolean;busy:boolean;error:string;updated:Date|null}) => void) {
+  let disposed = false, started = false, loading = true, refreshing = false;
+  let error = "", updated: Date | null = null;
+  const emit = () => { if (!disposed) publish({loading, refreshing, busy:started, error, updated}); };
+  const queue = createRefreshQueue(async () => {
+    if (disposed) return;
+    started = true; emit();
+    try { await load(); if (!disposed) { error = ""; updated = new Date(); } }
+    catch (e) { if (!disposed) error = (e as Error)?.message || "Не удалось получить данные"; }
+    finally { if (!disposed) { loading = false; emit(); } }
+  });
+  async function request(manual: boolean) {
+    if (disposed) return;
+    // Timer/SSE hints do not grow a queue while a slow request is running.
+    if (!manual && started) return;
+    started = true;
+    if (manual) refreshing = true;
+    emit();
+    try { await queue.refresh(); }
+    finally { if (!disposed) { started = false; refreshing = false; emit(); } }
+  }
+  return { refresh: () => request(true), background: () => request(false), dispose() {disposed = true; queue.dispose();} };
+}

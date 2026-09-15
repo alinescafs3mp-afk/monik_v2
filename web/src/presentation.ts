@@ -33,3 +33,9 @@ export function orderOverview<T extends {name?:string;id?:string}>(machines:T[],
   return [...machines].sort((a,b)=>overviewPriority(b,isFresh(b))-overviewPriority(a,isFresh(a))
     || String(a.name||a.id).localeCompare(String(b.name||b.id)) || String(a.id).localeCompare(String(b.id)));
 }
+
+/** Three items down each bounded column, never a hidden unbounded table. */
+export function serviceColumnCapacity(width:number,columnWidth=200):number {
+ if(!Number.isFinite(width)||width<=0)return 3;
+ return Math.max(1,Math.min(12,Math.floor((width+12)/(Math.max(100,columnWidth)+12))))*3;
+}

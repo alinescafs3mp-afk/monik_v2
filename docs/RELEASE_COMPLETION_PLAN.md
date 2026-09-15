@@ -1,6 +1,6 @@
-# Monik: authoritative completion gates after V15
+# Monik: authoritative completion gates after V16
 
-Baseline reviewed: `ae6c5822843ec74fd4a0838913f1291849691d00`. V15 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `c671137d16269e568061a478b12fe3d4f3e7c82f`. V16 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
 
 ## Working features to preserve
 
@@ -10,7 +10,11 @@ V12 added exact receipt ACKs, local process locks, joined shutdown, corruption r
 
 V14 separates complete local-socket presence from HTTP identification, reconciles missing discoveries without losing watched outages/history, batches new checks into one revision, and adds external enrollment-profile selection plus explicit same-CA offline SAN extension. It does not change enrolled routes. Windows IPv6 parsing is corrected with byte fixtures, not native OS evidence.
 
-V15 implements owner-prepared one-file Linux managed installation, exact source/bundle validation, single-use download authorization and evidence-based readiness. Only standalone standard-library code and frontend unit tests were executed in the auditor's Go 1.23 environment; full Go 1.27 integration, Vue/browser and native service/boot acceptance remain mandatory and NOT RUN here. Do not inflate prior V14 results into current V15 evidence.
+V15 implements owner-prepared one-file Linux managed installation, exact source/bundle validation, single-use download authorization and evidence-based readiness. The initial V15 auditor had a limited Go 1.23 environment; host integration later passed full source/browser/process checks. V16 has its own full Go 1.27.0 source results. Native systemd/capability inheritance and service boot remain separate unproven gates; do not inflate source/build results into them.
+
+## V16 acceptance priority
+
+The owner has started a real first machine. Do not interpret helper/build PASS as a clean unattended install/boot test. Finish the exact browser/ping pilot corrections before expanding the fleet: stable editor scroll/focus through four background polls, nonblinking manual refresh affordance, green default 2xx/3xx versus configured failures, finite server-anchored freshness, 3-row service columns at real mobile/TV sizes, and actual service-account ICMP replies. V16 source tests and process fixtures are separate from blocked browser/kernel checks. Existing V15 units need explicit capability configuration as well as a worker update; do not re-enroll them. See V16 guide. Historical V15 toolchain limitations do not describe V16: the current audit used Go 1.27.0.
 
 ## Gates before broad release, in order
 

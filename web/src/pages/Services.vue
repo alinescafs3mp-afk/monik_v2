@@ -8,6 +8,8 @@ import {groupServices} from '../serviceGroups';
 import ServiceMonitorToggle from '../components/ServiceMonitorToggle.vue';
 import ServiceOverviewToggle from '../components/ServiceOverviewToggle.vue';
 import {stateLabel} from '../format';
+import {useServiceDisplay} from '../composables/useServiceDisplay';
+const {tone,outcome}=useServiceDisplay();
 const showInactive=ref(false);
 const rows=ref<any[]>([]),agents=ref<any[]>([]),query=ref(''),expanded=ref<Record<string,boolean>>({});
 const {loading,error:loadError,refresh}=usePolling(async()=>{const [s,a]=await Promise.all([get<any>('/api/v1/services?inventory=all'),get<any>('/api/v1/agents')]);rows.value=s.services||[];agents.value=a.agents||[];});
@@ -24,6 +26,6 @@ function expandAll(open:boolean){for(const g of groups.value)expanded.value[g.id
  <button type="button" class="service-group-header" :aria-expanded="!!expanded[g.id]" :aria-controls="`services-${g.id}`" @click="expanded[g.id]=!expanded[g.id]">
  <span aria-hidden="true">{{expanded[g.id]?'▾':'▸'}}</span><span class="dot" :class="g.state"/><span class="group-machine"><strong>{{g.name}}</strong><small class="muted">{{g.os}} / {{g.arch}}</small></span><span>{{stateLabel(g.state)}} · Сервисов {{g.services.length}}</span></button>
  <div v-if="expanded[g.id]" :id="`services-${g.id}`" class="service-group-body"><router-link :to="`/machines/${encodeURIComponent(g.id)}#services`">Открыть машину</router-link><div class="table-wrap"><table><thead><tr><th>Сервис</th><th>URL</th><th>Ответ</th><th>Мониторинг / обзор</th><th>Действия</th></tr></thead><tbody>
- <tr v-for="s in g.services" :key="s.id"><td><strong>{{s.display_name||s.url}}</strong><ServiceNameEditor :id="s.id" :name="s.display_name||s.url" :expected-name="s.display_name??''" @saved="refresh"/></td><td>{{s.url}}</td><td><span class="dot" :class="s.state"/> {{s.summary}}<small class="inventory-note muted">{{inventoryNote(s)}}</small></td><td><div class="service-choices"><ServiceMonitorToggle :service="s"/><ServiceOverviewToggle :service="s"/></div></td><td><router-link :to="{path:`/machines/${encodeURIComponent(g.id)}`,query:{service:s.id},hash:'#check-editor'}">Настроить запрос</router-link></td></tr>
+ <tr v-for="s in g.services" :key="s.id"><td><strong>{{s.display_name||s.url}}</strong><ServiceNameEditor :id="s.id" :name="s.display_name||s.url" :expected-name="s.display_name??''" @saved="refresh"/></td><td>{{s.url}}</td><td><span class="dot" :class="tone(s)"/> {{outcome(s)}}<small class="inventory-note muted">{{inventoryNote(s)}}</small></td><td><div class="service-choices"><ServiceMonitorToggle :service="s"/><ServiceOverviewToggle :service="s"/></div></td><td><router-link :to="{path:`/machines/${encodeURIComponent(g.id)}`,query:{service:s.id},hash:'#check-editor'}">Настроить запрос</router-link></td></tr>
  </tbody></table></div></div></section></div>
 </section></template>

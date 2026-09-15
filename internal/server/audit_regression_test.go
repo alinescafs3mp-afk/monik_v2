@@ -127,8 +127,8 @@ func TestAuditOverviewContainsMetricsAndRealServiceOutcome(t *testing.T) {
 		t.Fatalf("unsafe/incomplete card: %s", w.Body.String())
 	}
 	summaries, err := app.serviceSummaries("a", now)
-	if err != nil || len(summaries) != 1 || summaries[0].State != "responds" {
-		t.Fatalf("401 is not down: %+v %v", summaries, err)
+	if err != nil || len(summaries) != 1 || summaries[0].State != "http_error" {
+		t.Fatalf("401 retains its HTTP response but fails the default success policy: %+v %v", summaries, err)
 	}
 	summaries, err = app.serviceSummaries("a", now.Add(time.Minute))
 	if err != nil || summaries[0].State != "stale" {

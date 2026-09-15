@@ -562,6 +562,9 @@ Restart=on-failure
 RestartSec=5
 User=%s
 NoNewPrivileges=true
+# Raw-socket capability for ICMP fallback; no root worker or global sysctl change.
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
 UMask=0077
 KillMode=control-group
 TimeoutStopSec=15

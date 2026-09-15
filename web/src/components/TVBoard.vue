@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import ServiceList from './ServiceList.vue';
 import {computed,nextTick,onMounted,onUnmounted,onUpdated,ref,watch} from 'vue';
-import {bytes,number,stateLabel} from '../format';
-import {worstDisk,orderedServices,overviewPriority} from '../presentation';
-import {boardCapacity,pageSlice,serviceFresh} from '../display';
+import {pingDetail,bytes,number,stateLabel} from '../format';
+import {worstDisk,overviewPriority} from '../presentation';
+import {boardCapacity,pageSlice} from '../display';
 const props=defineProps<{cards:any[];fresh:(c:any)=>boolean}>();
 const board=ref<HTMLElement|null>(null),size=ref(4),page=ref(0),autoplay=ref(false),hovered=ref(false),now=ref(Date.now());
 const screen=computed(()=>pageSlice(props.cards,page.value,size.value));
@@ -19,8 +20,6 @@ function measure(){
   size.value=boardCapacity(window.innerHeight,el.getBoundingClientRect().top+head,rowHeight+4);
  });
 }
-function state(s:any){return s.fresh&&!serviceFresh(s,now.value)?'stale':s.state;}
-function outcome(s:any){return s.fresh&&!serviceFresh(s,now.value)?'Нет свежих данных':s.summary;}
 function turn(delta:number){page.value=Math.max(0,Math.min(screen.value.pages-1,screen.value.page+delta));lastPage=Date.now();}
 watch(()=>props.cards.map(c=>c.id).join('|'),()=>{page.value=Math.min(page.value,screen.value.pages-1);});
 watch(()=>props.cards.filter(c=>overviewPriority(c,props.fresh(c))>0).map(c=>c.id).join('|'),(value,old)=>{
@@ -46,10 +45,10 @@ onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconne
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='cpu')}"><span class="sr">CPU </span><strong>{{number(c.cpu,'%',0)}}</strong></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='ram')}"><span class="sr">RAM </span><strong>{{c.ram_total>0?number(c.ram_used/c.ram_total*100,'%',0):'Нет данных'}}</strong><small>{{bytes(c.ram_used)}} / {{bytes(c.ram_total)}}</small></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='disk')}"><span class="sr">DISK </span><strong>{{number(worstDisk(c.disks)?.used_percent,'%',0)}}</strong><small :title="worstDisk(c.disks)?.mount">{{worstDisk(c.disks)?.mount||'Нет данных'}}</small></div>
-  <div class="tv-metric"><span class="sr">Ping </span><strong>{{number(c.ping?.mean_ms,' мс',0)}}</strong><small>Потери {{number(c.ping?.loss_percent,'%',0)}}</small></div>
-  <div class="tv-services"><div v-for="s in orderedServices(c.services).slice(0,2)" :key="s.id" class="tv-service"><span class="dot" :class="state(s)"/><router-link :to="{path:`/machines/${encodeURIComponent(c.id)}`,query:{service:s.id},hash:'#check-editor'}" :title="`${s.display_name||s.url}: ${s.summary}`"><strong>{{s.display_name||s.url}}</strong><small>{{outcome(s)}}</small></router-link></div>
-   <router-link v-if="!c.services?.length" :to="`/machines/${encodeURIComponent(c.id)}#services`">Выбрать сервисы</router-link>
-   <small v-if="c.services?.length>2">Ещё выбранных: {{c.services.length-2}}</small><small v-if="c.unselected_service_problems" class="err">Проблем вне списка: {{c.unselected_service_problems}}</small>
+  <div class="tv-metric"><span class="sr">Ping </span><strong>{{number(c.ping?.mean_ms,' мс',0)}}</strong><small>Потери {{number(c.ping?.loss_percent,'%',0)}}</small><small v-if="pingDetail(c.ping)" :title="pingDetail(c.ping)">{{pingDetail(c.ping)}}</small></div>
+  <div class="tv-services"><ServiceList v-if="c.services?.length" :services="c.services" compact columns/>
+   <router-link v-else :to="`/machines/${encodeURIComponent(c.id)}#services`">Выбрать сервисы</router-link>
+   <small v-if="c.unselected_service_problems" class="err">Проблем вне списка: {{c.unselected_service_problems}}</small>
   </div>
  </article>
  <footer class="tv-pager"><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" type="checkbox"/> Листать каждые 20 с</label></footer>

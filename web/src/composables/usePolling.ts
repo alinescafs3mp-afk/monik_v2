@@ -1,20 +1,16 @@
 import { onMounted, onUnmounted, ref } from "vue";
-import { createRefreshQueue } from "../refreshQueue";
+import { createPollingController } from "../refreshQueue";
 
-/** SSE is a hint, never the only reconciliation path. */
+/** SSE is only a hint. Background refresh preserves all visible interaction state. */
 export function usePolling(load: () => Promise<void>, enabled: () => boolean = () => true) {
-  const loading = ref(true), refreshing = ref(false), error = ref(""), updated = ref<Date | null>(null);
-  let disposed = false, timer = 0, lastStart = 0;
-  const queue = createRefreshQueue(async () => {
-    if (disposed) return;
-    refreshing.value = true; lastStart = Date.now();
-    try { await load(); if (!disposed) { error.value = ""; updated.value = new Date(); } }
-    catch (e) { if (!disposed) error.value = (e as Error)?.message || "Не удалось получить данные"; }
-    finally { if (!disposed) { loading.value = false; refreshing.value = false; } }
+  const loading=ref(true), refreshing=ref(false), busy=ref(false), error=ref(""), updated=ref<Date|null>(null);
+  let timer=0, lastStart=0;
+  const controller=createPollingController(async()=>{lastStart=performance.now();await load();},s=>{
+    loading.value=s.loading;refreshing.value=s.refreshing;busy.value=s.busy;error.value=s.error;updated.value=s.updated;
   });
-  const refresh = queue.refresh;
-  function hint() { if (!refreshing.value && enabled() && !document.hidden && Date.now() - lastStart > 1500) void refresh(); }
-  onMounted(() => { void refresh(); timer = window.setInterval(() => { if (!refreshing.value && enabled() && !document.hidden) void refresh(); }, 5000); window.addEventListener("monik:refresh", hint); document.addEventListener("visibilitychange", hint); });
-  onUnmounted(() => { disposed = true; queue.dispose(); window.clearInterval(timer); window.removeEventListener("monik:refresh", hint); document.removeEventListener("visibilitychange", hint); });
-  return { loading, refreshing, error, updated, refresh };
+  const refresh=controller.refresh;
+  function hint(){if(!busy.value&&enabled()&&!document.hidden&&performance.now()-lastStart>1500)void controller.background();}
+  onMounted(()=>{void controller.background();timer=window.setInterval(()=>{if(enabled()&&!document.hidden)void controller.background();},5000);window.addEventListener("monik:refresh",hint);document.addEventListener("visibilitychange",hint);});
+  onUnmounted(()=>{controller.dispose();window.clearInterval(timer);window.removeEventListener("monik:refresh",hint);document.removeEventListener("visibilitychange",hint);});
+  return {loading,refreshing,busy,error,updated,refresh};
 }

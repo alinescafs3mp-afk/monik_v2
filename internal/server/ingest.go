@@ -368,8 +368,8 @@ func (a *App) evalCheck(agentID string, c protocol.CheckObservation) {
 		st, reason = "transport_fail", c.Transport
 	} else if c.AppResult == "fail" {
 		st, reason = "app_fail", c.AppReason
-	} else if c.AppResult != "pass" && c.HTTPStatus != nil && *c.HTTPStatus >= 500 {
-		st, reason = "http_error", "server error"
+	} else if c.AppResult != "pass" && (c.HTTPStatus == nil || *c.HTTPStatus < 200 || *c.HTTPStatus >= 400) {
+		st, reason = "http_error", "unexpected HTTP response"
 	}
 	_ = a.Store.SetState("service", c.ServiceID, st, reason)
 	if err := a.Store.ObserveIncident("service", c.ServiceID, "http", c.ObservedAt, known, known && st != "ok", "warning", reason, storage.IncidentPolicy{MaxGap: protocol.CheckFreshness(c.IntervalSeconds), Failures: 3, Successes: 2, Maintenance: maintenance}); err != nil {

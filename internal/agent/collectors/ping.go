@@ -17,6 +17,8 @@ import (
 )
 
 type sample struct {
+	target  string
+	failure string
 	at      time.Time
 	rtt     time.Duration
 	ok      bool
@@ -33,21 +35,44 @@ type Pinger struct {
 func NewPinger() *Pinger { return &Pinger{} }
 
 func (p *Pinger) Observe(ctx context.Context, target string, timeout time.Duration, now time.Time) {
-	s := sample{at: now, sent: true}
 	rtt, sent, err := pingOnce(ctx, target, timeout)
-	s.sent = sent
+	p.record(target, now, rtt, sent, err)
+}
+
+func (p *Pinger) record(target string, now time.Time, rtt time.Duration, sent bool, err error) {
+	s := sample{target: target, at: now, sent: sent}
 	if err != nil {
-		if os.IsPermission(err) || isPerm(err) {
-			s.sent = false
+		switch {
+		case os.IsPermission(err) || isPerm(err):
 			s.permErr = true
+			s.failure = "permission_denied"
+		case errors.Is(err, context.Canceled):
+			s.failure = "cancelled"
+		default:
+			if sent {
+				s.failure = "no_reply"
+			} else {
+				s.failure = "send_failed"
+			}
 		}
-	} else {
+	} else if sent {
 		s.ok = true
 		s.rtt = rtt
 	}
 	p.mu.Lock()
-	p.samples = append(p.samples, s)
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	// Keep bounded storage even if a caller temporarily does not request Summary.
+	cut := now.Add(-protocol.PingWindow)
+	kept := p.samples[:0]
+	for _, old := range p.samples {
+		if old.target == target && old.at.After(cut) && !old.at.After(now) {
+			kept = append(kept, old)
+		}
+	}
+	p.samples = append(kept, s)
+	if len(p.samples) > 120 {
+		p.samples = p.samples[len(p.samples)-120:]
+	}
 }
 
 func isPerm(err error) bool {
@@ -75,54 +100,75 @@ func (p *Pinger) Summary(now time.Time, window time.Duration, target string) (*p
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cut := now.Add(-window)
-	var kept []sample
+	kept := make([]sample, 0, len(p.samples))
 	sent, recv := 0, 0
-	var sum time.Duration
-	var minV, maxV time.Duration
-	perm := false
-	first := true
+	var sum, minV, maxV time.Duration
+	var latest *sample
+	var lastReply *time.Time
 	for _, s := range p.samples {
-		if !s.at.After(cut) || s.at.After(now) {
+		if !s.at.After(cut) || s.at.After(now) || (s.target != "" && s.target != target) {
 			continue
 		}
 		kept = append(kept, s)
-		if s.permErr {
-			perm = true
-			continue
+		if latest == nil || !s.at.Before(latest.at) {
+			copy := s
+			latest = &copy
 		}
 		if s.sent {
 			sent++
 		}
-		if s.ok {
+		if s.ok && s.sent {
 			recv++
 			sum += s.rtt
-			if first || s.rtt < minV {
+			if recv == 1 || s.rtt < minV {
 				minV = s.rtt
 			}
-			if first || s.rtt > maxV {
+			if recv == 1 || s.rtt > maxV {
 				maxV = s.rtt
 			}
-			first = false
+			if lastReply == nil || s.at.After(*lastReply) {
+				copy := s.at
+				lastReply = &copy
+			}
 		}
 	}
 	p.samples = kept
-	out := &protocol.PingSummary{Target: target, Sent: sent, Received: recv, WindowSec: int(window.Seconds())}
-	if perm && sent == 0 {
-		out.Permission = "permission_denied"
-		return out, protocol.Capability{Status: protocol.CapPermissionDenied, Reason: "cannot send ICMP"}
-	}
+	out := &protocol.PingSummary{Target: target, Sent: sent, Received: recv, WindowSec: int(window.Seconds()), LastReplyAt: lastReply}
 	if recv > 0 {
-		mean := float64(sum.Microseconds()) / float64(recv) / 1000.0
-		mn := float64(minV.Microseconds()) / 1000.0
-		mx := float64(maxV.Microseconds()) / 1000.0
-		out.MeanMS, out.MinMS, out.MaxMS = &mean, &mn, &mx
+		mean := float64(sum) / float64(time.Millisecond) / float64(recv)
+		mn := float64(minV) / float64(time.Millisecond)
+		mx := float64(maxV) / float64(time.Millisecond)
+		out.MeanMS = &mean
+		out.MinMS = &mn
+		out.MaxMS = &mx
 	}
 	if sent > 0 {
-		loss := float64(sent-recv) / float64(sent) * 100
+		loss := float64(sent-recv) * 100 / float64(sent)
 		out.LossPct = &loss
 	}
-	t := now
-	return out, protocol.Capability{Status: protocol.CapSupported, LastSuccess: &t}
+	cap := protocol.Capability{Status: protocol.CapSupported, LastSuccess: lastReply}
+	switch {
+	case latest == nil:
+		out.Status = "pending"
+		out.Reason = "Ожидаем первое измерение ICMP"
+		cap.Status = protocol.CapPartial
+	case latest.permErr:
+		out.Status = "permission_denied"
+		out.Permission = "permission_denied"
+		out.Reason = "Службе запрещён ICMP: проверьте разрешение ping-сокетов или CAP_NET_RAW"
+		cap.Status = protocol.CapPermissionDenied
+	case !latest.sent:
+		out.Status = "send_failed"
+		out.Reason = "Не удалось отправить ICMP: проверьте адрес, маршрут и сеть"
+		cap.Status = protocol.CapError
+	case !latest.ok:
+		out.Status = "no_reply"
+		out.Reason = "ICMP отправлен, ответ не получен: возможна фильтрация или потеря связи"
+	default:
+		out.Status = "ok"
+	}
+	cap.Reason = out.Reason
+	return out, cap
 }
 
 // Only a reply to this particular request is evidence of reachability. UDP

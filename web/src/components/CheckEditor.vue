@@ -29,7 +29,9 @@ function openService(id:string):boolean{
  return true;
 }
 defineExpose({openService,focusEditor});
-watch(()=>[route.query.service,services.value.length],async()=>{
+// Observe navigation intent and target availability, not a fresh array produced
+// whenever telemetry replaces detail. Passive refresh must never scroll/focus.
+watch([()=>route.query.service,()=>services.value.some(s=>s.id===String(route.query.service||''))],async()=>{
  const id=String(route.query.service||'');
  if(id&&services.value.some(s=>s.id===id)&&openService(id)){await nextTick();focusEditor();}
 },{immediate:true,flush:'post'});

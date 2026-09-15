@@ -256,6 +256,9 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 		sum, cap := a.Ping.Summary(now, protocol.PingWindow, a.cfg.Ping.Target)
 		host.Ping = sum
 		caps["ping"] = cap
+	} else if host != nil {
+		host.Ping = &protocol.PingSummary{Target: a.cfg.Ping.Target, WindowSec: int(protocol.PingWindow.Seconds()), Status: "disabled", Reason: "Ping выключен в конфигурации"}
+		caps["ping"] = protocol.Capability{Status: protocol.CapPartial, Reason: "Ping выключен в конфигурации"}
 	}
 	locals, _ := netutil.LocalInterfaceIPs()
 	if !a.cfg.Paused {

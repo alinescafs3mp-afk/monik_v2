@@ -304,5 +304,8 @@ func CheckFreshness(seconds int) time.Duration {
 	if seconds < 5 || seconds > 3600 {
 		seconds = 5
 	}
+	if seconds*3 < 20 {
+		return 20 * time.Second
+	}
 	return time.Duration(seconds*3) * time.Second
 }

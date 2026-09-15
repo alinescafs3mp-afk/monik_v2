@@ -1,3 +1,14 @@
+// Presentation clock only, never used for authorization or operation deadlines.
+let clockAnchor: {server:number; received:number; request:number} | null=null;
+export function observeServerTime(value: unknown, request: number, received=performance.now()) {
+  const server=typeof value==='string'?Date.parse(value):NaN;
+  if(!Number.isFinite(server)||!Number.isFinite(request)||!Number.isFinite(received)||received<request)return;
+  if(clockAnchor&&request<clockAnchor.request)return; // late older response
+  clockAnchor={server,received,request};
+}
+export function serverNow(monotonic=performance.now()): number {
+  return clockAnchor ? clockAnchor.server+Math.max(0,monotonic-clockAnchor.received) : Date.now();
+}
 export type ApiError = { error: string; message: string; status: number; operation_id?: string };
 const state = { csrf: "", stream: "unknown" as "live" | "paused" | "unknown" };
 export const csrf = () => state.csrf;
@@ -10,6 +21,7 @@ export function setReauthHandler(handler:typeof reauthHandler){reauthHandler=han
 const activeSubmissions = new Set<string>();
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const requestStarted=performance.now();
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (init.method && !["GET","HEAD"].includes(init.method) && state.csrf) headers.set("X-CSRF-Token", state.csrf);
@@ -24,6 +36,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     try { data = await res.json(); }
     catch { throw { error: "invalid_response", message: "Сервер вернул неполный или некорректный ответ", status: res.ok ? 0 : res.status } satisfies ApiError; }
     if (!res.ok) throw { error: data?.error || "http", message: data?.message || res.statusText, status: res.status } satisfies ApiError;
+    observeServerTime(data?.server_time,requestStarted);
     return data as T;
   } finally { clearTimeout(timeout); init.signal?.removeEventListener("abort", abort); }
 }

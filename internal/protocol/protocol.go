@@ -3,27 +3,29 @@ package protocol
 import "time"
 
 const (
-	SchemaVersion        = 3
-	DefaultBootstrapURL  = "https://46.150.103.61:8777"
-	DefaultListen        = "0.0.0.0:8777"
-	DefaultPort          = 8777
-	EnrollmentTTL        = 10 * time.Minute
-	ReportInterval       = 5 * time.Second
-	CheckInterval        = 5 * time.Second
-	DiscoveryInterval    = 60 * time.Second
-	DiskInterval         = 30 * time.Second
-	InventoryInterval    = 5 * time.Minute
-	PingInterval         = 5 * time.Second
-	PingTimeout          = time.Second
-	PingWindow           = 60 * time.Second
-	HTTPProbeTimeout     = 2 * time.Second
-	ICMPTimeout          = time.Second
-	MaxConcurrentProbes  = 16
-	DiscoveryBudgetMin   = 128
-	RetryMax             = 60 * time.Second
-	SpoolMaxAge          = 30 * time.Minute
-	SpoolMaxBytes        = 100 * 1024 * 1024
-	StaleContact         = 15 * time.Second
+	SchemaVersion       = 3
+	DefaultBootstrapURL = "https://46.150.103.61:8777"
+	DefaultListen       = "0.0.0.0:8777"
+	DefaultPort         = 8777
+	EnrollmentTTL       = 10 * time.Minute
+	ReportInterval      = 5 * time.Second
+	CheckInterval       = 5 * time.Second
+	DiscoveryInterval   = 60 * time.Second
+	DiskInterval        = 30 * time.Second
+	InventoryInterval   = 5 * time.Minute
+	PingInterval        = 5 * time.Second
+	PingTimeout         = time.Second
+	PingWindow          = 60 * time.Second
+	HTTPProbeTimeout    = 2 * time.Second
+	ICMPTimeout         = time.Second
+	MaxConcurrentProbes = 16
+	DiscoveryBudgetMin  = 128
+	RetryMax            = 60 * time.Second
+	SpoolMaxAge         = 30 * time.Minute
+	SpoolMaxBytes       = 100 * 1024 * 1024
+	StaleContact        = 20 * time.Second
+	// Update probation is deliberately stricter than display jitter tolerance.
+	RolloutFreshContact  = 15 * time.Second
 	UnreachableContact   = 30 * time.Second
 	CheckFailCount       = 3
 	CheckRecoverCount    = 2
@@ -167,15 +169,18 @@ type Disk struct {
 }
 
 type PingSummary struct {
-	Target     string   `json:"target"`
-	MeanMS     *float64 `json:"mean_ms"`
-	MinMS      *float64 `json:"min_ms"`
-	MaxMS      *float64 `json:"max_ms"`
-	Sent       int      `json:"sent"`
-	Received   int      `json:"received"`
-	LossPct    *float64 `json:"loss_percent"`
-	Permission string   `json:"permission,omitempty"`
-	WindowSec  int      `json:"window_seconds"`
+	Status      string     `json:"status,omitempty"`
+	Reason      string     `json:"reason,omitempty"`
+	LastReplyAt *time.Time `json:"last_reply_at,omitempty"`
+	Target      string     `json:"target"`
+	MeanMS      *float64   `json:"mean_ms"`
+	MinMS       *float64   `json:"min_ms"`
+	MaxMS       *float64   `json:"max_ms"`
+	Sent        int        `json:"sent"`
+	Received    int        `json:"received"`
+	LossPct     *float64   `json:"loss_percent"`
+	Permission  string     `json:"permission,omitempty"`
+	WindowSec   int        `json:"window_seconds"`
 }
 
 // ResponseFeedback contains only bounded protocol metadata and allowlisted health tokens.

@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref } from "vue";
 import { get, submitOp } from "../api";
 import { usePolling } from "../composables/usePolling";
-import { bytes, number, stateLabel } from "../format";
+import { pingDetail, bytes, number, stateLabel } from "../format";
 import { worstDisk, readPreference, savePreference, matchesMachine, overviewPriority, orderOverview } from "../presentation";
 import TVBoard from "../components/TVBoard.vue";
 import {useDisplay} from "../composables/useDisplay";
@@ -11,10 +11,10 @@ import ServiceList from "../components/ServiceList.vue";
 const emit = defineEmits<{ toast: [string, string?] }>();
 const data = ref<any>(null), problemsOnly = ref(false), pending = ref<string[]>([]), query = ref("");
 const layout = ref(readPreference('monik:overview-layout', 'rows') === 'cards' ? 'cards' : 'rows');
-const now = ref(Date.now()); let fetchedAt = Date.now();
+const now = ref(Date.now()); let fetchedAt = performance.now();
 const timer = window.setInterval(() => { now.value = Date.now(); }, 2000); onUnmounted(() => clearInterval(timer));
-const { loading, error, refreshing, updated, refresh } = usePolling(async () => { data.value = await get("/api/v1/overview"); fetchedAt = Date.now(); now.value = fetchedAt; });
-function fresh(c: any) { return c.metrics_fresh && (c.age_seconds || 0) + Math.max(0, now.value-fetchedAt)/1000 <= 15; }
+const { loading, error, refreshing, updated, refresh } = usePolling(async () => { data.value = await get("/api/v1/overview"); fetchedAt = performance.now(); now.value = Date.now(); });
+function fresh(c: any) { void now.value; return c.metrics_fresh && (c.age_seconds || 0) + Math.max(0, performance.now()-fetchedAt)/1000 <= (c.fresh_for_seconds || 20); }
 const cards = computed(() => orderOverview((data.value?.cards || []).filter((c:any)=>c.pinned && (!problemsOnly.value || overviewPriority(c,fresh(c))>0) && matchesMachine(c,query.value)), fresh));
 
 function breach(c: any, metric: string) { return fresh(c) && (c.breaches || []).some((b: any) => b.metric === metric); }
@@ -48,9 +48,9 @@ async function pin(c: any) {
           <div :class="{ 'metric-problem': breach(c,'cpu') }"><dt>CPU</dt><dd>{{ number(c.cpu, '%', 1) }}</dd></div>
           <div :class="{ 'metric-problem': breach(c,'ram') }"><dt>RAM</dt><dd>{{ c.ram_total > 0 ? number(c.ram_used / c.ram_total * 100, '%', 1) : 'Нет данных' }}</dd><small>{{ bytes(c.ram_used) }} / {{ bytes(c.ram_total) }}</small></div>
           <div :class="{ 'metric-problem': breach(c,'disk') }"><dt>DISK <small class="disk-mount" :title="worstDisk(c.disks)?.mount">{{ worstDisk(c.disks)?.mount }}</small></dt><dd>{{ number(worstDisk(c.disks)?.used_percent, '%', 1) }}</dd><small>{{ bytes(worstDisk(c.disks)?.used_bytes) }} / {{ bytes(worstDisk(c.disks)?.total_bytes) }}</small><small v-if="c.disks?.length > 1">Самый заполненный из {{ c.disks.length }}</small></div>
-          <div><dt>Средний ping</dt><dd>{{ number(c.ping?.mean_ms, ' мс', 1) }}</dd><small>Потери {{ number(c.ping?.loss_percent, '%') }} · {{ c.ping?.window_seconds || 60 }} с</small></div>
+          <div><dt>Средний ping</dt><dd>{{ number(c.ping?.mean_ms, ' мс', 1) }}</dd><small>Потери {{ number(c.ping?.loss_percent, '%') }} · {{ c.ping?.window_seconds || 60 }} с</small><small v-if="pingDetail(c.ping)" class="ping-diagnostic" :title="c.ping?.reason">{{pingDetail(c.ping)}}</small></div>
         </dl>
-        <div class="host-service-cell"><router-link :to="`/machines/${encodeURIComponent(c.id)}#services`" class="service-heading">Выбрано сервисов {{ c.services?.length || 0 }}/{{c.services_total||0}}</router-link><p v-if="!c.services?.length" class="muted service-empty">Отметьте сервисы для обзора во вкладке «Сервисы».</p><small v-if="c.unselected_service_problems" class="err">Проблем вне выбранных: {{c.unselected_service_problems}}</small><ServiceList v-if="c.services?.length" :services="c.services || []" :limit="layout==='rows' ? 2 : 4" :compact="layout==='rows'"/><router-link v-if="c.services?.length > (layout==='rows'?2:4)" :to="`/machines/${encodeURIComponent(c.id)}#services`">Все сервисы →</router-link></div>
+        <div class="host-service-cell"><router-link :to="`/machines/${encodeURIComponent(c.id)}#services`" class="service-heading">Выбрано сервисов {{ c.services?.length || 0 }}/{{c.services_total||0}}</router-link><p v-if="!c.services?.length" class="muted service-empty">Отметьте сервисы для обзора во вкладке «Сервисы».</p><small v-if="c.unselected_service_problems" class="err">Проблем вне выбранных: {{c.unselected_service_problems}}</small><ServiceList v-if="c.services?.length" :services="c.services || []" :limit="layout==='rows' ? undefined : 4" :columns="layout==='rows'" :compact="layout==='rows'"/><router-link v-if="layout==='cards' && c.services?.length > 4" :to="`/machines/${encodeURIComponent(c.id)}#services`">Все сервисы →</router-link></div>
         <div class="host-line-actions"><router-link :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`" title="Открыть SSH-консоль">⌘</router-link><button :disabled="pending.includes(c.id)" :aria-label="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" :title="c.pinned ? 'Убрать из обзора' : 'Показывать в обзоре'" @click="pin(c)"><span aria-hidden="true">{{ pending.includes(c.id) ? '…' : c.pinned ? '★' : '☆' }}</span></button><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`" title="Графики и параметры">↗</router-link></div>
       </article>
     </div>

@@ -301,6 +301,7 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 			card["temperatures"] = host.Temperatures
 			card["observed_at"] = obs
 			card["age_seconds"] = now.Sub(obs).Seconds()
+			card["fresh_for_seconds"] = protocol.StaleContact.Seconds()
 			card["metrics_fresh"] = fresh
 			breaches := rules.EvaluateHost(host, rules.ThresholdRules(ruleVersion.Rules))
 			card["breaches"] = breaches
@@ -421,6 +422,7 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 		"maintenance_active": maintenance, "agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
 		"discovery": discovery, "desired_config": json.RawMessage(orJSON(ag.DesiredConfig)),
 		"age_seconds": a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
+		"server_time": a.Clock.Now(), "fresh_for_seconds": protocol.StaleContact.Seconds(),
 	})
 }
 
@@ -440,7 +442,7 @@ func (a *App) handleServices(w http.ResponseWriter, r *http.Request, s *storage.
 	if selection == "all" {
 		rows = all
 	}
-	a.writeJSON(w, 200, map[string]any{"services": rows, "inactive_services": inactive})
+	a.writeJSON(w, 200, map[string]any{"services": rows, "inactive_services": inactive, "server_time": a.Clock.Now()})
 }
 
 func (a *App) handleService(w http.ResponseWriter, r *http.Request, s *storage.Session) {

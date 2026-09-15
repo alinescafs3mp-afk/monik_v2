@@ -21,6 +21,7 @@ from operation_read_scenarios import exercise_operation_reads
 from rollout_scenarios import exercise_rollouts
 from navigation_scenarios import exercise_navigation_failure
 from inventory_scenarios import exercise_inventory_profiles
+from seamless_scenarios import exercise_seamless_updates
 
 
 def run(binary: Path, output: Path) -> None:
@@ -97,6 +98,7 @@ def run(binary: Path, output: Path) -> None:
                     expect(checkbox).not_to_be_checked()
                     checkbox.click()
                     expect(checkbox).to_be_checked()
+                    exercise_seamless_updates(context, base, output, results)
                     page.goto(base + "/", wait_until="domcontentloaded")
                     card = page.locator("article.host-card").filter(has=page.get_by_role("heading", name="Audit host", exact=True))
                     expect(card).to_have_count(1)
@@ -216,14 +218,19 @@ def run(binary: Path, output: Path) -> None:
                     expect(editor).to_be_visible()
                     expect(editor.locator("h3")).to_be_focused()
                     results.append("Services groups expand by host; repeated configure click opens, selects and focuses actual editor")
-                    # Editor is independent from a failing history endpoint.
+                    # Charts live on the summary tab. A failing history query
+                    # must not hide or reset the service editor on the services tab.
                     def fail_history(route):
                         route.fulfill(status=503, content_type="application/json", body='{"message":"history fixture failure"}')
                     page.route("**/api/v1/history/series?*", fail_history)
                     page.goto(base + "/machines/audit-host?service=audit-auth#check-editor", wait_until="domcontentloaded")
                     expect(editor).to_be_visible()
                     expect(editor.locator("select").first).to_have_value("audit-auth")
+                    page.get_by_role("button", name="Параметры и графики", exact=True).click()
                     expect(page.locator("main")).to_contain_text("history fixture failure")
+                    page.get_by_role("button", name="Сервисы", exact=True).click()
+                    expect(editor).to_be_visible()
+                    expect(editor.locator("select").first).to_have_value("audit-auth")
                     page.unroute("**/api/v1/history/series?*", fail_history)
                     results.append("failed graph history does not hide service editor")
                     # Owner label survives background telemetry, reload and a second change.

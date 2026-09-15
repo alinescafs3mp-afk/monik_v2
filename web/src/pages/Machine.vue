@@ -4,7 +4,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { get, submitOp } from "../api";
 import { usePolling } from "../composables/usePolling";
-import { bytes, number, localDateValue, stateLabel, finite } from "../format";
+import { pingDetail, bytes, number, localDateValue, stateLabel, finite } from "../format";
 import { exportDownload } from "../history";
 import TimeBar from "../components/TimeBar.vue";
 import Spark from "../components/Spark.vue";
@@ -18,6 +18,7 @@ const detail=ref<any>(null), history=ref<any>(null), point=ref<any>(null), pendi
 const mode=ref<'live'|'history'>(route.query.at?'history':'live');
 const hours=ref([1,2,3,6,12,24].includes(Number(route.query.hours))?Number(route.query.hours):1);
 const end=ref(localDateValue(route.query.at && Number.isFinite(Date.parse(String(route.query.at)))?new Date(String(route.query.at)):new Date()));
+const endEditing=ref(false);
 const cursor=ref(''), tab=ref(route.hash==='#services'||route.hash==='#check-editor'||route.query.service?'services':'summary');
 const checkEditor=ref<InstanceType<typeof CheckEditor>|null>(null);
 watch(()=>[route.hash,route.query.service],()=>{if(['#services','#check-editor'].includes(route.hash)||route.query.service)tab.value='services';});
@@ -37,15 +38,17 @@ async function load() {
  // Publish inventory immediately. A slow/broken history query must not hold the
  // current service editor hostage or hide a successfully fetched machine.
  const inventory=get(`/api/v1/agents/${encodeURIComponent(id)}`).then(d=>{if(current())detail.value=d;return d;});
- const [d,h,p]=await Promise.allSettled([inventory,get(`/api/v1/history/series?${q}`),historical?get(`/api/v1/history/point?${new URLSearchParams({agent_id:id,at:cursor.value || to.toISOString()})}`):Promise.resolve(null)]);
+ const needHistory=tab.value==='summary';
+ const [d,h,p]=await Promise.allSettled([inventory,needHistory?get(`/api/v1/history/series?${q}`):Promise.resolve(history.value),historical&&needHistory?get(`/api/v1/history/point?${new URLSearchParams({agent_id:id,at:cursor.value || to.toISOString()})}`):Promise.resolve(null)]);
  if(!current())return;
  if(d.status==='rejected')throw d.reason;
  history.value=h.status==='fulfilled'?h.value:null;point.value=p.status==='fulfilled'?p.value:null;
  historyError.value=[h,p].filter(v=>v.status==='rejected').map(v=>(v as PromiseRejectedResult).reason?.message||'Не удалось прочитать историю').join('; ');
- if(!historical)end.value=localDateValue(to);
+ if(!historical&&!endEditing.value)end.value=localDateValue(to);
 }
 const {loading,refreshing,error,updated,refresh}=usePolling(load,()=>mode.value==='live');
 watch([hours,mode,()=>route.params.id],(v,old)=>{++generation; exportURL.value='';if(v[0]!==old[0]||v[2]!==old[2])cursor.value='';if(v[2]!==old[2]){detail.value=null;history.value=null;point.value=null;}void refresh();});
+watch(tab,value=>{if(value==='summary')void refresh();});
 const host=computed(()=>mode.value==='history'?point.value?.host:detail.value?.host);
 const rows=computed<any[]>(()=>history.value?.host || []);
 const secretName=ref(''); const secretHeader=ref('Authorization'); const secretValue=ref('');
@@ -79,12 +82,14 @@ async function replaceSecret(){
   <template v-if="detail">
    <header class="bar"><div><router-link to="/">← Обзор</router-link><h2>{{ detail.agent.display_name || detail.agent.hostname }}</h2><MachineNameEditor :id="detail.agent.id" :name="detail.agent.display_name || detail.agent.hostname || detail.agent.id" @saved="refresh"/><p class="muted">{{ detail.agent.os }} / {{ detail.agent.arch }} · <span class="dot" :class="detail.state"/> {{ stateLabel(detail.state) }} (сейчас)</p></div><div class="row"><button :disabled="!!pending || mode==='history'" @click="action('agent.collect_now')">{{ pending==='agent.collect_now'?'Отправляем…':'Собрать сейчас' }}</button><button :disabled="!!pending || mode==='history'" @click="action('agent.discover_now')">{{ pending==='agent.discover_now'?'Отправляем…':'Обнаружить сервисы' }}</button></div></header>
    <div class="row detail-tabs"><button v-for="[id,label] in [['summary','Параметры и графики'],['services','Сервисы'],['agent','Агент и конфигурация']]" :key="id" :aria-pressed="tab===id" @click="tab=id">{{ label }}</button></div>
+   <template v-if="tab==='summary'">
    <p v-if="historyError" class="panel err" role="alert">История: {{historyError}}. Настройки текущей машины доступны. <button @click="refresh">Повторить историю</button></p>
    <TimeBar v-model:mode="mode" v-model:hours="hours"/><div class="row"><button :disabled="!!pending||!history" @click="exportRange">{{ pending==='history.export'?'Готовим экспорт…':'Экспорт интервала в JSON' }}</button><a v-if="exportURL" :href="exportURL" download>Скачать экспорт</a></div>
-   <form class="row time-form" @submit.prevent="fixed"><label>Конец интервала <input v-model="end" type="datetime-local" step="1" required/></label><button :disabled="refreshing">Открыть дату</button><small class="muted">{{ zone }} · {{ mode==='live'?'Окно обновляется':'HISTORY: окно закреплено' }}</small></form>
+   <form class="row time-form" @submit.prevent="fixed"><label>Конец интервала <input v-model="end" type="datetime-local" step="1" required @focus="endEditing=true" @blur="endEditing=false"/></label><button :disabled="refreshing">Открыть дату</button><small class="muted">{{ zone }} · {{ mode==='live'?'Окно обновляется':'HISTORY: окно закреплено' }}</small></form>
    <p v-if="mode==='history'" class="panel data-warning">Срез {{ cursor || end }}. {{ point?.found ? `Измерено ${point.age_seconds.toFixed(0)} с до выбранного момента` : 'Измерений нет' }}. {{ point?.fresh ? '' : 'Нет свежего подтверждения состояния в этой точке.' }} Сведения об агенте и список сервисов ниже относятся к текущему инвентарю, не к прошлому.</p>
+   </template>
    <section v-if="tab==='summary'" class="panel">
-    <dl class="metric-grid"><div><dt>CPU</dt><dd>{{ number(host?.cpu_percent,'%',1) }}</dd><small>{{ host?.cpu_model }}</small></div><div><dt>RAM</dt><dd>{{ bytes(host?.ram_used_bytes) }}</dd><small>Всего {{ bytes(host?.ram_total_bytes) }} · доступно {{ bytes(host?.ram_available_bytes) }}</small></div><div><dt>Средний ping</dt><dd>{{ number(host?.ping?.mean_ms,' мс',1) }}</dd><small>Потери {{ number(host?.ping?.loss_percent,'%') }} · {{ host?.ping?.target || '8.8.8.8' }}</small></div><div><dt>Uptime машины</dt><dd>{{ number(host?.system_uptime_seconds ? host.system_uptime_seconds/3600 : host?.system_uptime_seconds,' ч',1) }}</dd></div></dl>
+    <dl class="metric-grid"><div><dt>CPU</dt><dd>{{ number(host?.cpu_percent,'%',1) }}</dd><small>{{ host?.cpu_model }}</small></div><div><dt>RAM</dt><dd>{{ bytes(host?.ram_used_bytes) }}</dd><small>Всего {{ bytes(host?.ram_total_bytes) }} · доступно {{ bytes(host?.ram_available_bytes) }}</small></div><div><dt>Средний ping</dt><dd>{{ number(host?.ping?.mean_ms,' мс',1) }}</dd><small>Потери {{ number(host?.ping?.loss_percent,'%') }} · {{ host?.ping?.target || '8.8.8.8' }}</small><small v-if="pingDetail(host?.ping)">{{pingDetail(host?.ping)}}</small></div><div><dt>Uptime машины</dt><dd>{{ number(host?.system_uptime_seconds ? host.system_uptime_seconds/3600 : host?.system_uptime_seconds,' ч',1) }}</dd></div></dl>
     <div class="chart-grid"><Spark :points="series('cpu_pct')" label="CPU" unit="%" :step="history?.step_seconds" :from="history?.from" :to="history?.to" @select="select"/><Spark :points="series('ram_used',1073741824)" label="Занятая RAM" unit=" GiB" :step="history?.step_seconds" :from="history?.from" :to="history?.to" @select="select"/><Spark :points="series('ping_mean_ms')" label="Средний ping за окно агента" unit=" мс" :step="history?.step_seconds" :from="history?.from" :to="history?.to" @select="select"/><Spark :points="series('ping_loss')" label="Потери ping за окно агента" unit="%" :step="history?.step_seconds" :from="history?.from" :to="history?.to" @select="select"/><Spark v-for="mount in diskMounts" :key="mount" :points="diskSeries(mount)" :label="`DISK ${mount}`" unit="%" :step="history?.step_seconds" :from="history?.from" :to="history?.to" @select="select"/><Spark v-for="sensor in sensors" :key="sensor" :points="tempSeries(sensor)" :label="sensor" unit=" °C" :step="history?.step_seconds" :from="history?.from" :to="history?.to" @select="select"/></div>
     <p v-if="!sensors.length" class="muted">Температурные датчики не предоставили измерения в этом интервале.</p><p class="muted">Разрешение графиков: {{ history?.step_seconds }} с. Вертикальные отметки сохраняют минимум/максимум параметра внутри каждого бакета. Линия показывает последнее измерение. Пропуски не соединяются. Клик по графику открывает срез.</p>
     <div class="table-wrap"><table><thead><tr><th>Диск</th><th>Занято</th><th>Всего</th><th>Доступно</th></tr></thead><tbody><tr v-for="d in host?.disks || []" :key="d.mount"><td>{{ d.mount }} ({{ d.fs }})</td><td>{{ bytes(d.used_bytes) }}</td><td>{{ bytes(d.total_bytes) }}</td><td>{{ bytes(d.available_bytes) }}</td></tr></tbody></table></div>

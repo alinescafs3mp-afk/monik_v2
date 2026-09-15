@@ -43,6 +43,7 @@ type serviceSummary struct {
 	Summary           string                       `json:"summary"`
 	Discovery         *protocol.DiscoveredEndpoint `json:"discovery,omitempty"`
 	Fresh             bool                         `json:"fresh"`
+	FreshForSeconds   float64                      `json:"fresh_for_seconds"`
 	MaintenanceActive bool                         `json:"maintenance_active"`
 }
 
@@ -89,9 +90,10 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			return nil, err
 		}
 		if obs != nil {
+			item.FreshForSeconds = protocol.CheckFreshness(obs.IntervalSeconds).Seconds()
 			item.Fresh = st == "ok" && now.Sub(obs.ObservedAt) <= protocol.CheckFreshness(obs.IntervalSeconds) && !obs.ObservedAt.After(now.Add(5*time.Second))
 			item.State = "responds"
-			item.Summary = "HTTP отвечает; здоровье приложения не настроено"
+			item.Summary = "Нет корректного HTTP-ответа"
 			if obs.HTTPStatus != nil {
 				item.Summary = fmt.Sprintf("HTTP %d", *obs.HTTPStatus)
 				if obs.LatencyMS != nil {
@@ -117,14 +119,15 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			case obs.AppResult == "fail":
 				item.State = "app_fail"
 				item.Summary += " · " + obs.AppReason
-			case obs.AppResult != "pass" && obs.HTTPStatus != nil && *obs.HTTPStatus >= 500:
+			case obs.AppResult != "pass" && (obs.HTTPStatus == nil || *obs.HTTPStatus < 200 || *obs.HTTPStatus >= 400):
 				item.State = "http_error"
-				item.Summary += " · ошибка сервера"
+				item.Summary += " · неожиданный HTTP-ответ"
 			case obs.AppResult == "pass":
 				item.State = "ok"
 				item.Summary += " · проверка пройдена"
 			default:
-				item.Summary += " · здоровье приложения не настроено"
+				// A baseline 2xx/3xx response proves responsiveness, not application dependencies.
+				item.State = "responds"
 			}
 		}
 		if obs != nil && obs.Feedback != nil && obs.Feedback.Health != "" {
