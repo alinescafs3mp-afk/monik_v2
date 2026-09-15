@@ -143,6 +143,10 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 		a.writeErr(w, 409, "invalid_profile", e.Error())
 		return
 	}
+	s = a.currentOwner(w, s, true)
+	if s == nil {
+		return
+	}
 	code, expires, e := a.Store.CreateInstallerCode(s.Username, b.Manifest.Build, platform)
 	if e != nil {
 		a.writeErr(w, 409, "enrollment_unavailable", e.Error())
@@ -150,6 +154,10 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 	}
 	if _, e = a.Store.DB.ExecContext(r.Context(), `INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,?,?,?,?)`, a.Clock.Now().UTC().Format(time.RFC3339Nano), s.Username, "installer.console_consent", platform, fmt.Sprintf("local_agent_console=%t; no controller secrets or reusable permits in audit", body.EnableAgentConsole)); e != nil {
 		a.writeErr(w, 503, "audit_unavailable", "installer consent was not confirmed; unused enrollment expires")
+		return
+	}
+	s = a.currentOwner(w, s, true)
+	if s == nil {
 		return
 	}
 	p.EnrollmentCode = code

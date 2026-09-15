@@ -1,18 +1,20 @@
-# V19 current acceptance (2026-09-15)
+# V20 acceptance ledger (2026-09-15)
 
-Baseline `776076273d677046b3a765e30d781f37b44957d5`, tree `61f3e23e62937654f65273aabb4f9ca53e288f4f`. Auditor browser was BLOCKED_BEFORE_LOGIN; host executed that gate. Previous V18 ledger is `docs/history/ACCEPTANCE_LEDGER_THROUGH_V18.md`. See `docs/audit/validation-review19-2026-09-15.json`.
+Reviewed commit `0385030878ec58e0f7a8bf1b95ab1f38fd1cde06`, tree `b948195118d1b08bf765106ee55d78b52555a7ce`. Patch applied to exact auditor tree `411474a6c760ade2c20e25b95a3de58fcfec7461`. Previous V19 local host evidence is preserved in `docs/history/ACCEPTANCE_LEDGER_THROUGH_V19.md`. The separate baseline GitHub CI failed after 42 browser cases; neither report cancels the other. Auditor browser was BLOCKED_BEFORE_LOGIN; host executed that gate. See `docs/audit/validation-review20-2026-09-15.json`.
 
 | Gate | Actual host evidence |
 |---|---|
-| Baseline | Exact tree `61f3e23e62937654f65273aabb4f9ca53e288f4f`. Patch applied to auditor tree `bd8d7e3061d2b0d6e1a704a14cb8bb7536f23bc6`. |
-| Go 1.27.1 race | PASS: 442 top-level including fuzz seeds, 628 test/subtest/seed PASS events, 27 packages. Opt-in native/ICMP/UID/unit-syntax skip in `./...`; native process cases run separately. |
-| Frontend | PASS: 185 Node tests, `tsc --noEmit`, Vite production UI. Not vue-tsc. |
-| V19 repeats | PASS: 5 shuffled race runs of `TestV19` in server and storage. 10 runs of 36 TV-profile/column Node tests, 0 failures. |
-| Modules/static | go vet and go mod verify PASS. Lockfiles unchanged. |
-| Linux/Windows build | Four binaries per amd64 platform; Windows CROSS-COMPILE ONLY. Credential-free installer templates linux-amd64 and linux-arm64 rebuilt after commit. |
-| Browser | Host 45/45. Includes two-context shared TV geometry/density/autoplay, lost-save identity, SSE fallback, edit conflict, local mode/390px isolation, plus prior V18 remote/console and V17/V16 cases. Fixture loopback only. |
-| Native processes | PASS 3/3 uid=1000, including signed update and failed-candidate rollback. Not systemd/boot. |
-| UID isolation fixture | NOT RUN: requires disposable root to drop test UIDs. Not run as root on the live controller. |
-| Physical TV, native service boot, soak | NOT RUN. Existing agents were not re-enrolled or replaced for V19. Shared TV profile does not change console opt-in. |
+| Baseline regressions | Eleven groups fail on the unchanged baseline; same checks pass on corrected source. Additional first-draft Origin edge case fixed during self-review. |
+| Go 1.27.1 race | 465 top-level PASS, 691 test/subtest/seed PASS events, 27 packages. 7 opt-in/fixture tests skipped in the ordinary full suite; native process cases run separately. |
+| Frontend | 188 Node tests PASS; tsc and production Vite build PASS. Includes source assertions; not vue-tsc. |
+| Repeats/fuzz | New V20 groups five shuffled race repetitions PASS. Origin fuzzer 344,416 executions during requested 15s PASS. |
+| Modules/static | go vet and go mod verify PASS. Lockfiles unchanged. Not a CVE audit. |
+| Build | Four binaries each for Linux/Windows amd64; one-file Linux amd64/arm64 templates rebuilt after commit. Cross-compilation is not native Windows acceptance. |
+| Native processes | PASS 3/3 uid=1000, including signed replacement and failed-candidate rollback. Not systemd/boot. |
+| Console identity | Source/PTY/frame tests PASS. UID isolation fixture NOT RUN (needs disposable root). Broker was not dropped to UID65534 on this host. |
+| systemd unit syntax | PASS only. No native service activation/install/boot. |
+| Browser | Host 45/45. Includes V19 two-context shared TV geometry/density/autoplay, lost-save identity, SSE fallback, edit conflict, local mode/390px isolation, plus prior V18 remote/console and V17/V16 cases. Fixture loopback only. Assertions were not weakened. |
+| ICMP, physical TV, real perimeter, load/soak | NOT RUN. No full restore or independent service-host recovery claim. |
+| Package | Exact target tree `411474a6c760ade2c20e25b95a3de58fcfec7461` before host extras. |
 
-Host extras versus auditor tree `bd8d7e30`: this ledger, `IMPLEMENTATION_STATUS.md`, `docs/audit/validation-review19-2026-09-15.json`, and CSS/`TVProfilePanel` wrap so a 390px TV viewport cannot overflow. Assertions were not weakened. `operation.retry_selected` and service-host self-update stay fail-closed. Existing agents need no binary replacement for this feature.
+Host extras versus auditor tree `411474a6`: this ledger, `IMPLEMENTATION_STATUS.md`, and `docs/audit/validation-review20-2026-09-15.json`. No locator, origin, CSRF, TLS or geometry check was weakened. `operation.retry_selected` and independent service-host self-update stay fail-closed. Existing agents need no binary replacement for V20. Server/UI-only update: preserve enrolled identities, CA/TLS, journals, shared TV profile and local console opt-in. Installer templates for future downloads must match the deployed server build.

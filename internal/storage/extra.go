@@ -192,21 +192,67 @@ func (s *Store) PendingCredential(agentID string) (hash, jobID string, err error
 	if err != nil {
 		return "", "", err
 	}
-	until, _ := time.Parse(time.RFC3339Nano, exp)
-	if until.Before(s.now().UTC()) {
-		_, _ = s.db().Exec(`DELETE FROM agent_credential_overlap WHERE agent_id=?`, agentID)
+	until, parseErr := time.Parse(time.RFC3339Nano, exp)
+	if parseErr != nil {
+		return "", "", ErrConflict
+	}
+	if !s.now().UTC().Before(until) {
+		// Another request may have installed a newer overlap since the read.
+		_, _ = s.db().Exec(`DELETE FROM agent_credential_overlap WHERE agent_id=? AND pending_hash=? AND expires_at=?`, agentID, hash, exp)
 		return "", "", ErrNotFound
 	}
 	return hash, jobID, nil
 }
 
+// Promotion is a compare-and-swap of the still valid pending credential, not
+// permission to install a cached verifier after a revoke or a newer rotation.
 func (s *Store) PromoteCredential(agentID, hash string) error {
+	if agentID == "" || hash == "" {
+		return ErrConflict
+	}
 	return s.WithTx(func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`UPDATE agents SET credential_hash=? WHERE id=?`, hash, agentID); err != nil {
-			return err
+		var current string
+		var revoked bool
+		if e := tx.QueryRow(`SELECT credential_hash,revoked FROM agents WHERE id=?`, agentID).Scan(&current, &revoked); e != nil {
+			return e
 		}
-		_, err := tx.Exec(`DELETE FROM agent_credential_overlap WHERE agent_id=?`, agentID)
-		return err
+		if revoked {
+			return ErrConflict
+		}
+		if current == hash {
+			return nil
+		} // Concurrent identical promotion; preserve a newer overlap.
+		var pending, expiry string
+		if e := tx.QueryRow(`SELECT pending_hash,expires_at FROM agent_credential_overlap WHERE agent_id=?`, agentID).Scan(&pending, &expiry); e != nil {
+			return e
+		}
+		until, e := time.Parse(time.RFC3339Nano, expiry)
+		if e != nil || pending != hash || !s.now().Before(until) {
+			return ErrConflict
+		}
+		result, e := tx.Exec(`UPDATE agents SET credential_hash=? WHERE id=? AND revoked=0 AND credential_hash=?`, hash, agentID, current)
+		if e != nil {
+			return e
+		}
+		n, e := result.RowsAffected()
+		if e != nil {
+			return e
+		}
+		if n != 1 {
+			return ErrConflict
+		}
+		result, e = tx.Exec(`DELETE FROM agent_credential_overlap WHERE agent_id=? AND pending_hash=? AND expires_at=?`, agentID, hash, expiry)
+		if e != nil {
+			return e
+		}
+		n, e = result.RowsAffected()
+		if e != nil {
+			return e
+		}
+		if n != 1 {
+			return ErrConflict
+		}
+		return nil
 	})
 }
 

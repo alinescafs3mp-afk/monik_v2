@@ -249,7 +249,7 @@ type consoleMessage struct {
 
 func consoleSize(cols, rows int) bool { return cols >= 20 && cols <= 300 && rows >= 5 && rows <= 120 }
 func consoleOrigin(r *http.Request) bool {
-	return r.TLS != nil && r.Header.Get("Origin") == "https://"+r.Host
+	return r.TLS != nil && len(r.Header.Values("Origin")) == 1 && r.Header.Get("Origin") == "https://"+r.Host
 }
 func (a *App) handleConsoleSocket(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	if s.Role != "owner" || !recentOK(s, a.Clock.Now()) || !consoleOrigin(r) || r.URL.RawQuery != "" {

@@ -28,6 +28,11 @@ func (a *App) handlePasswordChange(w http.ResponseWriter, r *http.Request, s *st
 		a.writeErr(w, 400, "unchanged", "choose a different password")
 		return
 	}
+	release, allowed := a.passwordWork(w)
+	if !allowed {
+		return
+	}
+	defer release()
 	user, err := a.Store.UserByName(s.Username)
 	if err != nil || !secure.VerifyPassword(user.PasswordHash, body.Current) {
 		a.writeErr(w, 401, "invalid_credentials", "current password is incorrect")
@@ -40,7 +45,7 @@ func (a *App) handlePasswordChange(w http.ResponseWriter, r *http.Request, s *st
 	}
 	a.controlMu.Lock()
 	defer a.controlMu.Unlock()
-	if err = a.Store.SessionStillValid(s.ID); err != nil {
+	if s, err = a.Store.RevalidateSession(s); err != nil {
 		a.writeErr(w, 401, "unauthorized", "session expired; sign in again")
 		return
 	}

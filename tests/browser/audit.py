@@ -4,6 +4,7 @@ Run after npm run build and go build -o /tmp/monik-audit-server
 ./tests/fixtures/audit-server. No production credentials or network targets.
 """
 import argparse
+import traceback
 import json
 import re
 import os
@@ -510,7 +511,7 @@ def run(binary: Path, output: Path) -> None:
                     browser.close()
                     browser = None
             except Exception as error:
-                errors.append(str(error))
+                errors.append(traceback.format_exc())
                 raise
             finally:
                 process.terminate()

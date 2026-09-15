@@ -107,6 +107,13 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 	// Serialize config publication against discovery-generated desired revisions.
 	a.controlMu.Lock()
 	defer a.controlMu.Unlock()
+	// Reading an untrusted body can overlap a revoke/rotation. Authorize again
+	// at the serialized ingestion boundary, before committing or returning jobs.
+	ag, _, ok = a.lookupAgent(r, true)
+	if !ok || ag.ID != rep.AgentID {
+		a.writeErr(w, 401, "unauthenticated", "agent credential expired during request")
+		return
+	}
 	accepted, err := a.Store.AcceptReport(rep)
 	if err != nil {
 		a.writeErr(w, 409, "report_rejected", "report not committed: "+err.Error())
@@ -191,6 +198,9 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func bearer(r *http.Request) (agentID, cred string, ok bool) {
+	if len(r.Header.Values("Authorization")) != 1 || len(r.Header.Values("X-Monik-Agent-Id")) != 1 {
+		return "", "", false
+	}
 	h := r.Header.Get("Authorization")
 	if !strings.HasPrefix(h, "Bearer ") {
 		return "", "", false

@@ -1,0 +1,79 @@
+{
+  "audit": "20",
+  "date": "2026-09-15",
+  "baseline_commit": "0385030878ec58e0f7a8bf1b95ab1f38fd1cde06",
+  "baseline_tree": "b948195118d1b08bf765106ee55d78b52555a7ce",
+  "auditor_result_tree": "411474a6c760ade2c20e25b95a3de58fcfec7461",
+  "full_release_accepted": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.27.0",
+    "node": "v22.23.2",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "auditor": {
+    "browser": "BLOCKED_BEFORE_LOGIN",
+    "native_uid": 65534,
+    "origin_fuzz_execs": 94589
+  },
+  "executed": {
+    "package_verify": {"status": "PASS", "files": 94},
+    "preflight": {"status": "PASS", "applied_tree": "411474a6c760ade2c20e25b95a3de58fcfec7461"},
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_tests_and_fuzz_targets": 465,
+      "test_and_seed_results": 691,
+      "tested_packages": 27
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS"},
+    "frontend": {"status": "PASS", "node_tests": 188, "tsc": true, "vite": true},
+    "v20_repeats": {"status": "PASS", "go_count": 5, "filter": "TestV20", "packages": 2},
+    "origin_fuzz": {"status": "PASS", "execs": 344416, "duration_seconds_requested": 15},
+    "linux_windows_build": {"status": "PASS", "note": "four Linux amd64 and four Windows amd64; installer templates amd64+arm64 rebuilt after commit"},
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "systemd_unit_syntax": {"status": "PASS", "not": "install/boot"},
+    "agentconsole_source": {"status": "PASS", "uid_isolation_fixture": "NOT RUN"},
+    "browser": {
+      "status": "PASS",
+      "passed": 45,
+      "includes": [
+        "same-origin/JSON login through compiled UI",
+        "two independent cookie contexts share TV geometry, density and autoplay",
+        "lost POST acknowledgement reconciled by request identity with one write",
+        "five-second fallback without SSE",
+        "stale concurrent edit is a conflict, not last-write-wins",
+        "display mode stays local; 390px TV viewport does not overflow",
+        "prior V18 remote/console and V17/V16 cases"
+      ],
+      "not": "physical TV/Yandex"
+    }
+  },
+  "host_extras": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/audit/validation-review20-2026-09-15.json"
+  ],
+  "not_run": [
+    "MONIK_V18_UID_FIXTURE",
+    "native systemd/Windows SCM boot",
+    "physical TV / Yandex",
+    "24h soak / 50-agent capacity",
+    "independent service-host self-update",
+    "protected full restore",
+    "external perimeter pentest",
+    "current dependency CVE scan"
+  ],
+  "fail_closed_preserved": [
+    "operation.retry_selected",
+    "independent service-host self-update"
+  ],
+  "no_agent_upgrade_required": true
+}

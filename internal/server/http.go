@@ -110,8 +110,8 @@ func (a *App) needAuth(fn func(http.ResponseWriter, *http.Request, *storage.Sess
 			a.writeErr(w, 403, "csrf", "CSRF token missing or invalid")
 			return
 		}
-		if s.Role == "viewer" && r.Method != http.MethodGet && r.Method != http.MethodHead {
-			a.writeErr(w, 403, "forbidden", "viewer cannot mutate")
+		if s.Role != "owner" && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			a.writeErr(w, 403, "forbidden", "owner role required for mutation")
 			return
 		}
 		fn(w, r, s)
@@ -164,6 +164,11 @@ func (a *App) handleSetup(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
+	release, allowed := a.passwordWork(w)
+	if !allowed {
+		return
+	}
+	defer release()
 	if err := a.CompleteSetup(req); err != nil {
 		a.writeErr(w, 400, "setup_failed", err.Error())
 		return
@@ -189,6 +194,11 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 400, "invalid_credentials", "username and password are required within size limits")
 		return
 	}
+	release, allowed := a.passwordWork(w)
+	if !allowed {
+		return
+	}
+	defer release()
 	u, err := a.Store.UserByName(body.Username)
 	if err != nil || !secure.VerifyPassword(u.PasswordHash, body.Password) {
 		a.writeErr(w, 401, "invalid_credentials", "invalid username or password")
@@ -499,6 +509,9 @@ func (a *App) handleOperations(w http.ResponseWriter, r *http.Request, s *storag
 		a.writeErr(w, 500, "db", "could not load operations")
 		return
 	}
+	for i, op := range page.Operations {
+		page.Operations[i] = operationView(op, s)
+	}
 	a.writeJSON(w, 200, page)
 }
 
@@ -512,7 +525,7 @@ func (a *App) handleOperation(w http.ResponseWriter, r *http.Request, s *storage
 		a.writeErr(w, 500, "db", "could not read operation evidence")
 		return
 	}
-	a.writeJSON(w, 200, op)
+	a.writeJSON(w, 200, operationView(op, s))
 }
 
 func (a *App) handleLookupOp(w http.ResponseWriter, r *http.Request, s *storage.Session) {
@@ -546,44 +559,69 @@ func (a *App) handleLookupOp(w http.ResponseWriter, r *http.Request, s *storage.
 		a.writeErr(w, 409, "idempotency_conflict", "same key used with a different request")
 		return
 	}
-	if err != nil {
+	if errors.Is(err, storage.ErrNotFound) {
 		a.writeJSON(w, 200, map[string]any{"found": false})
+		return
+	}
+	if err != nil {
+		a.writeErr(w, 503, "lookup_unavailable", "could not determine original operation; do not submit it again")
 		return
 	}
 	a.writeJSON(w, 200, map[string]any{"found": true, "operation": op})
 }
 
 func (a *App) handleSSE(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	fl, ok := w.(http.Flusher)
-	if !ok {
+	if _, ok := w.(http.Flusher); !ok {
 		a.writeErr(w, 500, "sse", "streaming unsupported")
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+	release, ok := a.eventStreamSlot(s.ID)
+	if !ok {
+		w.Header().Set("Retry-After", "5")
+		a.writeErr(w, 429, "stream_limit", "too many event streams; close unused tabs")
+		return
+	}
+	defer release()
+	rc := http.NewResponseController(w)
+	// Includes initial headers/flush, not only writes after the first heartbeat.
+	// Reset a connection deadline before returning it to ordinary HTTP keepalive.
+	defer rc.SetWriteDeadline(time.Time{})
+	write := func(raw string) bool {
+		if e := rc.SetWriteDeadline(time.Now().Add(5 * time.Second)); e != nil && !errors.Is(e, http.ErrNotSupported) {
+			return false
+		}
+		if _, e := w.Write([]byte(raw)); e != nil {
+			return false
+		}
+		return rc.Flush() == nil
+	}
 	cursor := int64(0)
 	if v := r.Header.Get("Last-Event-ID"); v != "" {
 		cursor, _ = strconv.ParseInt(v, 10, 64)
 	}
-	if q := r.URL.Query().Get("cursor"); q != "" {
-		cursor, _ = strconv.ParseInt(q, 10, 64)
+	if v := r.URL.Query().Get("cursor"); v != "" {
+		cursor, _ = strconv.ParseInt(v, 10, 64)
 	}
-	min, max, boundsErr := a.Store.EventBounds()
-	if boundsErr != nil {
+	min, max, e := a.Store.EventBounds()
+	if e != nil {
 		a.writeErr(w, 500, "db", "could not read event bounds")
 		return
 	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
 	if cursor < 0 || cursor > max || cursor > 0 && (cursor < max-10000 || cursor < min-1) {
 		cursor = max
-		_, _ = w.Write([]byte("event: resnapshot\ndata: {\"reason\":\"cursor_expired\"}\n\n"))
-		fl.Flush()
+		if !write("event: resnapshot\ndata: {\"reason\":\"cursor_expired\"}\n\n") {
+			return
+		}
 	}
 	if cursor == 0 {
 		cursor = max
 	}
-	_, _ = w.Write([]byte("retry: 3000\n: connected\n\n"))
-	fl.Flush()
+	if !write("retry: 3000\n: connected\n\n") {
+		return
+	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
@@ -591,26 +629,23 @@ func (a *App) handleSSE(w http.ResponseWriter, r *http.Request, s *storage.Sessi
 		case <-r.Context().Done():
 			return
 		case <-tick.C:
-			if a.sessionFrom(r) == nil {
+			current := a.sessionFrom(r)
+			if current == nil || current.UserID != s.UserID || current.Role != s.Role {
 				return
 			}
-			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Second))
-			evs, err := a.Store.EventsAfter(cursor, 100)
-			if err != nil {
+			evs, e := a.Store.EventsAfter(cursor, 100)
+			if e != nil {
 				return
 			}
-			for _, e := range evs {
-				cursor = e.ID
-				_, _ = w.Write([]byte("id: " + strconv.FormatInt(e.ID, 10) + "\n"))
-				_, _ = w.Write([]byte("event: " + e.Type + "\n"))
-				_, _ = w.Write([]byte("data: " + e.Payload + "\n\n"))
-			}
-			if len(evs) == 0 {
-				if _, err := w.Write([]byte(": heartbeat\n\n")); err != nil {
+			for _, ev := range evs {
+				if !write("id: " + strconv.FormatInt(ev.ID, 10) + "\nevent: " + ev.Type + "\ndata: " + ev.Payload + "\n\n") {
 					return
 				}
+				cursor = ev.ID
 			}
-			fl.Flush()
+			if len(evs) == 0 && !write(": heartbeat\n\n") {
+				return
+			}
 		}
 	}
 }
@@ -822,9 +857,21 @@ func (a *App) handleReauth(w http.ResponseWriter, r *http.Request, s *storage.Se
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
 	}
+	release, allowed := a.passwordWork(w)
+	if !allowed {
+		return
+	}
+	defer release()
 	u, err := a.Store.UserByName(s.Username)
 	if err != nil || len(body.Password) > 1024 || !secure.VerifyPassword(u.PasswordHash, body.Password) {
 		a.writeErr(w, 401, "invalid_credentials", "invalid password")
+		return
+	}
+	a.controlMu.Lock()
+	defer a.controlMu.Unlock()
+	current, err := a.Store.RevalidateSession(s)
+	if err != nil || current.Role != "owner" {
+		a.writeErr(w, 401, "unauthorized", "session or permissions changed; sign in again")
 		return
 	}
 	until := a.Clock.Now().Add(10 * time.Minute)
@@ -906,12 +953,20 @@ func (a *App) handleEnrollmentGet(w http.ResponseWriter, r *http.Request, s *sto
 }
 
 func (a *App) handleSecrets(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	list, _ := a.Store.ListSecrets()
+	list, err := a.Store.ListSecrets()
+	if err != nil {
+		a.writeErr(w, 503, "secrets_unavailable", "could not read secrets metadata")
+		return
+	}
 	a.writeJSON(w, 200, map[string]any{"secrets": list})
 }
 
 func (a *App) handleBackups(w http.ResponseWriter, r *http.Request, s *storage.Session) {
-	list, _ := a.Store.Backups()
+	list, err := a.Store.Backups()
+	if err != nil {
+		a.writeErr(w, 503, "backups_unavailable", "could not read backup catalogue")
+		return
+	}
 	a.writeJSON(w, 200, map[string]any{"backups": list})
 }
 

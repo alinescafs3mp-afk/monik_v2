@@ -501,3 +501,17 @@ code{overflow-wrap:anywhere}
  .remote-column-pad .row{justify-content:flex-start;}
  .tv-mode .overview-tools input[type=search]{max-width:100%;}
 }
+
+/* V20: viewport CSS is the immediate safety net while ResizeObserver/rAF and
+   Vue replace measured desktop tracks. Never clip overflow to hide a bad grid. */
+@media(max-width:600px){
+ :root .tv-board .overview-column-header {display:none;}
+ :root .tv-board .column-dividers {display:none;}
+ :root .tv-board.columns-adjustable .tv-machine {
+  grid-template-columns:repeat(4,minmax(0,1fr));column-gap:.4rem;
+  padding-left:.6rem;padding-right:.6rem;
+ }
+ :root .tv-board .tv-identity,:root .tv-board .tv-services,:root .tv-board .tv-machine-actions {grid-column:1/-1;}
+ :root .tv-board .tv-metric>strong,:root .tv-board .tv-metric>small {white-space:normal;overflow-wrap:anywhere;}
+ .remote-column-controls,.remote-column-pad {box-sizing:border-box;}
+}

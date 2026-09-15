@@ -323,7 +323,7 @@ func (a *App) lookupAgent(r *http.Request, promotePending bool) (*storage.AgentR
 		return nil, "", false
 	}
 	fresh, err := a.Store.Agent(ag.ID)
-	if err != nil {
+	if err != nil || fresh.Revoked || !secure.EqualHash(fresh.CredentialHash, got) {
 		return nil, "", false
 	}
 	return fresh, cred, true

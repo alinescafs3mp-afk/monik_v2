@@ -33,10 +33,12 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 	// Real HTTP sessions can be revoked while waiting for the lock. Empty IDs
 	// occur only in internal unit calls, never in needAuth HTTP handling.
 	if s.ID != "" {
-		if err := a.Store.SessionStillValid(s.ID); err != nil {
-			a.writeErr(w, 401, "unauthorized", "session was revoked or expired")
+		fresh, err := a.Store.RevalidateSession(s)
+		if err != nil || fresh.Role != "owner" {
+			a.writeErr(w, 401, "unauthorized", "session or permissions changed; sign in again")
 			return
 		}
+		s = fresh
 	}
 	if reason := actions.UnavailableReason(req.Action); reason != "" {
 		a.writeErr(w, 501, "not_implemented", reason)
@@ -106,7 +108,7 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 		a.writeErr(w, 409, "check_prerequisite", err.Error())
 		return
 	}
-	if def.Scope == actions.ScopeAgents && len(targets) == 0 {
+	if (def.Scope == actions.ScopeAgents || req.Action == "credential.revoke") && len(targets) == 0 {
 		a.writeErr(w, 400, "no_targets", "no agents in frozen target set")
 		return
 	}
@@ -295,13 +297,7 @@ func (a *App) executeServerSide(op *protocol.Operation, def actions.Def, s *stor
 		}
 		_ = a.Store.UpdateTarget(op.ID, "server", protocol.TargetSucceeded, "commit_ack", "acknowledged", "", false, nil)
 	case "credential.revoke":
-		for _, t := range op.Targets {
-			if t.AgentID == "server" {
-				continue
-			}
-			_ = a.Store.RevokeAgent(t.AgentID)
-			_ = a.Store.UpdateTarget(op.ID, t.AgentID, protocol.TargetSucceeded, "revoked", "credential rejected immediately", "", false, nil)
-		}
+		return a.Store.RevokeOperationAgents(op.ID)
 	case "backup.create":
 		return a.runBackup(op)
 	case "update.import":

@@ -83,7 +83,22 @@ def exercise_tv_profile(browser, context, base, credentials, output, results):
         expect(tv.get_by_label('Режим экрана',exact=True)).to_have_value('tv')
         tv.set_viewport_size({'width':390,'height':844})
         expect(tv.locator('.tv-profile-panel')).to_be_visible()
-        assert tv.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+        # set_viewport_size can return before ResizeObserver and Vue's rAF
+        # have committed. Wait for the real contract, not a guessed sleep.
+        # The same one-pixel tolerance is retained; permanent overflow fails.
+        try:
+            expect(tv.locator('.tv-board')).not_to_have_class(re.compile(r'.*\bcolumns-adjustable\b.*'))
+            tv.wait_for_function('document.documentElement.scrollWidth<=innerWidth+1', timeout=5000)
+        except Exception:
+            from json import dumps
+            geometry=tv.evaluate("""() => ({viewport:innerWidth,width:document.documentElement.scrollWidth,
+              elements:[...document.querySelectorAll('body *')].map(e=>({tag:e.tagName,cls:e.className,
+                left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right,
+                width:e.getBoundingClientRect().width})).filter(e=>e.right>innerWidth+1 || e.left< -1).slice(0,40)})""")
+            (output/'v20-narrow-overflow.json').write_text(dumps(geometry,ensure_ascii=False,indent=2))
+            tv.screenshot(path=str(output/'v20-narrow-failure.png'),full_page=True)
+            raise
+        assert tv.evaluate('document.documentElement.scrollWidth<=innerWidth+1'), 'TV layout overflows at 390 CSS pixels after settled resize'
         tv.screenshot(path=str(output/'v19-tv-profile-phone.png'),full_page=True)
         tv.set_viewport_size({'width':960,'height':540})
         tv.screenshot(path=str(output/'v19-tv-profile-shared.png'),full_page=True)

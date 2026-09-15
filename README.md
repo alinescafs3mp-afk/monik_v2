@@ -1,6 +1,6 @@
-## Current audit: V17
+## Current audit: V20
 
-Shared resizable overview columns, keyboard controls, per-device/mode persistence, adaptive service layout and latest-selection history fixes. Read [usage](docs/V17_COLUMNS_RU.md), [actual audit boundaries](docs/AUDIT_REVIEW_17_2026-09-15.md) and [acceptance ledger](ACCEPTANCE_LEDGER.md). Run `scripts/verify-audit17.sh --with-browser` before host acceptance. Agents/schema/protocol are unchanged; preserve deployed state and rebuild matching server/UI and installer templates. Historical notes below are not current acceptance evidence.
+Existing-function and network-security hardening. Read [audit](docs/AUDIT_REVIEW_20_2026-09-15.md), [deployment notes](docs/V20_NETWORK_SECURITY_RU.md), [security acceptance](docs/SECURITY_ACCEPTANCE_V20.md) and [ledger](ACCEPTANCE_LEDGER.md). Run `scripts/verify-audit20.sh --with-browser`. V20 changes controller/UI only; preserve all enrolled state and rebuild matching installer templates for future downloads. Historical sections below are not current acceptance evidence.
 
 ## Historical V15 one-file Linux installation
 
@@ -14,7 +14,7 @@ Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote 
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: V17 resizable Overview and frontend reliability, PRE-RELEASE, visual/native release acceptance pending.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_17_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: V20 controller security and reliability, PRE-RELEASE, visual/native release acceptance pending.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_17_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
 The corrected new-profile bootstrap URL is `https://46.150.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 
@@ -56,7 +56,7 @@ Server/UI first, then compatible agents, preserving identities, protected state,
 
 Linux service-account/ownership provisioning and one-file installer code exist; actual native install/boot must be accepted separately. Windows restricted identities/ACLs and independent service-host self-update recovery remain incomplete/not accepted. A running old supervisor is not proof a replacement will boot. Worker update and rebind contain tested partial implementations, not a finished fleet rollout. Immutable publication is now implemented; native cohort acceptance, service-host recovery, full controller restore/reconciliation and long-term aggregates remain release blockers. Bounded worker canaries/batches/pause/resume are now implemented; see docs/V11_ROLLOUTS_RU.md. Some corresponding APIs deliberately reject unfinished actions; do not remove guards to make buttons green.
 
-No shell through the monitoring agent, host reboot or unrelated application/container control. The separately owner-authorized fixed-target SSH console remains optional and isolated from agent authority. External Telegram/email notifications remain deferred. Keep signing private keys and production runtime state out of this repository and ordinary diagnostics.
+No unrestricted or privileged shell through the monitoring agent, host reboot or unrelated application/container control. The separately authorized V18 locally opted-in, non-root terminal is retained. The separately owner-authorized fixed-target SSH console remains optional and isolated from agent authority. External Telegram/email notifications remain deferred. Keep signing private keys and production runtime state out of this repository and ordinary diagnostics.
 
 ## Layout
 

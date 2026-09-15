@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/clock"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/processlock"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
@@ -39,6 +40,7 @@ type Config struct {
 }
 
 type App struct {
+	network         networkLimits
 	controlMu       sync.Mutex
 	installerMu     sync.Mutex
 	console         consoleState
@@ -172,64 +174,84 @@ type SetupRequest struct {
 func (a *App) CompleteSetup(req SetupRequest) error {
 	a.controlMu.Lock()
 	defer a.controlMu.Unlock()
-	if a.SetupComplete() {
-		return fmt.Errorf("setup already completed")
-	}
-	if req.Username == "" || req.Password == "" {
-		return fmt.Errorf("username and password required")
-	}
-	if len(req.Password) < 10 {
-		return fmt.Errorf("password must be at least 10 characters")
-	}
-	hash, err := secure.HashPassword(req.Password)
+	n, err := a.Store.UserCount()
 	if err != nil {
 		return err
 	}
-
+	if n > 0 {
+		return fmt.Errorf("setup already completed")
+	}
+	if req.Username == "" || len(req.Username) > 255 || len(req.Password) < 10 || len(req.Password) > 1024 {
+		return fmt.Errorf("username must be 1..255 bytes and password 10..1024 bytes")
+	}
 	if req.AdvertisedURL == "" {
 		req.AdvertisedURL = protocol.DefaultBootstrapURL
 	}
 	if req.Listen == "" {
 		req.Listen = protocol.DefaultListen
 	}
-	_ = a.Store.SetSetting("advertised_url", req.AdvertisedURL)
-	_ = a.Store.SetSetting("listen", req.Listen)
-	a.Cfg.AdvertisedURL = req.AdvertisedURL
-	a.Cfg.Listen = req.Listen
-	if err := a.ensureTLS(req.SANs); err != nil {
+	if _, err := netutil.ValidateControllerURL(req.AdvertisedURL); err != nil {
 		return err
 	}
-	if _, err := a.Store.CreateUser(req.Username, hash, "owner"); err != nil {
+	if _, _, err := net.SplitHostPort(req.Listen); err != nil {
+		return fmt.Errorf("invalid listen address: %w", err)
+	}
+	if len(req.SANs) > 64 {
+		return fmt.Errorf("too many certificate names")
+	}
+	for _, name := range req.SANs {
+		if len(name) > 253 {
+			return fmt.Errorf("certificate name too long")
+		}
+	}
+	hash, err := secure.HashPassword(req.Password)
+	if err != nil {
 		return err
 	}
-	a.Store.Audit(req.Username, "setup", "server", "initial owner created")
+	bundle, err := a.loadTLSFor(req.AdvertisedURL, req.Listen, req.SANs)
+	if err != nil {
+		return err
+	}
+	if err = a.Store.CommitInitialSetup(req.Username, hash, req.AdvertisedURL, req.Listen); err != nil {
+		return err
+	}
+	a.Cfg.AdvertisedURL, a.Cfg.Listen = req.AdvertisedURL, req.Listen
+	a.TLS = bundle
 	return nil
 }
 
 func (a *App) ensureTLS(extra []string) error {
+	b, err := a.loadTLSFor(a.Cfg.AdvertisedURL, a.Cfg.Listen, extra)
+	if err == nil {
+		a.TLS = b
+	}
+	return err
+}
+
+func (a *App) loadTLSFor(advertised, listen string, extra []string) (*tlsutil.Bundle, error) {
 	dir := filepath.Join(a.Cfg.DataDir, "tls")
 	established, err := a.Store.UserCount()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if established > 0 {
 		for _, name := range []string{"ca.crt", "ca.key"} {
 			if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-				return fmt.Errorf("enrolled TLS identity is unavailable; restore the original CA: %w", err)
+				return nil, fmt.Errorf("enrolled TLS identity is unavailable; restore the original CA: %w", err)
 			}
 		}
 	}
 	dns := []string{"localhost"}
 	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
-	if a.Cfg.AdvertisedURL != "" {
-		host := hostOf(a.Cfg.AdvertisedURL)
+	if advertised != "" {
+		host := hostOf(advertised)
 		if ip := net.ParseIP(host); ip != nil {
 			ips = append(ips, ip)
 		} else if host != "" {
 			dns = append(dns, host)
 		}
 	}
-	if host, _, err := net.SplitHostPort(a.Cfg.Listen); err == nil {
+	if host, _, err := net.SplitHostPort(listen); err == nil {
 		if ip := net.ParseIP(host); ip != nil && !ip.IsUnspecified() {
 			ips = append(ips, ip)
 		}
@@ -249,10 +271,9 @@ func (a *App) ensureTLS(extra []string) error {
 	}
 	b, err := tlsutil.LoadOrCreate(dir, dns, ips, 90*24*time.Hour)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	a.TLS = b
-	return nil
+	return b, nil
 }
 
 func hostOf(raw string) string {
@@ -464,7 +485,7 @@ func (a *App) csrfAndSecurity(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'")
 		if r.Method == http.MethodTrace {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -477,6 +498,13 @@ func (a *App) csrfAndSecurity(next http.Handler) http.Handler {
 			a.writeErr(w, http.StatusForbidden, "admin_network", "administrative access is not allowed from this network")
 			return
 		}
+		if !a.browserRequestAllowed(w, r) {
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") && !strings.HasPrefix(r.URL.Path, "/api/v1/agent/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 		next.ServeHTTP(w, r)
 	})

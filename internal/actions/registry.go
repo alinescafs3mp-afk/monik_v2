@@ -59,7 +59,7 @@ var Registry = map[string]Def{
 	"backup.create":            {ID: "backup.create", Scope: ScopeServerJob, Risk: "sensitive", DurableOperation: true, IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "verified_complete_artifact"},
 	"history.export":           {ID: "history.export", Scope: ScopeServerJob, Risk: "read_only", DurableOperation: true, IdempotencyRequired: true, AuthoritativeCompletion: "bounded_artifact_ready"},
 	"agent.archive":            {ID: "agent.archive", Scope: ScopeServer, Risk: "config", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "explicit_lifecycle_policy_commit"},
-	"enrollment.create":        {ID: "enrollment.create", Scope: ScopeServer, Risk: "sensitive", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
+	"enrollment.create":        {ID: "enrollment.create", Scope: ScopeServer, Risk: "sensitive", DurableOperation: false, IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "commit"},
 	"service.pin":              {ID: "service.pin", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 	"service.hide":             {ID: "service.hide", Scope: ScopeServer, Risk: "reversible", DurableOperation: false, IdempotencyRequired: true, AuthoritativeCompletion: "commit"},
 	"service.pause":            {ID: "service.pause", Scope: ScopeAgents, Risk: "config", RequiresCapability: "monitoring_configuration", DurableOperation: true, IdempotencyRequired: true, AuthoritativeCompletion: "applied_revision_hash"},

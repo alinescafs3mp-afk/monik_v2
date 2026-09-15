@@ -1,6 +1,10 @@
-# Monik: authoritative completion gates after V19
+# Monik: authoritative completion gates after V20
 
-Baseline reviewed: `776076273d677046b3a765e30d781f37b44957d5`. V19 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `0385030878ec58e0f7a8bf1b95ab1f38fd1cde06`. V20 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+
+## V20 network-security acceptance
+
+Controller-only hardening: viewer journal capability redaction, same-origin browser writes, bounded password work/SSE, fresh role/session/token validation after waits, transactional credential revoke and first-owner setup, pending-key promotion revalidation, explicit database failures and narrow-TV fallback. No new agent permissions or protocol change. Preserve the detailed security matrix and do not replace uncertainty with green status. Require the updated exact-source Playwright harness: baseline GitHub CI failed after 42 passes despite a separate host 45/45 report. Auditor browser policy blocks remain NOT RUN, not product passes. Current-CVE assessment and external-perimeter testing are not implied by module integrity or localhost TLS tests.
 
 ## Working features to preserve
 

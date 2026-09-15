@@ -27,6 +27,13 @@ func (a *App) handleOperationReads(w http.ResponseWriter, r *http.Request, s *st
 		a.writeErr(w, 400, "malformed", "read flag and a versioned selection are required")
 		return
 	}
+	a.controlMu.Lock()
+	defer a.controlMu.Unlock()
+	current, err := a.Store.RevalidateSession(s)
+	if err != nil || current.Role != "owner" {
+		a.writeErr(w, 401, "unauthorized", "session or permissions changed; reload before editing")
+		return
+	}
 	// This is server-side attention metadata, not a remote execution request.
 	e := a.Store.MarkOperationsRead(s.Username, *body.Read, body.Targets)
 	switch {

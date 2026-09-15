@@ -68,6 +68,13 @@ func (a *App) handleTVProfileSave(w http.ResponseWriter, r *http.Request, s *sto
 			return
 		}
 	}
+	a.controlMu.Lock()
+	defer a.controlMu.Unlock()
+	current, err := a.Store.RevalidateSession(s)
+	if err != nil || current.Role != "owner" {
+		a.writeErr(w, 401, "unauthorized", "session or permissions changed; reload before editing")
+		return
+	}
 	p, e := a.Store.SaveTVProfile(*body.Revision, body.RequestID, s.Username, body.Value)
 	if errors.Is(e, storage.ErrConflict) || errors.Is(e, storage.ErrIdempotencyConflict) {
 		a.writeErr(w, 409, "display_conflict", "Общий ТВ-профиль изменён с другого устройства. Перечитайте его перед новой правкой.")

@@ -184,6 +184,15 @@ func (a *App) handleConsoleConfigure(w http.ResponseWriter, r *http.Request, s *
 	}
 	a.consoleConfigMu.Lock()
 	defer a.consoleConfigMu.Unlock()
+	s = a.currentOwner(w, s, true)
+	if s == nil {
+		return
+	}
+	currentAgent, err := a.Store.Agent(id)
+	if err != nil || currentAgent.Revoked || currentAgent.Archived {
+		a.writeErr(w, 409, "access_revoked", "machine access changed while reading request")
+		return
+	}
 	cfg, revision, err := a.readConsoleConfiguration()
 	if err != nil {
 		a.writeErr(w, 409, "config_invalid", err.Error())
@@ -220,6 +229,15 @@ func (a *App) handleConsoleConfigure(w http.ResponseWriter, r *http.Request, s *
 	detail := fmt.Sprintf("enabled=%t; previous_revision=%s; new_revision=%s", *req.Enabled, revision, consoleConfigRevision(body))
 	if _, err = a.Store.DB.ExecContext(r.Context(), `INSERT INTO audit_events(at,actor,action,entity,detail) VALUES(?,?,?,?,?)`, a.Clock.Now().UTC().Format(time.RFC3339Nano), s.Username, "console.configure.requested", id, detail); err != nil {
 		a.writeErr(w, 503, "audit_unavailable", "Изменение не отправлено: журнал действий недоступен.")
+		return
+	}
+	s = a.currentOwner(w, s, true)
+	if s == nil {
+		return
+	}
+	currentAgent, err = a.Store.Agent(id)
+	if err != nil || currentAgent.Revoked || currentAgent.Archived {
+		a.writeErr(w, 409, "access_revoked", "machine access changed while saving configuration")
 		return
 	}
 	if err = secure.AtomicWrite(filepath.Join(a.Cfg.DataDir, "console-targets.json"), body, 0600); err != nil {
