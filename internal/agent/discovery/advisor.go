@@ -215,7 +215,24 @@ func InspectListenersPolicy(ctx context.Context, ls []Listener, locals []net.IP,
 	defer cancel()
 	targets := DialTargets(ls, locals)
 	sort.Strings(targets)
-	delta := &protocol.DiscoveryDelta{Kind: "snapshot", StartedAt: start, ListenerCount: len(ls), CoverageComplete: true}
+	delta := &protocol.DiscoveryDelta{Kind: "snapshot", StartedAt: start, ListenerCount: len(ls), CoverageComplete: true,
+		InventoryVersion: 1, ListenerCoverageComplete: true}
+	// This list describes OS listeners, even when HTTP identification is capped,
+	// fails, or is deliberately disabled. Never infer a closed port from HTTP.
+	const inventoryLimit = 4096
+	delta.ListenerTargets = append([]string(nil), targets...)
+	if len(delta.ListenerTargets) > inventoryLimit {
+		delta.ListenerTargets = delta.ListenerTargets[:inventoryLimit]
+		delta.ListenerCoverageComplete = false
+		delta.PermissionGaps = append(delta.PermissionGaps, "OS listener inventory limit reached")
+	}
+	for _, l := range ls {
+		if l.IP == nil || l.Port < 1 || l.Port > 65535 {
+			delta.ListenerCoverageComplete = false
+			delta.PermissionGaps = append(delta.PermissionGaps, "invalid OS listener entry")
+			break
+		}
+	}
 	if budget < 0 {
 		budget = 0
 	}

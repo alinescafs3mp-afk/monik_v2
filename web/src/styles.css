@@ -409,3 +409,7 @@ button:focus,a:focus,input:focus,select:focus,textarea:focus,summary:focus { out
 .operation-read-control>small{flex-basis:100%}
 .read-badge{font-size:.85em;white-space:nowrap;color:var(--muted,#9aa9bd)}
 @media(max-width:600px){.operation-filters label{flex-wrap:wrap}.operation-filters input[type=search]{max-width:100%}.operation-selection button{min-height:42px}.operation-pagination{justify-content:space-between}.operation-table th,.operation-table td{padding:.6rem}}
+
+.inventory-choice{display:inline-flex;align-items:center;gap:.5em;max-width:100%;flex-wrap:wrap}.inventory-choice input[type="checkbox"]{width:auto;flex:none}.inventory-note{display:block;overflow-wrap:anywhere;margin-top:.25em}.profile-address{display:grid;gap:.6rem}.profile-address input{width:100%;min-width:0}.profile-address .row{flex-wrap:wrap}
+pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+code{overflow-wrap:anywhere}

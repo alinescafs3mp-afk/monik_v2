@@ -1,6 +1,6 @@
-# Monik: authoritative completion gates after V13
+# Monik: authoritative completion gates after V14
 
-Baseline reviewed: `5fef10f15b610ff79b036f040d45037175b28866`. V13 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed: `b969c6a34d3852687bd3aa3c73212ec4e183f55f`. V14 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
 
 ## Working features to preserve
 
@@ -8,11 +8,13 @@ Go controller / SQLite / embedded Vue; enrolled agents with scoped trust and qua
 
 V12 added exact receipt ACKs, local process locks, joined shutdown, corruption rejection and genuine local signed worker replacement/failed-candidate recovery. V13 adds validated complete control/secret JSON, unambiguous health decoding, config-result provenance, durable/fair receipt handling, restart-persistent queue loss accounting, backfill independence from old jobs and address preservation. No generic operation retry or service-host self-update has been silently enabled.
 
+V14 separates complete local-socket presence from HTTP identification, reconciles missing discoveries without losing watched outages/history, batches new checks into one revision, and adds external enrollment-profile selection plus explicit same-CA offline SAN extension. It does not change enrolled routes. Windows IPv6 parsing is corrected with byte fixtures, not native OS evidence.
+
 ## Gates before broad release, in order
 
 ### G1. First-host native installation and recovery
 
-Paths: `internal/install`, `internal/servicehost`, CLI, agent setup. Confirm Linux account/permissions, native systemd install/start/stop/restart/boot without interactive login. Complete Windows restricted service identity, ACLs, correlated bounded local IPC, native SCM/boot. Make partial install/reinstall recovery explicit. Preserve identity, URLs, journals and both queue formats. Existing process fixtures do not count as service-boot evidence.
+Paths: `internal/install`, `internal/servicehost`, CLI, agent setup. For the first remote pilot use the selected external profile origin, verify SAN/trust from the remote host, keep independent access, and confirm `listener_inventory_v1`. Do not rewrite working LAN agents or generate a replacement CA. Confirm Linux account/permissions, native systemd install/start/stop/restart/boot without interactive login. Complete Windows restricted service identity, ACLs, correlated bounded local IPC, native SCM/boot. Make partial install/reinstall recovery explicit. Preserve identity, URLs, journals and both queue formats. Existing process fixtures do not count as service-boot evidence.
 
 Independently recoverable replacement of the service-host remains mandatory. A supervisor that crashes before its own recovery code cannot be its only recovery mechanism. Keep current explicit guard until actual OS-backed recovery passes bad-entrypoint, interrupted activation, write denial/full disk, network loss and re-upgrade tests.
 
@@ -32,7 +34,7 @@ Application-health gates and optional canary choice need explicit criteria, not 
 
 Implement the retained requirement: 48h raw, 30d minute and 180d coarse history, or explicitly obtain a revised measured capacity from the owner. Preserve extrema, counts, quality/coverage, configuration/rule/inventory anchors. Measure concurrent retention, exports, backup and ingestion, disk/WAL growth and delayed collectors. First/last samples or a broad queue-loss interval are not complete coverage.
 
-Bound metadata/dedup retention consistently with replay windows. V13 makes queue loss counters durable but does not reconstruct pre-upgrade loss or guarantee Windows power-cut durability. Expand rules only with workload-specific selectors, absolute free space, known sensors and historical semantics. Multiple check types need a primary/aggregate contract before adding protocols.
+Bound metadata/dedup retention consistently with replay windows. V14 hides inactive discoveries but intentionally retains their request definitions and history; implement future bounded retirement/GC with owner selection and recovery anchors, not deletion just because a port closed. V13 makes queue loss counters durable but does not reconstruct pre-upgrade loss or guarantee Windows power-cut durability. Expand rules only with workload-specific selectors, absolute free space, known sensors and historical semantics. Multiple check types need a primary/aggregate contract before adding protocols.
 
 ### G5. Everyday access and safety
 

@@ -126,10 +126,8 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 				a.evalCheck(ag.ID, c)
 			}
 		}
-		for _, ep := range accepted.Endpoints {
-			if ep.SpeaksHTTP {
-				a.ensureBaselineCheck(ag.ID, ep)
-			}
+		if err := a.ensureBaselineChecks(ag.ID, accepted.Endpoints); err != nil {
+			a.Log.Error("discovery check publication failed; inventory is committed, check creation will retry on rediscovery", "agent_id", ag.ID, "error", err)
 		}
 		if rep.Discovery != nil {
 			_ = a.Store.AppendEvent("discovery", "agent", ag.ID, 0, rep.Discovery)
@@ -206,44 +204,67 @@ func bearer(r *http.Request) (agentID, cred string, ok bool) {
 }
 
 func (a *App) ensureBaselineCheck(agentID string, ep protocol.DiscoveredEndpoint) {
+	if err := a.ensureBaselineChecks(agentID, []protocol.DiscoveredEndpoint{ep}); err != nil {
+		a.Log.Error("baseline check publication failed", "error", err)
+	}
+}
+
+// One observed inventory publishes at most one desired revision. Never rewrite
+// existing user checks, and do not invalidate every service once per new port.
+func (a *App) ensureBaselineChecks(agentID string, endpoints []protocol.DiscoveredEndpoint) error {
+	if len(endpoints) == 0 {
+		return nil
+	}
 	ag, err := a.Store.Agent(agentID)
 	if err != nil {
-		return
+		return err
 	}
-	var cfg protocol.AgentConfig
+	cfg := protocol.DefaultAgentConfig()
 	if ag.DesiredConfig != "" {
-		_ = json.Unmarshal([]byte(ag.DesiredConfig), &cfg)
-	} else {
-		cfg = protocol.DefaultAgentConfig()
-	}
-	for _, c := range cfg.Checks {
-		if c.ServiceID == ep.ServiceID {
-			return
+		if err = json.Unmarshal([]byte(ag.DesiredConfig), &cfg); err != nil {
+			return err
 		}
 	}
-	d := protocol.CheckDefinition{ID: idgen.New(), ServiceID: ep.ServiceID, Kind: "baseline_http", URL: ep.URL, DialTarget: ep.DialTarget, Method: "GET", HostHeader: ep.HostHeader, TLSServerName: ep.TLSServerName, TimeoutSeconds: 2, IntervalSeconds: 5}
-	// New inventory only. Never replace an existing custom or failing baseline check.
-	if supportsCustom(ag) {
-		for _, suggestion := range ep.Suggestions {
-			if suggestion.AutoEligible && suggestion.Confidence == "high" {
-				d = suggestion.Definition
-				d.ID = idgen.New()
-				d.ServiceID = ep.ServiceID
-				break
+	known := map[string]bool{}
+	for _, c := range cfg.Checks {
+		known[c.ServiceID] = true
+	}
+	changed := false
+	for _, ep := range endpoints {
+		if !ep.SpeaksHTTP || known[ep.ServiceID] {
+			continue
+		}
+		d := protocol.CheckDefinition{ID: idgen.New(), ServiceID: ep.ServiceID, Kind: "baseline_http", URL: ep.URL, DialTarget: ep.DialTarget, Method: "GET", HostHeader: ep.HostHeader, TLSServerName: ep.TLSServerName, TimeoutSeconds: 2, IntervalSeconds: 5}
+		if supportsCustom(ag) {
+			for _, suggestion := range ep.Suggestions {
+				if suggestion.AutoEligible && suggestion.Confidence == "high" {
+					d = suggestion.Definition
+					d.ID = idgen.New()
+					d.ServiceID = ep.ServiceID
+					break
+				}
 			}
 		}
+		d.Paused = !cfg.AutoMonitorNew
+		cfg.Checks = append(cfg.Checks, d)
+		known[ep.ServiceID] = true
+		changed = true
 	}
-	d.Paused = !cfg.AutoMonitorNew
-	cfg.Checks = append(cfg.Checks, d)
-	if err := a.monitoringExclusions(ag, &cfg); err != nil {
-		return
+	if !changed {
+		return nil
 	}
-	if protocol.ValidateAgentConfig(cfg) != nil {
-		return
+	if err = a.monitoringExclusions(ag, &cfg); err != nil {
+		return err
 	}
-	body, _ := json.Marshal(cfg)
+	if err = protocol.ValidateAgentConfig(cfg); err != nil {
+		return err
+	}
+	body, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
 	hash := sha256.Sum256(body)
-	_ = a.Store.SetDesired(agentID, ag.DesiredRevision+1, hex.EncodeToString(hash[:]), string(body))
+	return a.Store.SetDesired(agentID, ag.DesiredRevision+1, hex.EncodeToString(hash[:]), string(body))
 }
 
 func (a *App) evalHostIncidents(agentID string, h *protocol.HostMetrics, at time.Time) {

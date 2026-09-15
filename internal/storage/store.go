@@ -594,6 +594,15 @@ func (s *Store) UpsertService(sv protocol.DiscoveredEndpoint, agentID string) er
 		return err
 	}
 	_, err = s.db().Exec(`INSERT INTO service_discovery(service_id,payload,updated_at) VALUES(?,?,?) ON CONFLICT(service_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`, id, string(payload), now)
+	if err != nil {
+		return err
+	}
+	// Positive identification can revive an endpoint even after rolling back to
+	// an older agent. Older agents still never supply negative inventory evidence.
+	if strings.HasPrefix(sv.Source, "listener") {
+		_, err = s.db().Exec(`INSERT INTO service_presence(service_id,state,last_seen_at,missing_since,absent_snapshots) VALUES(?,'present',?,'',0)
+   ON CONFLICT(service_id) DO UPDATE SET state='present',last_seen_at=excluded.last_seen_at,missing_since='',absent_snapshots=0`, id, now)
+	}
 	return err
 }
 
@@ -605,71 +614,88 @@ func boolInt(b bool) int {
 }
 
 type ServiceRow struct {
-	ID          string     `json:"id"`
-	AgentID     string     `json:"agent_id"`
-	DisplayName string     `json:"display_name"`
-	URL         string     `json:"url"`
-	DialTarget  string     `json:"dial_target"`
-	HostHeader  string     `json:"host_header"`
-	ProcessName string     `json:"process_name"`
-	Source      string     `json:"source"`
-	SpeaksHTTP  bool       `json:"speaks_http"`
-	Pinned      bool       `json:"pinned"`
-	Hidden      bool       `json:"hidden"`
-	Paused      bool       `json:"paused"`
-	Ignored     bool       `json:"ignored"`
-	LastSeenAt  *time.Time `json:"last_seen_at"`
-	FirstSeenAt time.Time  `json:"first_seen_at"`
+	InventoryState   string     `json:"inventory_state"`
+	LastDiscoveredAt *time.Time `json:"last_discovered_at,omitempty"`
+	MissingSince     *time.Time `json:"missing_since,omitempty"`
+	MissingSnapshots int        `json:"missing_snapshots"`
+	ID               string     `json:"id"`
+	AgentID          string     `json:"agent_id"`
+	DisplayName      string     `json:"display_name"`
+	URL              string     `json:"url"`
+	DialTarget       string     `json:"dial_target"`
+	HostHeader       string     `json:"host_header"`
+	ProcessName      string     `json:"process_name"`
+	Source           string     `json:"source"`
+	SpeaksHTTP       bool       `json:"speaks_http"`
+	Pinned           bool       `json:"pinned"`
+	Hidden           bool       `json:"hidden"`
+	Paused           bool       `json:"paused"`
+	Ignored          bool       `json:"ignored"`
+	LastSeenAt       *time.Time `json:"last_seen_at"`
+	FirstSeenAt      time.Time  `json:"first_seen_at"`
 }
 
-func (s *Store) Services(agentID string) ([]*ServiceRow, error) {
-	q := `SELECT id,agent_id,display_name,url,dial_target,host_header,process_name,source,speaks_http,pinned,hidden,paused,ignored,last_seen_at,first_seen_at FROM services`
-	var args []any
-	if agentID != "" {
-		q += ` WHERE agent_id=?`
-		args = append(args, agentID)
-	}
-	q += ` ORDER BY display_name`
-	rows, err := s.db().Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []*ServiceRow
-	for rows.Next() {
-		sv := &ServiceRow{}
-		var http, pin, hid, pau, ign int
-		var last, first sql.NullString
-		if err := rows.Scan(&sv.ID, &sv.AgentID, &sv.DisplayName, &sv.URL, &sv.DialTarget, &sv.HostHeader, &sv.ProcessName, &sv.Source, &http, &pin, &hid, &pau, &ign, &last, &first); err != nil {
-			return nil, err
-		}
-		sv.SpeaksHTTP, sv.Pinned, sv.Hidden, sv.Paused, sv.Ignored = http == 1, pin == 1, hid == 1, pau == 1, ign == 1
-		if last.Valid {
-			t, _ := time.Parse(time.RFC3339Nano, last.String)
-			sv.LastSeenAt = &t
-		}
-		if first.Valid {
-			sv.FirstSeenAt, _ = time.Parse(time.RFC3339Nano, first.String)
-		}
-		out = append(out, sv)
-	}
-	return out, rows.Err()
-}
+const serviceColumns = `v.id,v.agent_id,COALESCE(v.display_name,''),COALESCE(v.url,''),COALESCE(v.dial_target,''),COALESCE(v.host_header,''),COALESCE(v.process_name,''),COALESCE(v.source,''),v.speaks_http,v.pinned,v.hidden,v.paused,v.ignored,v.last_seen_at,v.first_seen_at,COALESCE(p.state,'unknown'),COALESCE(NULLIF(p.last_seen_at,''),v.last_discovered_at),p.missing_since,COALESCE(p.absent_snapshots,0)`
+const serviceJoin = ` FROM services v LEFT JOIN service_presence p ON p.service_id=v.id`
 
-func (s *Store) Service(id string) (*ServiceRow, error) {
+func scanService(row rowScanner) (*ServiceRow, error) {
 	sv := &ServiceRow{}
-	var http, pin, hid, pau, ign int
-	var last, first sql.NullString
-	err := s.db().QueryRow(`SELECT id,agent_id,display_name,url,dial_target,host_header,process_name,source,speaks_http,pinned,hidden,paused,ignored,last_seen_at,first_seen_at FROM services WHERE id=?`, id).
-		Scan(&sv.ID, &sv.AgentID, &sv.DisplayName, &sv.URL, &sv.DialTarget, &sv.HostHeader, &sv.ProcessName, &sv.Source, &http, &pin, &hid, &pau, &ign, &last, &first)
+	var h, pin, hid, pau, ign int
+	var last, first, discovered, missing sql.NullString
+	err := row.Scan(&sv.ID, &sv.AgentID, &sv.DisplayName, &sv.URL, &sv.DialTarget, &sv.HostHeader, &sv.ProcessName, &sv.Source, &h, &pin, &hid, &pau, &ign, &last, &first, &sv.InventoryState, &discovered, &missing, &sv.MissingSnapshots)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	sv.SpeaksHTTP, sv.Pinned, sv.Hidden, sv.Paused, sv.Ignored = http == 1, pin == 1, hid == 1, pau == 1, ign == 1
+	sv.SpeaksHTTP, sv.Pinned, sv.Hidden, sv.Paused, sv.Ignored = h == 1, pin == 1, hid == 1, pau == 1, ign == 1
+	for _, field := range []struct {
+		raw  sql.NullString
+		dest **time.Time
+	}{{last, &sv.LastSeenAt}, {discovered, &sv.LastDiscoveredAt}, {missing, &sv.MissingSince}} {
+		if field.raw.Valid && field.raw.String != "" {
+			t, e := time.Parse(time.RFC3339Nano, field.raw.String)
+			if e != nil {
+				return nil, fmt.Errorf("invalid stored service timestamp: %w", e)
+			}
+			*field.dest = &t
+		}
+	}
+	if first.Valid && first.String != "" {
+		t, e := time.Parse(time.RFC3339Nano, first.String)
+		if e != nil {
+			return nil, e
+		}
+		sv.FirstSeenAt = t
+	}
 	return sv, nil
+}
+func (s *Store) Services(agentID string) ([]*ServiceRow, error) {
+	q := `SELECT ` + serviceColumns + serviceJoin
+	var args []any
+	if agentID != "" {
+		q += ` WHERE v.agent_id=?`
+		args = append(args, agentID)
+	}
+	q += ` ORDER BY v.display_name,v.id`
+	rows, err := s.db().Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]*ServiceRow, 0)
+	for rows.Next() {
+		sv, e := scanService(rows)
+		if e != nil {
+			return nil, e
+		}
+		out = append(out, sv)
+	}
+	return out, rows.Err()
+}
+func (s *Store) Service(id string) (*ServiceRow, error) {
+	return scanService(s.db().QueryRow(`SELECT `+serviceColumns+serviceJoin+` WHERE v.id=?`, id))
 }
 
 func (s *Store) UpdateServiceFlags(id string, fields map[string]any) error {

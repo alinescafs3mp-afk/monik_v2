@@ -27,6 +27,8 @@ func main() {
 		os.Exit(runSetup(os.Args[2:]))
 	case "run":
 		os.Exit(runServer(os.Args[2:]))
+	case "tls-add-name":
+		os.Exit(runTLSAddName(os.Args[2:]))
 	case "backup":
 		os.Exit(runBackup(os.Args[2:]))
 	case "restore":
@@ -43,6 +45,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `monik-server %s
   setup   complete first-run owner setup
   run     serve UI and agent API
+  tls-add-name add a certificate SAN while the controller is stopped
   backup  consistent sqlite snapshot
   restore restore into an empty data directory
 `, version.Version)

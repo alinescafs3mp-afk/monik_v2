@@ -514,3 +514,19 @@ CREATE TABLE IF NOT EXISTS update_rollout_members (
 );
 CREATE INDEX IF NOT EXISTS idx_rollout_wave ON update_rollout_members(operation_id,wave);
 CREATE INDEX IF NOT EXISTS idx_rollout_active ON update_rollouts(state,created_at);
+
+-- Presence is inventory evidence, not application health or a deletion flag.
+CREATE TABLE IF NOT EXISTS service_presence (
+ service_id TEXT PRIMARY KEY REFERENCES services(id) ON DELETE CASCADE,
+ state TEXT NOT NULL CHECK(state IN ('present','unconfirmed','missing')),
+ last_seen_at TEXT NOT NULL DEFAULT '',
+ missing_since TEXT NOT NULL DEFAULT '',
+ absent_snapshots INTEGER NOT NULL DEFAULT 0 CHECK(absent_snapshots>=0)
+);
+CREATE TABLE IF NOT EXISTS discovery_checkpoints (
+ agent_id TEXT PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+ started_at TEXT NOT NULL,
+ ended_at TEXT NOT NULL,
+ complete INTEGER NOT NULL CHECK(complete IN (0,1)),
+ listener_count INTEGER NOT NULL
+);

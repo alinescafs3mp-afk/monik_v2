@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -188,13 +189,36 @@ func (b *Bundle) MaybeRenew(dir string, dns []string, ips []net.IP, leafTTL time
 	if time.Until(c.NotAfter) > leafTTL/3 {
 		return nil
 	}
-	// Ordinary renewal cannot silently delete the enrolled IP/DNS identities.
-	if len(dns) == 0 {
-		dns = c.DNSNames
+	// New settings/interfaces may add SANs; ordinary renewal must not drop old ones.
+	dns = append(append([]string(nil), c.DNSNames...), dns...)
+	ips = append(append([]net.IP(nil), c.IPAddresses...), ips...)
+	return b.replaceLeaf(dir, dns, ips, leafTTL)
+}
+
+func (b *Bundle) replaceLeaf(dir string, dns []string, ips []net.IP, leafTTL time.Duration) error {
+	// Renewal runs repeatedly; preserve names without growing duplicate SANs.
+	uniqueDNS := make([]string, 0, len(dns))
+	seenDNS := map[string]bool{}
+	for _, name := range dns {
+		key := strings.ToLower(name)
+		if !seenDNS[key] {
+			uniqueDNS = append(uniqueDNS, name)
+			seenDNS[key] = true
+		}
 	}
-	if len(ips) == 0 {
-		ips = c.IPAddresses
+	uniqueIPs := make([]net.IP, 0, len(ips))
+	seenIP := map[string]bool{}
+	for _, ip := range ips {
+		if ip == nil {
+			return fmt.Errorf("invalid nil IP SAN")
+		}
+		key := ip.String()
+		if !seenIP[key] {
+			uniqueIPs = append(uniqueIPs, ip)
+			seenIP[key] = true
+		}
 	}
+	dns, ips = uniqueDNS, uniqueIPs
 	staging, err := os.MkdirTemp(dir, ".renew-*")
 	if err != nil {
 		return err
@@ -376,4 +400,53 @@ func ParseCerts(pemBytes []byte) ([]*x509.Certificate, error) {
 func FingerprintDER(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
+}
+
+// LeafCertificate parses a snapshot of the active certificate. It exposes no key.
+func (b *Bundle) LeafCertificate() (*x509.Certificate, error) {
+	active, ok := b.leaf.Load().(*tls.Certificate)
+	if !ok || len(active.Certificate) == 0 {
+		return nil, fmt.Errorf("no active certificate")
+	}
+	return x509.ParseCertificate(active.Certificate[0])
+}
+
+// AddServerName is an explicit OFFLINE administrative action. Existing CA and
+// all previous SANs are preserved. It neither changes routes nor migrates agents.
+func (b *Bundle) AddServerName(dir, name string) (bool, error) {
+	if net.ParseIP(name) == nil {
+		if len(name) == 0 || len(name) > 253 || strings.ContainsAny(name, "/:*% \t\r\n") {
+			return false, fmt.Errorf("name must be an IP address or DNS hostname, not a URL")
+		}
+		for _, label := range strings.Split(name, ".") {
+			if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+				return false, fmt.Errorf("invalid DNS name")
+			}
+			for _, c := range label {
+				if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+					return false, fmt.Errorf("DNS name must be ASCII; use its IDNA form")
+				}
+			}
+		}
+	}
+	b.renewMu.Lock()
+	defer b.renewMu.Unlock()
+	c, err := b.LeafCertificate()
+	if err != nil {
+		return false, err
+	}
+	if c.VerifyHostname(name) == nil {
+		return false, nil
+	}
+	dns := append([]string(nil), c.DNSNames...)
+	ips := append([]net.IP(nil), c.IPAddresses...)
+	if ip := net.ParseIP(name); ip != nil {
+		ips = append(ips, ip)
+	} else {
+		dns = append(dns, name)
+	}
+	if err := b.replaceLeaf(dir, dns, ips, 90*24*time.Hour); err != nil {
+		return false, err
+	}
+	return true, nil
 }

@@ -264,6 +264,7 @@ func (a *Agent) tick(ctx context.Context, discover bool) {
 	caps["http_custom_v1"] = protocol.Capability{Status: "supported", Reason: "bounded custom requests, typed assertions and per-check intervals"}
 	caps["immutable_release_v1"] = protocol.Capability{Status: "supported", Reason: "release-specific metadata and authenticated target URLs"}
 	caps["selective_monitor_v1"] = protocol.Capability{Status: "supported", Reason: "paused checks excluded from scheduler and rediscovery probes"}
+	caps["listener_inventory_v1"] = protocol.Capability{Status: "supported", Reason: "separate complete OS listener snapshot and bounded protocol identification"}
 	caps["health_advisor_v1"] = protocol.Capability{Status: "supported", Reason: "bounded local suggestions; no auth/TLS bypass or custom-check replacement"}
 	if discover && !a.cfg.Paused && a.discovering.CompareAndSwap(false, true) {
 		a.forceDiscovery = false

@@ -27,6 +27,9 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 	if len(rep.Checks) > 1000 || len(rep.JobReceipts) > 128 {
 		return out, fmt.Errorf("report exceeds item budget")
 	}
+	if err := validateInventory(rep.Discovery, rep.ObservedAt, s.now()); err != nil {
+		return out, err
+	}
 	if rep.Discovery != nil && len(rep.Discovery.Confirmed) > 256 {
 		return out, fmt.Errorf("discovery exceeds item budget")
 	}
@@ -123,7 +126,11 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 			}
 		}
 		if out.Live {
-			if rep.Discovery != nil {
+			acceptDiscovery, e := ts.inventoryIsNew(rep.AgentID, rep.Discovery)
+			if e != nil {
+				return e
+			}
+			if acceptDiscovery {
 				raw, err := json.Marshal(rep.Discovery)
 				if err != nil {
 					return err
@@ -146,6 +153,9 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 						return err
 					}
 					out.Endpoints = append(out.Endpoints, ep)
+				}
+				if err := ts.reconcileInventory(rep.AgentID, rep.Discovery); err != nil {
+					return err
 				}
 			}
 			versions := map[string]string{"worker": rep.WorkerVersion, "worker_digest": rep.WorkerDigest, "service_host": rep.ServiceHostVersion, "service_host_digest": rep.ServiceHostDigest}

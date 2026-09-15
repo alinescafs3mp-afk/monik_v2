@@ -6,7 +6,7 @@ import { get, post } from "../api";
 const router = useRouter();
 const username = ref("owner");
 const password = ref("");
-const advertised = ref("https://46.120.103.61:8777");
+const advertised = ref("https://46.150.103.61:8777");
 const listen = ref("0.0.0.0:8777");
 const err = ref("");
 const pending = ref(false);

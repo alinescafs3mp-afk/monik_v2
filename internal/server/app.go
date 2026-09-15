@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,11 +253,11 @@ func (a *App) ensureTLS(extra []string) error {
 }
 
 func hostOf(raw string) string {
-	raw = strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
-	if h, _, err := net.SplitHostPort(raw); err == nil {
-		return h
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
 	}
-	return strings.TrimSuffix(raw, "/")
+	return u.Hostname()
 }
 
 func (a *App) Run(ctx context.Context) error {

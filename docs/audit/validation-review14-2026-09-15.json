@@ -1,0 +1,102 @@
+{
+  "audit": 14,
+  "date": "2026-09-15",
+  "baseline_commit": "b969c6a34d3852687bd3aa3c73212ec4e183f55f",
+  "baseline_tree": "2808fdc27e4e9da45553f299e81cce037ea6e8ed",
+  "scope": "source audit; no production requests/deployment; no GitHub mutation",
+  "go": {
+    "command": "go test -race -count=1 -json ./...",
+    "status": "PASS",
+    "top_level_passes": 353,
+    "pass_events": 478,
+    "packages": 23,
+    "fuzz_targets": 3,
+    "opt_in_native_skips": [
+      "TestAudit8NativeWorkerRestartAndRejectedUpload",
+      "TestAudit8NativeSupervisorRestartsWorker",
+      "TestV12NativeSignedUpdateAndFailedCandidateRecovery"
+    ]
+  },
+  "frontend": {
+    "node_tests": 115,
+    "tsc": "PASS",
+    "vite_build": "PASS",
+    "vue_tsc": "NOT RUN",
+    "dependencies": "offline reuse of existing locked dependencies; no lockfile changes"
+  },
+  "baseline": {
+    "go_race": "PASS",
+    "node_tests": 108,
+    "tree_verified": true
+  },
+  "regressions": {
+    "baseline_failures": 4,
+    "before_log": "evidence/regressions-before.log",
+    "after": "PASS",
+    "not_a_defect": "hostOf trailing-slash guard also passed on baseline"
+  },
+  "repeated": {
+    "count": 10,
+    "race": true,
+    "shuffle": true,
+    "packages": 6,
+    "status": "PASS"
+  },
+  "fuzz": {
+    "target": "FuzzV14OwnerPIDTable",
+    "requested_seconds": 15,
+    "execs": 313253,
+    "workers": 2,
+    "status": "PASS"
+  },
+  "native": {
+    "status": "PASS",
+    "scenarios": 3,
+    "uid": 65534,
+    "signed_update_and_failed_candidate_recovery": true,
+    "kernel_listener_to_sqlite_api": "PASS (simulated grace clock)",
+    "systemd_scm_boot": "NOT RUN"
+  },
+  "builds": {
+    "linux_amd64": 4,
+    "windows_amd64": 4,
+    "windows_native": "NOT RUN"
+  },
+  "browser": {
+    "status": "BLOCKED_BEFORE_LOGIN",
+    "assertions_passed": 0,
+    "error": "ERR_BLOCKED_BY_ADMINISTRATOR",
+    "first_attempt": "Playwright managed binary absent",
+    "system_browser": "/usr/bin/chromium",
+    "syntax": "PASS"
+  },
+  "host_execution": {
+    "date": "2026-09-15",
+    "go": {"status": "PASS", "top_level_pass_events": 353, "test_subtest_seed_pass_events": 478, "packages": 23, "fail_events": 0},
+    "frontend": {"status": "PASS", "tests": 115, "typecheck": "tsc --noEmit", "bundle": "production Vue/Vite"},
+    "native_processes": {"status": "PASS", "count": 3, "uid": 1000},
+    "repeat": {"status": "PASS", "count": 10, "shuffle": true, "packages": 6},
+    "fuzz": {"status": "PASS", "target": "FuzzV14OwnerPIDTable", "requested_duration_seconds": 15, "executions": 788015, "workers": 2},
+    "vet": "PASS",
+    "module_integrity": "PASS",
+    "browser": {
+      "status": "PASS",
+      "checks": 33,
+      "auditor": "BLOCKED_BEFORE_LOGIN",
+      "note": "Host ran the exact Playwright suite. 390px Add-machine overflow came from unwrapped install-command <pre>; CSS wrap was added. Assertions were not weakened."
+    }
+  },
+  "external_route": {
+    "url": "https://46.150.103.61:8777",
+    "tested": false,
+    "certificate_feature": "local loaded-leaf preflight and same-CA offline SAN extension tested in fixtures"
+  },
+  "outstanding": [
+    "native Linux systemd/Windows SCM installation and boot",
+    "independent service-host self-update recovery",
+    "full protected backup/restore",
+    "long retention aggregates",
+    "multi-host rollout and 24h soak",
+    "physical TV/Yandex"
+  ]
+}

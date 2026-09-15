@@ -19,7 +19,7 @@ func Listeners() ([]Listener, error) {
 	for _, f := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
 		ls, err := parseProcNet(f)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) && f == "/proc/net/tcp6" {
 				continue
 			}
 			return nil, err
@@ -43,19 +43,28 @@ func parseProcNet(path string) ([]Listener, error) {
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
-	sc.Scan()
+	if !sc.Scan() {
+		if err := sc.Err(); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("missing TCP table header")
+	}
+	header := strings.Fields(sc.Text())
+	if len(header) < 4 || header[1] != "local_address" || header[3] != "st" {
+		return nil, fmt.Errorf("invalid TCP table header")
+	}
 	var out []Listener
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
 		if len(fields) < 10 {
-			continue
+			return nil, fmt.Errorf("malformed TCP table row")
 		}
 		if fields[3] != "0A" {
 			continue
 		}
 		ip, port, err := parseAddr(fields[1])
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("malformed listening address: %w", err)
 		}
 		out = append(out, Listener{IP: ip, Port: port, Inode: fields[9]})
 	}

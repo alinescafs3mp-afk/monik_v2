@@ -1,14 +1,14 @@
-## Current stabilization audit: V13
+## Current stabilization audit: V14
 
-Read [the V13 audit](docs/AUDIT_REVIEW_13_2026-09-15.md), [deployment notes](docs/V13_RELIABILITY_RU.md) and [current acceptance](ACCEPTANCE_LEDGER.md). Thirteen before/after regression scenarios cover delivery, configuration, health provenance and queue losses; this is not thirteen independent vulnerability claims or full native acceptance. Run `scripts/verify-audit13.sh --with-browser` in a permitted test environment. It does not install services or deploy.
+Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote connection guide](docs/V14_DISCOVERY_AND_CONNECTION_RU.md) and [acceptance](ACCEPTANCE_LEDGER.md). Current inventory no longer grows forever with closed, unmonitored temporary ports. Expected/selected failures remain visible and history is retained. New external profiles can use the public origin independently of saved LAN routes. Run `scripts/verify-audit14.sh --with-browser` in a permitted environment; it does not install system services or deploy.
 
 # Monik
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: V13 reliability audit, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_13_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source: V14 inventory/profile audit, PRE-RELEASE.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_14_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
 
-The configurable bootstrap URL remains `https://46.120.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
+The corrected new-profile bootstrap URL is `https://46.150.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 
 ## Audit 10 release publication
 

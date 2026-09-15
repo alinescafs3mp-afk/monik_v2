@@ -4,7 +4,7 @@ import "time"
 
 const (
 	SchemaVersion        = 3
-	DefaultBootstrapURL  = "https://46.120.103.61:8777"
+	DefaultBootstrapURL  = "https://46.150.103.61:8777"
 	DefaultListen        = "0.0.0.0:8777"
 	DefaultPort          = 8777
 	EnrollmentTTL        = 10 * time.Minute
@@ -215,16 +215,21 @@ type CheckObservation struct {
 }
 
 type DiscoveryDelta struct {
-	Kind             string                `json:"kind"` // snapshot or delta
-	CoverageComplete bool                  `json:"coverage_complete"`
-	ListenerCount    int                   `json:"listener_count"`
-	Confirmed        []DiscoveredEndpoint  `json:"confirmed,omitempty"`
-	Unresolved       []UnresolvedCandidate `json:"unresolved,omitempty"`
-	Truncated        bool                  `json:"truncated"`
-	PermissionGaps   []string              `json:"permission_gaps,omitempty"`
-	StartedAt        time.Time             `json:"started_at"`
-	EndedAt          time.Time             `json:"ended_at"`
-	JobID            string                `json:"job_id,omitempty"`
+	// Version 1 separates OS socket inventory from bounded HTTP identification.
+	// An empty complete inventory is meaningful; omission in older agents is not.
+	InventoryVersion         int                   `json:"inventory_version,omitempty"`
+	ListenerCoverageComplete bool                  `json:"listener_coverage_complete,omitempty"`
+	ListenerTargets          []string              `json:"listener_targets,omitempty"`
+	Kind                     string                `json:"kind"` // snapshot or delta
+	CoverageComplete         bool                  `json:"coverage_complete"`
+	ListenerCount            int                   `json:"listener_count"`
+	Confirmed                []DiscoveredEndpoint  `json:"confirmed,omitempty"`
+	Unresolved               []UnresolvedCandidate `json:"unresolved,omitempty"`
+	Truncated                bool                  `json:"truncated"`
+	PermissionGaps           []string              `json:"permission_gaps,omitempty"`
+	StartedAt                time.Time             `json:"started_at"`
+	EndedAt                  time.Time             `json:"ended_at"`
+	JobID                    string                `json:"job_id,omitempty"`
 }
 
 type DiscoveredEndpoint struct {

@@ -30,6 +30,7 @@ func contact(ag *storage.AgentRow, now time.Time) (string, string) {
 }
 
 type serviceSummary struct {
+	InventoryArchived bool  `json:"inventory_archived"`
 	MonitoringEnabled bool  `json:"monitoring_enabled"`
 	MonitoringApplied bool  `json:"monitoring_applied"`
 	ConfigRevision    int64 `json:"configuration_revision"`
@@ -159,6 +160,14 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 			item.Summary = "Последний отчёт: проверки приостановлены"
 			item.Fresh = false
 		}
+		item.InventoryArchived = sv.InventoryState == "missing" && storage.IsListenerService(sv) && !item.MonitoringEnabled && !sv.Pinned && (!hasCheck || item.MonitoringApplied)
+		if item.InventoryArchived {
+			item.State = "inactive"
+			item.Summary = "Порт больше не обнаруживается; периодическая проверка выключена"
+			item.Fresh = false
+		} else if sv.InventoryState == "missing" {
+			item.Summary += " · порт не обнаруживается (история и выбранная проверка сохранены)"
+		}
 		item.MaintenanceActive, err = a.Store.InMaintenance("service", sv.ID, now)
 		if err != nil {
 			return nil, err
@@ -171,9 +180,23 @@ func (a *App) serviceSummaries(agentID string, now time.Time) ([]serviceSummary,
 // Desired-state progress is shown separately from observed service failures.
 func serviceHasProblem(state string) bool {
 	switch state {
-	case "ok", "responds", "paused", "unmonitored", "pending":
+	case "ok", "responds", "paused", "unmonitored", "pending", "inactive":
 		return false
 	default:
 		return true
 	}
+}
+
+// Do not filter storage reads: names, config and history stay addressable by ID.
+func currentServices(rows []serviceSummary) ([]serviceSummary, int) {
+	out := make([]serviceSummary, 0, len(rows))
+	inactive := 0
+	for _, r := range rows {
+		if r.InventoryArchived {
+			inactive++
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, inactive
 }

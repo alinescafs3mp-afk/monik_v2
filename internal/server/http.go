@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/actions"
+	"github.com/alinescafs3mp-afk/monik_v2/internal/netutil"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/rules"
 	"github.com/alinescafs3mp-afk/monik_v2/internal/secure"
@@ -236,6 +237,7 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 		a.writeErr(w, 500, "db", "could not load services")
 		return
 	}
+	svcs, inactiveServices := currentServices(svcs)
 	incs, err := a.Store.OpenIncidents()
 	if err != nil {
 		a.writeErr(w, 500, "db", "could not load incidents")
@@ -335,7 +337,7 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 		card["unselected_service_problems"] = otherProblems
 		cards = append(cards, card)
 	}
-	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "open_incidents": len(incs), "unread_incidents": unread, "actionable_incidents": actionable, "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
+	a.writeJSON(w, 200, map[string]any{"agents_total": total, "agents_reporting": reporting, "services": len(svcs), "inactive_services": inactiveServices, "open_incidents": len(incs), "unread_incidents": unread, "actionable_incidents": actionable, "operations_attention": attention, "cards": cards, "incidents": incs, "server_time": now, "unavailable_actions": actionAvailability()})
 }
 
 func display(ag *storage.AgentRow) string {
@@ -425,7 +427,17 @@ func (a *App) handleServices(w http.ResponseWriter, r *http.Request, s *storage.
 		a.writeErr(w, 500, "db", "could not load services")
 		return
 	}
-	a.writeJSON(w, 200, map[string]any{"services": rows})
+	all := rows
+	rows, inactive := currentServices(rows)
+	selection := r.URL.Query().Get("inventory")
+	if selection != "" && selection != "current" && selection != "all" {
+		a.writeErr(w, 400, "invalid_inventory", "inventory must be current or all")
+		return
+	}
+	if selection == "all" {
+		rows = all
+	}
+	a.writeJSON(w, 200, map[string]any{"services": rows, "inactive_services": inactive})
 }
 
 func (a *App) handleService(w http.ResponseWriter, r *http.Request, s *storage.Session) {
@@ -842,8 +854,36 @@ func (a *App) handleReleases(w http.ResponseWriter, r *http.Request, s *storage.
 }
 
 func (a *App) handleEnrollmentGet(w http.ResponseWriter, r *http.Request, s *storage.Session) {
+	selected := r.URL.Query().Get("controller_url")
+	if selected == "" {
+		selected = protocol.DefaultBootstrapURL
+	}
+	parsed, err := netutil.ValidateControllerURL(selected)
+	if err != nil {
+		a.writeErr(w, 400, "invalid_profile_url", "Profile URL must be an HTTPS origin without credentials, path, query or fragment")
+		return
+	}
+	selected = strings.TrimRight(selected, "/")
+	tlsInfo := map[string]any{"matches": false, "route_verified": false, "reason": "No loaded server certificate"}
+	if a.TLS != nil {
+		if cert, e := a.TLS.LeafCertificate(); e == nil {
+			ips := make([]string, 0, len(cert.IPAddresses))
+			for _, ip := range cert.IPAddresses {
+				ips = append(ips, ip.String())
+			}
+			tlsInfo["dns_names"], tlsInfo["ip_addresses"], tlsInfo["expires_at"] = cert.DNSNames, ips, cert.NotAfter
+			e = cert.VerifyHostname(parsed.Hostname())
+			if e == nil && a.Clock.Now().Before(cert.NotAfter) && !a.Clock.Now().Before(cert.NotBefore) {
+				tlsInfo["matches"] = true
+				tlsInfo["reason"] = "Loaded certificate matches the profile host; remote routing is not tested"
+			} else {
+				tlsInfo["reason"] = "Loaded certificate does not match this host or its validity period; prepare TLS before distributing the profile"
+			}
+		}
+	}
 	a.writeJSON(w, 200, map[string]any{
-		"advertised_url":    a.Cfg.AdvertisedURL,
+		"advertised_url": a.Cfg.AdvertisedURL,
+		"profile_url":    selected, "tls": tlsInfo,
 		"ca_cert_pem":       string(a.CACertPEM()),
 		"bootstrap_default": protocol.DefaultBootstrapURL,
 		"instructions": map[string]string{

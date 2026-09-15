@@ -9,7 +9,7 @@ export function bytes(n: unknown): string {
   return number(n, ` ${units[i]}`, i > 0 ? 1 : 0);
 }
 const states: Record<string, string> = {
-  unmonitored: "Не проверяется", pending: "Ожидает подтверждения", ok: "На связи", unknown: "Неизвестно", stale: "Данные устарели", unreachable: "Нет связи с агентом",
+  inactive: "Больше не обнаружен", unmonitored: "Не проверяется", pending: "Ожидает подтверждения", ok: "На связи", unknown: "Неизвестно", stale: "Данные устарели", unreachable: "Нет связи с агентом",
   revoked: "Доступ отозван", archived: "В архиве", responds: "HTTP отвечает", paused: "Пауза",
   app_fail: "Ошибка приложения", http_error: "Ошибка HTTP", transport_fail: "Нет соединения",
   queued: "В очереди", waiting_offline: "Ожидает агента", accepted: "Получено агентом", running: "Выполняется",

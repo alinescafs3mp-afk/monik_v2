@@ -39,7 +39,11 @@ func DialTargets(ls []Listener, locals []net.IP) []string {
 			continue
 		}
 
-		add(netutil.FormatDial(l.IP, port))
+		if l.Zone != "" && l.IP.IsLinkLocalUnicast() {
+			add(net.JoinHostPort(l.IP.String()+"%"+l.Zone, port))
+		} else {
+			add(netutil.FormatDial(l.IP, port))
+		}
 	}
 	return out
 }
