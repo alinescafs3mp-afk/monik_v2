@@ -25,6 +25,7 @@ from inventory_scenarios import exercise_inventory_profiles
 from seamless_scenarios import exercise_seamless_updates
 from column_scenarios import exercise_columns
 from tv_profile_scenarios import exercise_tv_profile, settled
+from tv_screen_scenarios import exercise_tv_screen
 from agent_console_scenarios import exercise_agent_console_and_remote
 
 
@@ -504,6 +505,7 @@ def run(binary: Path, output: Path) -> None:
                     exercise_columns(context, base, output, results)
                     exercise_agent_console_and_remote(context, base, output, results)
                     exercise_tv_profile(browser, context, base, {**access, "password":new_password}, output, results)
+                    exercise_tv_screen(browser, context, base, {**access, "password":new_password}, output, results)
                     exercise_navigation_failure(context, base, output, results)
                     assert not errors, errors
                     results.append("no uncaught browser errors or external requests")

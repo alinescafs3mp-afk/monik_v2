@@ -32,3 +32,8 @@
 Новые правила пока общие и только процентные для трёх метрик. Обслуживание не отключает реальные измерения и не делает красный сервис зелёным. Текущая браузерная приёмка v6 в среде аудитора заблокирована до входа; успешный старый браузерный тест не подменяет её. Нативные Windows-службы и отключение питания не подтверждаются кросс-компиляцией.
 
 Telegram, удалённая консоль, перезагрузка хостов и управление чужими приложениями не добавлены.
+
+
+## V21 review
+
+See [V21 audit](docs/AUDIT_REVIEW_21_2026-09-16.md) and [clean TV guide](docs/V21_CLEAN_TV_RU.md). The new screen preference is local, not a security role. Source validation does not replace physical-TV or service-boot acceptance.

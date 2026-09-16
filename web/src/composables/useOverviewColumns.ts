@@ -13,7 +13,8 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
   const storageKey = () => `monik:overview-columns:v1:${mode()}`;
   const inset = computed(() => (mode() === 'tv' ? .6 : .75) * font.value);
   const gap = computed(() => .6 * font.value);
-  const actions = computed(() => mode() === 'tv' ? 7 * font.value : 2 * font.value);
+  // TV icon targets match the 30px CSS box, independent of its 10/12/14px font.
+  const actions = computed(() => mode() === 'tv' ? 30 : 2 * font.value);
   const minimum = computed(() => columnMinima(mode()).map(n => n * font.value));
   const widths = computed(() => fitColumns(preferred.value.map(n => n * font.value), minimum.value,
     width.value - 2 * inset.value - 2 - actions.value - gap.value * 6));
@@ -130,6 +131,6 @@ export function useOverviewColumns(root: Ref<HTMLElement | null>, mode: () => Co
     }
   });
   onUnmounted(() => { cancel(); observer?.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('resize', measure); window.removeEventListener('blur', cancel); document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', abortPointer); window.removeEventListener('keydown', abortKey); });
-  return reactive({ remoteIndex, remoteBegin, remoteEnd, remoteKey, remoteSelect, remoteStep, widths, minimum, enabled, style, positions, resizing, notice, start, move, finish, key, reset });
+  return reactive({ cancel, remoteIndex, remoteBegin, remoteEnd, remoteKey, remoteSelect, remoteStep, widths, minimum, enabled, style, positions, resizing, notice, start, move, finish, key, reset });
 }
 export type OverviewColumns = ReturnType<typeof useOverviewColumns>;

@@ -1,7 +1,9 @@
-# V20: controller security/reliability hardening, PRE-RELEASE
+# V21: clean TV presentation and access correctness, PRE-RELEASE
 
-Reviewed base `0385030878ec58e0f7a8bf1b95ab1f38fd1cde06`. Read docs/AUDIT_REVIEW_20_2026-09-15.md and docs/SECURITY_ACCEPTANCE_V20.md. Previous V19 status is preserved at docs/history/IMPLEMENTATION_STATUS_THROUGH_V19.md. Its local 45/45 browser report and the separate baseline GitHub CI failure after 42 passes are distinct executions.
+Base `3303e991a2624c945662355e22fa7cfb8ef06a6a`. Read `docs/AUDIT_REVIEW_21_2026-09-16.md`, `docs/V21_CLEAN_TV_RU.md` and `docs/audit/validation-review21-2026-09-16.json`. Prior host V20 status/ledger are preserved under docs/history/*_THROUGH_V20.md.
 
-Implemented: exact browser mutation origin policy, bounded password/SSE work, sensitive viewer-journal redaction, delayed-request role/token/session revalidation, transactional initial setup and credential revoke, safe pending credential promotion, explicit database read failures, narrow-TV CSS fallback and actionable browser-failure artifacts. Monitoring/console authority and agent protocol remain unchanged. Manual code issuance requires recent owner authentication.
+Implemented: device-local clean TV with top recovery/diagnostics/paging, continued shared width/density synchronization, square 30px console/details links, viewer self-logout without general mutation rights, delayed history-export reauthorization, explicit export storage errors, and transactional still-current credential successor registration. No agent protocol/database migration or agent authority change.
 
-Host executed `scripts/verify-audit20.sh --with-browser` (45/45) that the auditor could not log in to. V20 is not a guarantee of no vulnerabilities. Full protected restore, independent service-host recovery, physical TV, native service/boot and fleet/soak gates stay open. See ACCEPTANCE_LEDGER.md and docs/RELEASE_COMPLETION_PLAN.md.
+Host executed `scripts/verify-audit21.sh --with-browser`: Go 1.27.1 race 478/714/27, 199 frontend tests, native processes 3/3 uid=1000, browser **50/50**. Auditor browser was BLOCKED_BEFORE_LOGIN; five new scenarios ran here. Vue omitted-Boolean `interactive` is default true so ordinary overview handles remain. UID isolation fixture NOT RUN. This is not a claim of completed v3 or a completed external security audit.
+
+No agents must be replaced for V21. Preserve current identifiers, credentials, trust, history, shared TV profile and local console opt-in. `operation.retry_selected` and independent service-host self-update remain fail-closed. Full restore, physical TV, native boot, perimeter and fleet/soak gates stay open in `docs/RELEASE_COMPLETION_PLAN.md`.

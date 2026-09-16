@@ -1,6 +1,14 @@
-# Monik: authoritative completion gates after V20
+# Monik: authoritative completion gates after V21
 
-Baseline reviewed: `0385030878ec58e0f7a8bf1b95ab1f38fd1cde06`. V20 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+Baseline reviewed for V21: `3303e991a2624c945662355e22fa7cfb8ef06a6a`. V21 is a corrective audit, not a full-release declaration. This document replaces the stacked historical status notes; historical text is preserved at `history/RELEASE_COMPLETION_PLAN_THROUGH_V12.md`. Owner requirements remain authoritative.
+
+## V21 clean TV and access correctness
+
+A device-local clean-TV choice hides the lower profile/editor/pager without changing the shared TV profile or browser role. The exit toggle and error indications remain above the rows. Multiple-page navigation also lives above the rows; focused controls still suspend paging. TV console/details links are bounded 30px SVG buttons with accessible names. This is not a kiosk, viewer credential, login bypass or hardware detector.
+
+Preserve viewer self-logout with CSRF/origin checks, export authorization revalidation and explicit storage failures, and transactional pending-credential registration bound to the still-current authenticator. Do not turn an expired/revoked key into a successor through a delayed request. Valid registration, retries and subsequent promotion remain supported. No schema or agent-protocol change. Existing agents do not need replacement. Rebuild matching installer templates for future downloads.
+
+Run the exact new two-context Playwright scenarios; SSR/template and numerical tests do not demonstrate real device geometry. The V20 host's successful CI is baseline evidence only. See the V21 acceptance ledger and report for the actual new-source results and limits.
 
 ## V20 network-security acceptance
 

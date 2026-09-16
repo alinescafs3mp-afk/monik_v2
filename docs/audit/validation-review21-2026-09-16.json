@@ -1,0 +1,117 @@
+{
+  "audit": "21",
+  "date": "2026-09-16",
+  "baseline_commit": "3303e991a2624c945662355e22fa7cfb8ef06a6a",
+  "baseline_tree": "f319e9b12f6e4091a95dea162046f1e509fe2078",
+  "auditor_result_tree": "12d287abd20118dbae11c225cb759f611bca0f38",
+  "full_release_accepted": false,
+  "no_agent_upgrade_required": true,
+  "schema_changed": false,
+  "agent_protocol_changed": false,
+  "environment": {
+    "host_go": "go1.27.1",
+    "auditor_go": "go1.27.0",
+    "node": "v22.23.2",
+    "vite": "6.4.3",
+    "playwright": "1.57.0",
+    "uid": 1000
+  },
+  "auditor": {
+    "browser": "BLOCKED_BEFORE_LOGIN",
+    "native_uid": 65534,
+    "frontend_node_tests": 198,
+    "go_race_top_level": 477,
+    "go_race_test_subtest_seed": 713
+  },
+  "executed": {
+    "package_verify": {"status": "PASS", "files": 86},
+    "preflight": {"status": "PASS", "applied_tree": "12d287abd20118dbae11c225cb759f611bca0f38"},
+    "full_go_race": {
+      "status": "PASS",
+      "top_level_pass": 478,
+      "test_subtest_seed_pass": 714,
+      "tested_packages": 27,
+      "note": "Opt-in native tests skipped in the ordinary suite then executed separately. ICMP was not enabled."
+    },
+    "vet": {"status": "PASS"},
+    "modules": {"status": "PASS", "note": "Not a current CVE audit."},
+    "frontend": {
+      "status": "PASS",
+      "node_tests": 199,
+      "tsc": true,
+      "vite": true,
+      "vue_tsc": false,
+      "note": "199 includes one extra host case that omitted Boolean interactive stays true."
+    },
+    "go_v21_repeats": {
+      "status": "PASS",
+      "repetitions": 10,
+      "shuffled": true,
+      "race": true,
+      "packages": ["internal/server", "internal/storage"],
+      "filter": "^TestV21"
+    },
+    "ui_repeats": {
+      "status": "PASS",
+      "repetitions": 10,
+      "tests_per_run": 47
+    },
+    "linux_windows_build": {
+      "status": "PASS",
+      "note": "four Linux amd64 and four Windows amd64; installer templates amd64+arm64 rebuilt after commit"
+    },
+    "native_linux_processes": {
+      "status": "PASS",
+      "passed": 3,
+      "uid": 1000,
+      "includes_signed_update_and_failed_candidate_recovery": true,
+      "not": "systemd/SCM/boot"
+    },
+    "console_uid_isolation": {
+      "status": "NOT RUN",
+      "opt_in": "MONIK_NATIVE_TESTS=1",
+      "note": "TestV18NativeActivatedPeerUIDAndKeyIsolation skipped; needs disposable root."
+    },
+    "systemd_unit_syntax": {
+      "status": "PASS",
+      "opt_in": "MONIK_SYSTEMD_VERIFY=1",
+      "not": "service activation, installed sandbox or boot"
+    },
+    "browser": {
+      "status": "PASS",
+      "passed": 50,
+      "errors": [],
+      "new_v21_scenarios": 5,
+      "physical_tv": false,
+      "note": "wait_for_function string predicates are blocked by production script-src 'self'; host polls the same contracts via CDP evaluate. CSP was not loosened. Clean-TV fixture restores monik:display=auto so later same-origin pages keep the ordinary overview heading."
+    }
+  },
+  "host_extras_versus_auditor_tree": [
+    "ACCEPTANCE_LEDGER.md",
+    "IMPLEMENTATION_STATUS.md",
+    "docs/audit/validation-review21-2026-09-16.json",
+    "web/src/components/OverviewColumnHeader.vue",
+    "web/test/tvScreen.test.mjs",
+    "tests/browser/tv_screen_scenarios.py"
+  ],
+  "not_run": [
+    "physical TV / Yandex remote",
+    "native systemd/Windows SCM installation and boot",
+    "UID isolation fixture (needs root)",
+    "live external perimeter/firewall tests",
+    "current dependency CVE scan",
+    "complete protected restore",
+    "independent service-host self-update recovery",
+    "large fleet/load",
+    "24-hour soak",
+    "ICMP live-network probe"
+  ],
+  "preserved": [
+    "identity/CA/current endpoints",
+    "enrolled credentials and retained history",
+    "shared TV profile",
+    "local console opt-in",
+    "operation.retry_selected fail-closed",
+    "independent service-host self-update fail-closed"
+  ]
+}

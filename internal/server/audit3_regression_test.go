@@ -122,7 +122,8 @@ func TestAudit3ExportContainsHistoryAndAuthenticatedDownload(t *testing.T) {
 		t.Fatal("foreign export exposed")
 	}
 	w = httptest.NewRecorder()
-	a.handleExportDownload(w, r, &storage.Session{Username: "owner", Role: "owner"})
+	_, ownerSession := v20Session(t, a, "owner")
+	a.handleExportDownload(w, r, ownerSession)
 	if w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -262,7 +264,7 @@ func (a *App) handleCredentialRotate(op *protocol.Operation) error {
 }
 
 func (a *App) handleCredentialNext(w http.ResponseWriter, r *http.Request) {
-	ag, _, ok := a.agentFromCurrent(r)
+	ag, cred, ok := a.agentFromCurrent(r)
 	if !ok {
 		a.writeErr(w, 401, "unauthenticated", "agent credential required")
 		return
@@ -275,21 +277,28 @@ func (a *App) handleCredentialNext(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 400, "malformed", "job_id and verifier required")
 		return
 	}
-	if len(body.Verifier) != 64 {
-		a.writeErr(w, 400, "malformed", "verifier must be a sha256 hex digest")
+	decoded, parseErr := hex.DecodeString(body.Verifier)
+	if parseErr != nil || len(decoded) != 32 || body.Verifier != strings.ToLower(body.Verifier) || body.JobID == "" || len(body.JobID) > 128 || strings.TrimSpace(body.JobID) != body.JobID {
+		a.writeErr(w, 400, "malformed", "job_id and a lowercase SHA256 hex verifier required")
 		return
 	}
-	if secure.EqualHash(ag.CredentialHash, body.Verifier) {
+	// Authentication may have changed while reading the request body. A second
+	// check improves the response; the transaction below is the final authority.
+	if current, _, valid := a.agentFromCurrent(r); !valid || current.ID != ag.ID {
+		a.writeErr(w, 401, "unauthenticated", "agent credential changed; request was not applied")
+		return
+	}
+	until, already, err := a.Store.RegisterPendingCredential(ag.ID, secure.HashToken(cred), body.Verifier, body.JobID, a.Clock.Now().UTC().Add(protocol.OneShotExpiry))
+	if err != nil {
+		if errors.Is(err, storage.ErrConflict) || errors.Is(err, storage.ErrNotFound) {
+			a.writeErr(w, 409, "credential_conflict", "credential or pending rotation changed; request was not applied")
+		} else {
+			a.writeErr(w, 503, "persist", "could not confirm pending credential registration")
+		}
+		return
+	}
+	if already {
 		a.writeJSON(w, 200, map[string]any{"ok": true, "already_current": true})
-		return
-	}
-	if pending, _, err := a.Store.PendingCredential(ag.ID); err == nil && pending != "" && !secure.EqualHash(pending, body.Verifier) {
-		a.writeErr(w, 409, "overlap", "a different pending credential is already registered")
-		return
-	}
-	until := a.Clock.Now().UTC().Add(protocol.OneShotExpiry)
-	if err := a.Store.SetPendingCredential(ag.ID, body.Verifier, body.JobID, until); err != nil {
-		a.writeErr(w, 500, "persist", "could not store pending verifier")
 		return
 	}
 	a.writeJSON(w, 200, map[string]any{"ok": true, "overlap_until": until})

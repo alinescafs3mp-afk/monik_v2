@@ -110,7 +110,10 @@ func (a *App) needAuth(fn func(http.ResponseWriter, *http.Request, *storage.Sess
 			a.writeErr(w, 403, "csrf", "CSRF token missing or invalid")
 			return
 		}
-		if s.Role != "owner" && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// Logging out removes only this session and must be available to viewers too.
+		// This exception does not grant other POST operations to a read-only user.
+		selfLogout := r.Method == http.MethodPost && r.URL.Path == "/api/v1/logout"
+		if s.Role != "owner" && r.Method != http.MethodGet && r.Method != http.MethodHead && !selfLogout {
 			a.writeErr(w, 403, "forbidden", "owner role required for mutation")
 			return
 		}

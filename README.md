@@ -75,3 +75,8 @@ Administrative tasks continue to use Direct SSH. See
 [`SECURITY_ACCEPTANCE_V18.md`](docs/SECURITY_ACCEPTANCE_V18.md) for deployment,
 revocation, sandbox limits and the mandatory native pilot. TV width adjustment
 has an OK/arrow mode and native +/- buttons, independent of long-press dragging.
+
+
+## V21 review
+
+See [V21 audit](docs/AUDIT_REVIEW_21_2026-09-16.md) and [clean TV guide](docs/V21_CLEAN_TV_RU.md). The new screen preference is local, not a security role. Source validation does not replace physical-TV or service-boot acceptance.

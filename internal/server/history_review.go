@@ -144,6 +144,10 @@ func (a *App) exportHistory(op *protocol.Operation, req protocol.SubmitOperation
 func (a *App) handleExportDownload(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	id := r.PathValue("id")
 	op, err := a.Store.Operation(id)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		a.writeErr(w, http.StatusServiceUnavailable, "export_unavailable", "could not read export evidence; the file was not declared missing")
+		return
+	}
 	if err != nil || op.Action != "history.export" || len(op.Targets) != 1 || op.Targets[0].Status != protocol.TargetSucceeded {
 		a.writeErr(w, 404, "not_found", "completed export not found")
 		return
@@ -156,6 +160,12 @@ func (a *App) handleExportDownload(w http.ResponseWriter, r *http.Request, s *st
 	until, err := time.Parse(time.RFC3339Nano, exp)
 	if err != nil || !a.Clock.Now().Before(until) {
 		a.writeErr(w, 410, "expired", "export expired; generate a new export")
+		return
+	}
+	// Middleware authorization may have aged during a database/file wait.
+	// Recheck before reading the artifact and again before releasing any bytes.
+	if _, err = a.Store.RevalidateSession(s); err != nil {
+		a.writeErr(w, http.StatusUnauthorized, "unauthorized", "session or permissions changed; sign in again")
 		return
 	}
 	path, err := confinedJoin(filepath.Join(a.Cfg.DataDir, "exports"), id+".json")
@@ -182,6 +192,14 @@ func (a *App) handleExportDownload(w http.ResponseWriter, r *http.Request, s *st
 	digest, _ := op.Targets[0].Evidence["sha256"].(string)
 	if len(raw) > 16<<20 || secure.SHA256Bytes(raw) != digest {
 		a.writeErr(w, 500, "integrity", "export verification failed")
+		return
+	}
+	if _, err = a.Store.RevalidateSession(s); err != nil {
+		a.writeErr(w, http.StatusUnauthorized, "unauthorized", "session or permissions changed; sign in again")
+		return
+	}
+	if !a.Clock.Now().Before(until) {
+		a.writeErr(w, http.StatusGone, "expired", "export expired; generate a new export")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

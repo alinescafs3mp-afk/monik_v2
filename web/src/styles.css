@@ -485,8 +485,11 @@ code{overflow-wrap:anywhere}
 @media(max-width:420px){.host-rows:not(.columns-adjustable) .host-line .metric-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}
 
 /* V18: dedicated TV actions and remote control, no long-press drag dependency. */
-.tv-machine-actions{display:flex;flex-direction:column;gap:.35rem;align-items:stretch;min-width:0;position:relative;z-index:3}
-.tv-machine-actions a{display:block;text-align:center;padding:.4rem;border:1px solid currentColor;border-radius:4px;white-space:normal}
+.tv-machine-actions{display:flex;flex-direction:column;gap:.35rem;align-items:center;min-width:0;position:relative;z-index:3}
+.tv-machine-actions .tv-icon-action{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:30px;height:30px;min-width:30px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);text-decoration:none;line-height:1;}
+.tv-icon-action svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;}
+.tv-machine-actions .tv-icon-action:focus{outline:3px solid var(--focus);outline-offset:2px;}
+.tv-board:not(.columns-adjustable) .tv-machine-actions{grid-column:1/-1;flex-direction:row;justify-content:flex-start;}
 .column-divider.remote-selected{background:var(--accent,#78b9ff);opacity:1;outline:2px solid currentColor}
 .column-divider{-webkit-user-drag:none;-webkit-touch-callout:none}
 @media(max-width:600px){.tv-machine-actions{flex-direction:row;flex-wrap:wrap}.remote-column-controls{width:100%}}
@@ -515,3 +518,8 @@ code{overflow-wrap:anywhere}
  :root .tv-board .tv-metric>strong,:root .tv-board .tv-metric>small {white-space:normal;overflow-wrap:anywhere;}
  .remote-column-controls,.remote-column-pad {box-sizing:border-box;}
 }
+
+/* V21: passive is a local presentation choice, not an authorization role. */
+.tv-page-strip{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:.5rem;min-width:0;margin:0 0 .25rem;}
+.tv-sync-warning{color:var(--warn,#b45309);font-size:.85em;max-width:26rem;overflow-wrap:anywhere;}
+.tv-tools-toggle{white-space:normal;}

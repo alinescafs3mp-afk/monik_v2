@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import {useDisplay} from '../composables/useDisplay';
+import {canAdvanceTV} from '../tvScreen';
+const {tvPassive}=useDisplay();
 import {useTVProfile} from '../composables/useTVProfile';
 import TVProfilePanel from './TVProfilePanel.vue';
 import {columnDefaults} from '../overviewColumns';
@@ -16,7 +19,7 @@ const props=defineProps<{cards:any[];fresh:(c:any)=>boolean;priority:(c:any)=>nu
 const board=ref<HTMLElement|null>(null),size=ref(4),page=ref(0),hovered=ref(false),now=ref(Date.now());
 const tv=useTVProfile();
 const autoplay=computed({get:()=>tv.state.value.autoplay,set:value=>{void tv.sync.update({autoplay:value});}});
-const columns=useOverviewColumns(board,()=> 'tv',()=>true,{widths:()=>tv.state.value.widths,begin:tv.sync.begin,commit:widths=>{void tv.sync.update({widths:widths.map((n,i)=>Math.max([6.5,3,5,4.5,5][i],Math.round(n*1000000)/1000000))});},cancel:tv.sync.cancel,reset:()=>{void tv.sync.update({widths:columnDefaults('tv')});}});
+const columns=useOverviewColumns(board,()=> 'tv',()=>true,{widths:()=>tv.state.value.widths,begin:()=>!tvPassive.value&&tv.sync.begin(),commit:widths=>{if(tvPassive.value){tv.sync.cancel();return;}void tv.sync.update({widths:widths.map((n,i)=>Math.max([6.5,3,5,4.5,5][i],Math.round(n*1000000)/1000000))});},cancel:tv.sync.cancel,reset:()=>{void tv.sync.update({widths:columnDefaults('tv')});}});
 const frozenOrder=ref<string[]>([]);let pendingProblemJump=false;
 const screen=computed(()=>pageSlice(keepVisibleOrder(props.cards,frozenOrder.value),page.value,size.value));
 watch(()=>columns.resizing,value=>{frozenOrder.value=value?props.cards.map(c=>String(c.id)):[];if(!value&&pendingProblemJump){pendingProblemJump=false;page.value=0;lastPage=Date.now();}},{flush:'sync'});
@@ -30,9 +33,9 @@ function measure(){
   if(lastWidth!==el.clientWidth||lastFont!==font+'|'+expansion+'|'+String(columns.style['--overview-columns'])){largestRow=0;lastWidth=el.clientWidth;lastFont=font+'|'+expansion+'|'+String(columns.style['--overview-columns']);}
   const heights=Array.from(el.querySelectorAll('.tv-machine')).map(row=>row.getBoundingClientRect().height);
   largestRow=Math.max(largestRow,...heights);const rowHeight=largestRow||84;
-  const head=el.querySelector('.tv-columns')?.getBoundingClientRect().height||24;
   const occupied=(selector:string)=>{const node=el.querySelector<HTMLElement>(selector);if(!node)return 0;const style=getComputedStyle(node);return node.getBoundingClientRect().height+(parseFloat(style.marginTop)||0)+(parseFloat(style.marginBottom)||0);};
-  const footer=occupied('.tv-pager')+occupied('.column-notice')+occupied('.tv-profile-panel')+8;
+  const head=occupied('.tv-columns')+occupied('.tv-page-strip');
+  const footer=tvPassive.value?0:occupied('.tv-pager')+occupied('.column-notice')+occupied('.tv-profile-panel')+8;
   size.value=boardCapacity(window.innerHeight,el.getBoundingClientRect().top+head,rowHeight+4,footer);
  });
 }
@@ -42,20 +45,26 @@ watch(()=>props.cards.filter(c=>props.priority(c)>0).map(c=>c.id).join('|'),(val
  const previous=new Set((old||'').split('|'));if(value.split('|').some(id=>id&&!previous.has(id))){if(columns.resizing)pendingProblemJump=true;else{page.value=0;lastPage=Date.now();}}
 });
 watch(autoplay,()=>lastPage=Date.now());
+watch(tvPassive,()=>{columns.cancel();hovered.value=false;largestRow=0;lastPage=Date.now();void nextTick(measure);});
 onMounted(()=>{
  window.addEventListener('resize',measure);
  if(typeof ResizeObserver!=='undefined'){observer=new ResizeObserver(measure);if(board.value)observer.observe(board.value);}
  timer=window.setInterval(()=>{
   now.value=Date.now();
-  if(!autoplay.value||columns.resizing||document.hidden||hovered.value||board.value?.contains(document.activeElement)||screen.value.pages<2){lastPage=now.value;return;}
+  if(!canAdvanceTV({autoplay:autoplay.value,passive:tvPassive.value,resizing:columns.resizing,hidden:document.hidden,hovered:hovered.value,focused:!!board.value?.contains(document.activeElement),pages:screen.value.pages})){lastPage=now.value;return;}
   if(now.value-lastPage>=20000){page.value=(screen.value.page+1)%screen.value.pages;lastPage=now.value;}
  },1000);void nextTick(measure);
 });
 onUpdated(measure);
 onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconnect();cancelAnimationFrame(frame);clearInterval(timer);});
 </script>
-<template><section ref="board" class="tv-board" :class="{'columns-adjustable':columns.enabled,'is-resizing':columns.resizing}" :style="columns.style" aria-label="Экран мониторинга" @mouseenter="hovered=true" @mouseleave="hovered=false">
- <OverviewColumnHeader :layout="columns" tv/>
+<template><section ref="board" class="tv-board" :class="{'columns-adjustable':columns.enabled,'is-resizing':columns.resizing,'tv-passive':tvPassive}" :style="columns.style" aria-label="Экран мониторинга" @mouseenter="hovered=true" @mouseleave="hovered=false">
+ <div v-if="tvPassive&&screen.pages>1" class="tv-page-strip" aria-label="Страницы машин">
+  <button type="button" :disabled="screen.page===0" aria-label="Предыдущая страница машин" @click="turn(-1)">←</button>
+  <span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span>
+  <button type="button" :disabled="screen.page===screen.pages-1" aria-label="Следующая страница машин" @click="turn(1)">→</button>
+ </div>
+ <OverviewColumnHeader :layout="columns" :interactive="!tvPassive" tv/>
  <article v-for="c in screen.rows" :key="c.id" class="tv-machine" :data-machine="c.id" :class="{'measurements-stale':!fresh(c),'has-problem':priority(c)>0}">
   <div class="tv-identity"><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :title="c.name"><strong>{{c.name}}</strong></router-link><small>{{c.os}} / {{c.arch}}</small><span class="badge"><span class="dot" :class="fresh(c)?c.state:'stale'"/>{{stateLabel(!fresh(c)&&c.state==='ok'?'stale':c.state)}}</span><small v-if="c.maintenance_active">Обслуживание</small></div>
   <div class="tv-metric" :class="{err:fresh(c)&&c.breaches?.some((b:any)=>b.metric==='cpu')}"><span class="sr">CPU </span><strong>{{number(c.cpu,'%',0)}}</strong></div>
@@ -66,10 +75,13 @@ onUnmounted(()=>{window.removeEventListener('resize',measure);observer?.disconne
    <router-link v-else :to="`/machines/${encodeURIComponent(c.id)}#services`">Выбрать сервисы</router-link>
    <small v-if="c.unselected_service_problems" class="err">Проблем вне списка: {{c.unselected_service_problems}}</small>
   </div>
-  <div class="tv-machine-actions"><router-link class="button" :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`">Консоль</router-link><router-link :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`">↗</router-link></div>
-  <ColumnDividers :layout="columns"/>
+  <div class="tv-machine-actions">
+   <router-link class="tv-icon-action" :to="`/machines/${encodeURIComponent(c.id)}/console`" :aria-label="`Консоль ${c.name}`" title="Открыть консоль"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6l6 6-6 6 M13 18h7"/></svg></router-link>
+   <router-link class="tv-icon-action" :to="`/machines/${encodeURIComponent(c.id)}`" :aria-label="`Открыть ${c.name}`" title="Графики и параметры"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5H4v15h15v-4 M13 4h7v7 M9 15L20 4"/></svg></router-link>
+  </div>
+  <ColumnDividers v-if="!tvPassive" :layout="columns"/>
  </article>
- <p v-if="columns.notice" class="muted column-notice" role="status">{{columns.notice}}</p>
- <TVProfilePanel/>
- <footer class="tv-pager"><ColumnRemoteControl :layout="columns" :disabled="!tv.sync.canChange()"/><button type="button" :disabled="!tv.sync.canChange()" @click="columns.reset">Сбросить ширину</button><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" :disabled="!tv.sync.canChange()||tv.state.phase==='editing'" type="checkbox"/> Листать каждые 20 с</label></footer>
+ <p v-if="!tvPassive&&columns.notice" class="muted column-notice" role="status">{{columns.notice}}</p>
+ <TVProfilePanel v-if="!tvPassive"/>
+ <footer v-if="!tvPassive" class="tv-pager"><ColumnRemoteControl :layout="columns" :disabled="!tv.sync.canChange()"/><button type="button" :disabled="!tv.sync.canChange()" @click="columns.reset">Сбросить ширину</button><button type="button" :disabled="screen.page===0" @click="turn(-1)">← Назад</button><span aria-live="polite">{{screen.page+1}} / {{screen.pages}} · {{cards.length}} машин</span><button type="button" :disabled="screen.page===screen.pages-1" @click="turn(1)">Далее →</button><label><input v-model="autoplay" :disabled="!tv.sync.canChange()||tv.state.phase==='editing'" type="checkbox"/> Листать каждые 20 с</label></footer>
 </section></template>
