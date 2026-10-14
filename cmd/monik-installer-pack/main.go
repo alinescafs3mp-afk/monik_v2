@@ -23,10 +23,11 @@ func run() error {
 	worker := flag.String("worker", "", "static monik-agent from the same build")
 	host := flag.String("supervisor", "", "static monik-service-host from the same build")
 	arch := flag.String("arch", "amd64", "Linux architecture")
+	flavor := flag.String("agent-flavor", "general", "general or spark-light (Linux ARM64 direct worker)")
 	build := flag.String("build", "", "source commit")
 	out := flag.String("out", "", "output reusable installer template")
 	flag.Parse()
-	if *installer == "" || *worker == "" || *host == "" || *out == "" || *build == "" {
+	if *installer == "" || *worker == "" || (*flavor == "general" && *host == "") || *out == "" || *build == "" {
 		return fmt.Errorf("all input paths, --out and --build are required")
 	}
 	a, e := read(*installer)
@@ -37,9 +38,14 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	c, e := read(*host)
-	if e != nil {
-		return e
+	var c []byte
+	if *flavor == "general" {
+		c, e = read(*host)
+		if e != nil {
+			return e
+		}
+	} else if *flavor != "spark-light" || *host != "" {
+		return fmt.Errorf("invalid flavor or supervisor supplied for direct Spark worker")
 	}
 	// Refuse replacement: publishing a different template is an explicit operator
 	// step. A partially written temporary file is never a downloadable template.
@@ -55,7 +61,12 @@ func run() error {
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
-	if e = installerbundle.Pack(f, a, b, c, *arch, *build); e == nil {
+	if *flavor == "spark-light" {
+		e = installerbundle.PackSpark(f, a, b, *arch, *build)
+	} else {
+		e = installerbundle.Pack(f, a, b, c, *arch, *build)
+	}
+	if e == nil {
 		e = f.Sync()
 	}
 	if ce := f.Close(); e == nil {

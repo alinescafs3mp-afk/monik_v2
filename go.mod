@@ -1,13 +1,13 @@
 module github.com/alinescafs3mp-afk/monik_v2
 
-go 1.27.0
+go 1.27.2
 
 require (
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/sigstore/sigstore v1.10.10
 	github.com/theupdateframework/go-tuf/v2 v2.4.1
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sys v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.58.0

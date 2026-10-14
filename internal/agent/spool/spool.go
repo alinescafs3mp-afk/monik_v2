@@ -21,12 +21,13 @@ import (
 const maxReportBytes = 8 << 20
 
 type Store struct {
-	dir         string
-	mu          sync.Mutex
-	dropped     int64
-	from, to    *time.Time
-	lastError   string
-	pendingLoss []string
+	dir          string
+	mu           sync.Mutex
+	dropped      int64
+	priorUnknown bool
+	from, to     *time.Time
+	lastError    string
+	pendingLoss  []string
 }
 type record struct {
 	path string
@@ -233,7 +234,14 @@ func (s *Store) Status() protocol.SpoolStatus {
 		v := *s.to
 		to = &v
 	}
-	return protocol.SpoolStatus{Bytes: bytes, Items: len(entries), Dropped: s.dropped, DropFrom: from, DropTo: to, Error: s.lastError}
+	statusError := s.lastError
+	if s.priorUnknown {
+		statusError = "spool loss total unknown; dropped is a known lower bound"
+		if s.lastError != "" {
+			statusError += "; " + s.lastError
+		}
+	}
+	return protocol.SpoolStatus{Bytes: bytes, Items: len(entries), Dropped: s.dropped, DroppedUnknown: s.priorUnknown, DropFrom: from, DropTo: to, Error: statusError}
 }
 func (s *Store) trimLocked() error {
 	if err := s.finishLossLocked(); err != nil {

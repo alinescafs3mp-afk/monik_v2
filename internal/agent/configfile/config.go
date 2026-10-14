@@ -26,6 +26,8 @@ type File struct {
 	AppliedHash         string `json:"applied_hash"`
 	UpdateRootPath      string `json:"update_root_path,omitempty"`
 	Managed             bool   `json:"managed"`
+	AgentFlavor         string `json:"agent_flavor,omitempty"`
+	RuntimeMode         string `json:"runtime_mode,omitempty"`
 	BootstrapURL        string `json:"bootstrap_url"`
 }
 

@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "log_root": "/var/log/spark-model-collection-v4",
+  "models": [
+    {
+      "id": "qwen3-coder-next-80b-huihui",
+      "name": "Qwen3 Coder Next 80B Huihui abliterated",
+      "engine": "vLLM",
+      "quant": "FP8 static",
+      "context": 262144,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_qwen3_coder_next_80b_abliterated_v4.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_qwen3_coder_next_80b_abliterated_v4.sh"
+      ],
+      "status": [
+        "/home/Dest/status_qwen3_coder_next_80b_abliterated_v4.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/qwen3-coder-next-80b-huihui/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/qwen3-coder-next-80b-huihui/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "ling-3-flash-124b-heretic-text",
+      "name": "Ling3 Flash124B Heretic TEXT",
+      "engine": "llama.cpp CUDA",
+      "quant": "MXFP4_MOE",
+      "context": 262144,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_ling3_flash_124b_heretic_text_v4.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_ling3_flash_124b_heretic_text_v4.sh"
+      ],
+      "status": [
+        "/home/Dest/status_ling3_flash_124b_heretic_text_v4.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/ling-3-flash-124b-heretic-text/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/ling-3-flash-124b-heretic-text/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "mistral-small-4-119b-heretic",
+      "name": "Mistral Small4 119B Heretic",
+      "engine": "vLLM",
+      "quant": "NVFP4 compressed-tensors",
+      "context": 256000,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_mistral_small4_119b_heretic_v4.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_mistral_small4_119b_heretic_v4.sh"
+      ],
+      "status": [
+        "/home/Dest/status_mistral_small4_119b_heretic_v4.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/mistral-small-4-119b-heretic/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/mistral-small-4-119b-heretic/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "nemotron-3-super-120b-heretic-v2",
+      "name": "Nemotron3 Super120B Heretic V2",
+      "engine": "llama.cpp CUDA",
+      "quant": "MXFP4_MOE",
+      "context": 262144,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_nemotron3_super_120b_heretic_v4.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_nemotron3_super_120b_heretic_v4.sh"
+      ],
+      "status": [
+        "/home/Dest/status_nemotron3_super_120b_heretic_v4.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/nemotron-3-super-120b-heretic-v2/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/nemotron-3-super-120b-heretic-v2/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "minimax-m27-229b-heretic",
+      "name": "MiniMax M2.7 229B Heretic",
+      "engine": "llama.cpp CUDA",
+      "quant": "IQ3_XS",
+      "context": 184832,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_minimax_m27_229b_heretic_v4.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_minimax_m27_229b_heretic_v4.sh"
+      ],
+      "status": [
+        "/home/Dest/status_minimax_m27_229b_heretic_v4.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/minimax-m27-229b-heretic/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/minimax-m27-229b-heretic/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "qwen-existing-observation",
+      "name": "Qwen3.8 Flash Next ABLITERATED NVFP4",
+      "engine": "SGLang",
+      "quant": "modelopt_fp4",
+      "context": 262144,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_qwen_existing_shared.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_qwen_existing_shared.sh"
+      ],
+      "status": [
+        "/home/Dest/status_qwen_existing_shared.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/qwen-existing-observation/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/qwen-existing-observation/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "gpt-oss-120b-existing-configured",
+      "name": "GPT OSS 120B MXFP4 ABLITERATED",
+      "engine": "vLLM",
+      "quant": "mxfp4",
+      "context": 131072,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_gpt_oss_120b_existing_shared.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_gpt_oss_120b_existing_shared.sh"
+      ],
+      "status": [
+        "/home/Dest/status_gpt_oss_120b_existing_shared.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured/actions.log",
+      "controller_owned_action_log": true
+    }
+  ]
+}

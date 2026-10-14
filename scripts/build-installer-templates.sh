@@ -21,6 +21,12 @@ for arch in $ARCHES; do
  # Publish the fully verified new template by rename. No live profile is here.
  install -m 0644 "$tmp/$arch.bin" "$OUT/.linux-$arch.bin.new"
  mv -f "$OUT/.linux-$arch.bin.new" "$OUT/linux-$arch.bin"
+ if [ "$arch" = arm64 ]; then
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 "$GO" build -trimpath -ldflags "$flags" -o "$tmp/spark-worker" ./cmd/monik-spark-agent
+  "$GO" run ./cmd/monik-installer-pack --agent-flavor spark-light --installer "$tmp/stub" --worker "$tmp/spark-worker" --arch arm64 --build "$COMMIT" --out "$tmp/spark-light.bin"
+  install -m 0644 "$tmp/spark-light.bin" "$OUT/.linux-arm64-spark-light.bin.new"
+  mv -f "$OUT/.linux-arm64-spark-light.bin.new" "$OUT/linux-arm64-spark-light.bin"
+ fi
 done
 (cd "$OUT" && sha256sum linux-*.bin > SHA256SUMS)
 printf 'Templates ready in %s. Deploy to <controller-data-dir>/installer-templates/ with the matching server build.\n' "$OUT"

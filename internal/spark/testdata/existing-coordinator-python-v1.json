@@ -1,0 +1,610 @@
+{
+  "cases": [
+    {
+      "name": "observe_no_owned_run",
+      "request": {
+        "method": "observe_many",
+        "profile_ids": [
+          "qwen3-coder-next-80b-huihui"
+        ],
+        "schema_version": 1
+      },
+      "response": {
+        "models": [
+          {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "agent_session": "fixture-session",
+            "api_ready": false,
+            "attempt": null,
+            "boot_id": "00000000-0000-0000-0000-000000000000",
+            "context": 262144,
+            "control_epoch": "fixture-epoch",
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 0,
+            "instance": null,
+            "instance_identity": "",
+            "message": "No owned instance",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "observed_at_ms": 1800000000000,
+            "process_active": false,
+            "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+            "run_id": null,
+            "shutdown_verified": true,
+            "shutdown_witness": {
+              "attempt": null,
+              "container_created": null,
+              "container_id": null,
+              "engine_birth": null,
+              "engine_pid": null,
+              "generation": 0,
+              "instance_identity": "",
+              "kind": "no_owned_run",
+              "model_id": "qwen3-coder-next-80b-huihui",
+              "owner": null,
+              "run_id": null
+            },
+            "state": "STOPPED"
+          }
+        ],
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "submit_start_dispatched",
+      "request": {
+        "method": "submit",
+        "request": {
+          "action": "start",
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 0,
+          "expected_instance": "",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-real-start",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "start",
+          "attempt": "3c992afc1d4a4a25b377494c96050970",
+          "generation": 1,
+          "operation_id": "fixture-real-start",
+          "phase": "dispatched",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "receipt_start_completed_ready",
+      "request": {
+        "authority": {
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch"
+        },
+        "method": "receipt",
+        "request": {
+          "action": "start",
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 0,
+          "expected_instance": "",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-real-start",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "start",
+          "attempt": "3c992afc1d4a4a25b377494c96050970",
+          "generation": 1,
+          "operation_id": "fixture-real-start",
+          "phase": "completed",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "result": {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "api_ready": true,
+            "attempt": "3c992afc1d4a4a25b377494c96050970",
+            "context": 262144,
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 1,
+            "message": "Exact fake API identity verified",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "process_active": true,
+            "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d",
+            "state": "READY"
+          },
+          "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "observe_owned_ready",
+      "request": {
+        "method": "observe_many",
+        "profile_ids": [
+          "qwen3-coder-next-80b-huihui"
+        ],
+        "schema_version": 1
+      },
+      "response": {
+        "models": [
+          {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "agent_session": "fixture-session",
+            "api_ready": true,
+            "attempt": "3c992afc1d4a4a25b377494c96050970",
+            "boot_id": "00000000-0000-0000-0000-000000000000",
+            "context": 262144,
+            "control_epoch": "fixture-epoch",
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 1,
+            "instance": {
+              "container_created": "2026-10-14T12:00:00Z",
+              "container_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "engine_birth": "102",
+              "engine_pid": 4202,
+              "owner": {
+                "birth": "101",
+                "invocation_id": "cccccccccccccccccccccccccccccccc",
+                "pid": 4201,
+                "unit": "spark-v4-qwen3-coder-next-80b-huihui@29c03e1d2c6b4dc4b4325ae000ea504d.service"
+              },
+              "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+            },
+            "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+            "message": "Exact fake API identity verified",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "observed_at_ms": 1800000000000,
+            "process_active": true,
+            "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+            "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d",
+            "state": "READY"
+          }
+        ],
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "submit_stop_dispatched",
+      "request": {
+        "method": "submit",
+        "request": {
+          "action": "stop",
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 1,
+          "expected_instance": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-real-stop",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "stop",
+          "attempt": "3c992afc1d4a4a25b377494c96050970",
+          "generation": 1,
+          "operation_id": "fixture-real-stop",
+          "phase": "dispatched",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "receipt_stop_completed_proven",
+      "request": {
+        "authority": {
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch"
+        },
+        "method": "receipt",
+        "request": {
+          "action": "stop",
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 1,
+          "expected_instance": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-real-stop",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "stop",
+          "attempt": "3c992afc1d4a4a25b377494c96050970",
+          "generation": 1,
+          "operation_id": "fixture-real-stop",
+          "phase": "completed",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "result": {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "api_ready": false,
+            "attempt": "3c992afc1d4a4a25b377494c96050970",
+            "context": 262144,
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 1,
+            "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+            "message": "Exact stopped effect reconciled from supervisor/resource evidence",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "process_active": false,
+            "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d",
+            "shutdown_verified": true,
+            "shutdown_witness": {
+              "attempt": "3c992afc1d4a4a25b377494c96050970",
+              "container_created": "2026-10-14T12:00:00Z",
+              "container_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "engine_birth": "102",
+              "engine_pid": 4202,
+              "generation": 1,
+              "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+              "kind": "exact_run_resources_released",
+              "model_id": "qwen3-coder-next-80b-huihui",
+              "owner": {
+                "birth": "101",
+                "invocation_id": "cccccccccccccccccccccccccccccccc",
+                "pid": 4201,
+                "unit": "spark-v4-qwen3-coder-next-80b-huihui@29c03e1d2c6b4dc4b4325ae000ea504d.service"
+              },
+              "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+            },
+            "state": "STOPPED"
+          },
+          "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "observe_owned_stopped",
+      "request": {
+        "method": "observe_many",
+        "profile_ids": [
+          "qwen3-coder-next-80b-huihui"
+        ],
+        "schema_version": 1
+      },
+      "response": {
+        "models": [
+          {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "agent_session": "fixture-session",
+            "api_ready": false,
+            "attempt": "3c992afc1d4a4a25b377494c96050970",
+            "boot_id": "00000000-0000-0000-0000-000000000000",
+            "context": 262144,
+            "control_epoch": "fixture-epoch",
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 1,
+            "instance": {
+              "container_created": "2026-10-14T12:00:00Z",
+              "container_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "engine_birth": "102",
+              "engine_pid": 4202,
+              "owner": {
+                "birth": "101",
+                "invocation_id": "cccccccccccccccccccccccccccccccc",
+                "pid": 4201,
+                "unit": "spark-v4-qwen3-coder-next-80b-huihui@29c03e1d2c6b4dc4b4325ae000ea504d.service"
+              },
+              "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+            },
+            "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+            "message": "Cancellation/termination recorded for this run",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "observed_at_ms": 1800000000000,
+            "process_active": false,
+            "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+            "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d",
+            "shutdown_verified": true,
+            "shutdown_witness": {
+              "attempt": "3c992afc1d4a4a25b377494c96050970",
+              "container_created": "2026-10-14T12:00:00Z",
+              "container_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "engine_birth": "102",
+              "engine_pid": 4202,
+              "generation": 1,
+              "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+              "kind": "exact_run_resources_released",
+              "model_id": "qwen3-coder-next-80b-huihui",
+              "owner": {
+                "birth": "101",
+                "invocation_id": "cccccccccccccccccccccccccccccccc",
+                "pid": 4201,
+                "unit": "spark-v4-qwen3-coder-next-80b-huihui@29c03e1d2c6b4dc4b4325ae000ea504d.service"
+              },
+              "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+            },
+            "state": "STOPPED"
+          }
+        ],
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "submit_stop_noop_proven",
+      "request": {
+        "method": "submit",
+        "request": {
+          "action": "stop",
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 1,
+          "expected_instance": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-real-stop-noop",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "stop",
+          "attempt": "3c992afc1d4a4a25b377494c96050970",
+          "generation": 1,
+          "operation_id": "fixture-real-stop-noop",
+          "phase": "completed",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "result": {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "api_ready": false,
+            "attempt": "3c992afc1d4a4a25b377494c96050970",
+            "context": 262144,
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 1,
+            "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+            "message": "Already stopped",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "process_active": false,
+            "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d",
+            "shutdown_verified": true,
+            "shutdown_witness": {
+              "attempt": "3c992afc1d4a4a25b377494c96050970",
+              "container_created": "2026-10-14T12:00:00Z",
+              "container_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "engine_birth": "102",
+              "engine_pid": 4202,
+              "generation": 1,
+              "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+              "kind": "exact_run_resources_released",
+              "model_id": "qwen3-coder-next-80b-huihui",
+              "owner": {
+                "birth": "101",
+                "invocation_id": "cccccccccccccccccccccccccccccccc",
+                "pid": 4201,
+                "unit": "spark-v4-qwen3-coder-next-80b-huihui@29c03e1d2c6b4dc4b4325ae000ea504d.service"
+              },
+              "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+            },
+            "state": "STOPPED"
+          },
+          "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "bind_current_agent",
+      "request": {
+        "binding": {
+          "agent_id": "fixture-agent",
+          "agent_session": "fixture-next-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "controller_id": "fixture-controller"
+        },
+        "method": "bind_current_agent",
+        "schema_version": 1
+      },
+      "response": {
+        "authority": {
+          "agent_session": "fixture-next-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "old_receipt_current_authority",
+      "request": {
+        "authority": {
+          "agent_session": "fixture-next-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch"
+        },
+        "method": "receipt",
+        "request": {
+          "action": "stop",
+          "agent_session": "fixture-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 1,
+          "expected_instance": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-real-stop",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "stop",
+          "attempt": "3c992afc1d4a4a25b377494c96050970",
+          "generation": 1,
+          "operation_id": "fixture-real-stop",
+          "phase": "completed",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "result": {
+            "action_log": "/fixture/logs/qwen3-coder-next-80b-huihui/actions.log",
+            "api_ready": false,
+            "attempt": "3c992afc1d4a4a25b377494c96050970",
+            "context": 262144,
+            "endpoint": "http://127.0.0.1:31001/v1",
+            "engine_log": "/fixture/logs/qwen3-coder-next-80b-huihui/engine.log",
+            "generation": 1,
+            "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+            "message": "Exact stopped effect reconciled from supervisor/resource evidence",
+            "model_id": "qwen3-coder-next-80b-huihui",
+            "process_active": false,
+            "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d",
+            "shutdown_verified": true,
+            "shutdown_witness": {
+              "attempt": "3c992afc1d4a4a25b377494c96050970",
+              "container_created": "2026-10-14T12:00:00Z",
+              "container_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "engine_birth": "102",
+              "engine_pid": 4202,
+              "generation": 1,
+              "instance_identity": "70b57d888012ef5ba2ad785f1e1d81c0397cbb21820823143ee434ccc73f9ae5",
+              "kind": "exact_run_resources_released",
+              "model_id": "qwen3-coder-next-80b-huihui",
+              "owner": {
+                "birth": "101",
+                "invocation_id": "cccccccccccccccccccccccccccccccc",
+                "pid": 4201,
+                "unit": "spark-v4-qwen3-coder-next-80b-huihui@29c03e1d2c6b4dc4b4325ae000ea504d.service"
+              },
+              "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+            },
+            "state": "STOPPED"
+          },
+          "run_id": "29c03e1d2c6b4dc4b4325ae000ea504d"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "submit_replacement_stop",
+      "request": {
+        "method": "submit",
+        "request": {
+          "action": "stop",
+          "agent_session": "fixture-next-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 2,
+          "expected_instance": "aa46c0bc08ea2edebce4bdf0f6ad3f36409c9ed33bbbe20dc2c315896201e52a",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-replacement-stop",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "stop",
+          "attempt": "ffffffffffffffffffffffffffffffff",
+          "generation": 2,
+          "operation_id": "fixture-replacement-stop",
+          "phase": "dispatched",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "run_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "name": "receipt_replaced_runtime_unresolved",
+      "request": {
+        "authority": {
+          "agent_session": "fixture-next-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch"
+        },
+        "method": "receipt",
+        "request": {
+          "action": "stop",
+          "agent_session": "fixture-next-session",
+          "boot_id": "00000000-0000-0000-0000-000000000000",
+          "control_epoch": "fixture-epoch",
+          "deadline_ms": 1800000010000,
+          "expected_generation": 2,
+          "expected_instance": "aa46c0bc08ea2edebce4bdf0f6ad3f36409c9ed33bbbe20dc2c315896201e52a",
+          "issued_at_ms": 1800000000000,
+          "operation_id": "fixture-replacement-stop",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "profile_revision": "ff10fc0c556b07eb38672f1f6623866ecea9e43537b9743ba0f9446db40f1acc",
+          "schema_version": 1
+        },
+        "schema_version": 1
+      },
+      "response": {
+        "receipt": {
+          "action": "stop",
+          "attempt": "ffffffffffffffffffffffffffffffff",
+          "generation": 2,
+          "operation_id": "fixture-replacement-stop",
+          "phase": "unresolved",
+          "profile_id": "qwen3-coder-next-80b-huihui",
+          "result": {
+            "reason": "original_runtime_replaced_or_missing"
+          },
+          "run_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "schema_version": 1
+      }
+    }
+  ],
+  "provenance": {
+    "fixture_clock": "fixed wall time1800000000; decoder tests separately verify archived snapshot is stale then rebase only observation timestamp for schema-positive test",
+    "model_handoffs": "1 FakeAdapter handoff, not live model effect",
+    "sanitization": [
+      "Synthetic fixed boot/agent/controller/session authority before producer reads it",
+      "Temporary log path prefix replaced with /fixture; no argv/env/manifest/credentials exported"
+    ],
+    "scope": "Real final83 Python Controller+StateStore+bridge dispatch with injected FakeAdapter; zero actual command/model effects",
+    "source_sha256": {
+      "modelctl.py": "b57fec6143bd540a18864e643513aa5e44a83bdfe855b0ce51351a0de47390c8",
+      "monik_bridge.py": "436bafb44c493c474998e3e4438eb166132294ef2dc428b835b4659a1ecbe389",
+      "supervisor.py": "5d6de458b1fde7d217d4a71d44c4ce6f04f4cc12d831e790917e06827bee51be",
+      "test_bridge_candidate.py": "09c0f3906ade856891358ec162a751b2d3d3e21264f5a26c3dea796d05f077b8"
+    }
+  },
+  "schema_version": 1
+}

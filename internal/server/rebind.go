@@ -207,6 +207,17 @@ func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation
 			return e
 		}
 		p := storage.PreparedUpdateTarget{AgentID: t.AgentID, Status: t.Status, Stage: "update.queued", Message: "verified release pinned; waiting for agent execution"}
+		flavor, e := a.Store.AgentFlavor(ag.ID)
+		if e != nil {
+			return e
+		}
+		if flavor == "spark-light" {
+			p.Status = protocol.TargetUnsupported
+			p.Stage = "direct_update_unsupported"
+			p.Message = "Spark-light direct worker requires local monitoring-only upgrade; general service-host updates are not compatible"
+			plan = append(plan, p)
+			continue
+		}
 		if !ag.ManagedReady {
 			p.Status = protocol.TargetUnsupported
 			p.Stage = "unmanaged"
@@ -229,7 +240,7 @@ func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation
 			plan = append(plan, p)
 			continue
 		}
-		art := matchArtifact(arts, ag.OS, ag.Arch)
+		art := matchArtifactFlavor(arts, ag.OS, ag.Arch, flavor)
 		if art == nil {
 			p.Status = protocol.TargetUnsupported
 			p.Stage = "no_artifact"
@@ -237,7 +248,7 @@ func (a *App) handleRollout(op *protocol.Operation, req protocol.SubmitOperation
 			plan = append(plan, p)
 			continue
 		}
-		p.Evidence = map[string]any{"release_id": releaseID, "release_digest": digest, "os": ag.OS, "arch": ag.Arch, "name": art["name"], "sha256": art["sha256"], "length": art["length"], "component": "worker", "previous_session": ag.SessionID}
+		p.Evidence = map[string]any{"agent_flavor": flavor, "release_id": releaseID, "release_digest": digest, "os": ag.OS, "arch": ag.Arch, "name": art["name"], "sha256": art["sha256"], "length": art["length"], "component": "worker", "previous_session": ag.SessionID}
 		plan = append(plan, p)
 	}
 	if req.Action == "update.rollout" {
@@ -279,6 +290,16 @@ func (a *App) handleRestart(op *protocol.Operation) error {
 		if err != nil {
 			continue
 		}
+		flavor, e := a.Store.AgentFlavor(ag.ID)
+		if e != nil {
+			return e
+		}
+		if flavor == "spark-light" {
+			if e = a.Store.MarkTargetAndJob(op.ID, t.AgentID, protocol.TargetUnsupported, "direct_restart_unsupported", "Restart the direct Spark-light monitoring service locally; model lifetimes are independent", false, nil); e != nil {
+				return e
+			}
+			continue
+		}
 		if !ag.ManagedReady {
 			_ = a.Store.MarkTargetAndJob(op.ID, t.AgentID, protocol.TargetUnsupported, "unmanaged", "unmanaged worker cannot restart itself; install the service host first", false, nil)
 			continue
@@ -294,9 +315,21 @@ func (a *App) handleRestart(op *protocol.Operation) error {
 }
 
 func matchArtifact(arts []map[string]any, osn, arch string) map[string]any {
+	return matchArtifactFlavor(arts, osn, arch, "general")
+}
+func matchArtifactFlavor(arts []map[string]any, osn, arch, flavor string) map[string]any {
 	osn, arch = strings.ToLower(osn), strings.ToLower(arch)
+	if flavor != "general" && flavor != "spark-light" || flavor == "spark-light" && (osn != "linux" || arch != "arm64") {
+		return nil
+	}
 	for _, art := range arts {
 		want := osn + "-" + arch + "/monik-agent"
+		if flavor == "spark-light" {
+			want = "spark-light/" + want
+		}
+		if v, ok := art["agent_flavor"]; ok && v != flavor {
+			continue
+		}
 		if osn == "windows" {
 			want += ".exe"
 		}

@@ -46,14 +46,17 @@ type Profile struct {
 }
 
 type Manifest struct {
-	Format     int      `json:"format"`
-	OS         string   `json:"os"`
-	Arch       string   `json:"arch"`
-	Build      string   `json:"build"`
-	Installer  Part     `json:"installer"`
-	Worker     Part     `json:"worker"`
-	Supervisor Part     `json:"supervisor"`
-	Profile    *Profile `json:"profile,omitempty"`
+	Format                    int      `json:"format"`
+	OS                        string   `json:"os"`
+	Arch                      string   `json:"arch"`
+	Build                     string   `json:"build"`
+	AgentFlavor               string   `json:"agent_flavor,omitempty"`
+	RuntimeMode               string   `json:"runtime_mode,omitempty"`
+	MinimumControllerFeatures []string `json:"minimum_controller_features,omitempty"`
+	Installer                 Part     `json:"installer"`
+	Worker                    Part     `json:"worker"`
+	Supervisor                Part     `json:"supervisor"`
+	Profile                   *Profile `json:"profile,omitempty"`
 }
 
 type Bundle struct {
@@ -96,12 +99,19 @@ func Open(r io.ReaderAt, size int64) (*Bundle, error) {
 	if err := d.Decode(&m); err != nil {
 		return nil, fmt.Errorf("unsupported installer manifest fields")
 	}
-	if m.Format != 1 || m.OS != "linux" || (m.Arch != "amd64" && m.Arch != "arm64") || len(m.Build) < 1 || len(m.Build) > 128 {
+	if m.OS != "linux" || (m.Arch != "amd64" && m.Arch != "arm64") || len(m.Build) < 1 || len(m.Build) > 128 {
 		return nil, fmt.Errorf("unsupported installer format or platform")
+	}
+	if err := m.ValidateVariant(); err != nil {
+		return nil, err
 	}
 	payload := size - footerSize - int64(n)
 	offset := int64(0)
-	for _, p := range []Part{m.Installer, m.Worker, m.Supervisor} {
+	parts := []Part{m.Installer, m.Worker}
+	if m.Format == 1 {
+		parts = append(parts, m.Supervisor)
+	}
+	for _, p := range parts {
 		if p.Size < 64 || p.Size > MaxExecutable || len(p.SHA256) != 64 || offset > payload-p.Size {
 			return nil, fmt.Errorf("invalid executable bounds")
 		}
@@ -233,6 +243,9 @@ func (b *Bundle) CopyWorker(w io.Writer) error {
 	return e
 }
 func (b *Bundle) CopySupervisor(w io.Writer) error {
+	if b.Manifest.Format == 2 {
+		return fmt.Errorf("direct Spark installer has no supervisor payload")
+	}
 	_, e := io.CopyN(w, io.NewSectionReader(b.Reader, b.Manifest.Installer.Size+b.Manifest.Worker.Size, b.Manifest.Supervisor.Size), b.Manifest.Supervisor.Size)
 	return e
 }
@@ -247,21 +260,66 @@ func writeFull(w io.Writer, b []byte) error {
 // Pack makes a template from three already built executables of one platform.
 func Pack(w io.Writer, installer, worker, supervisor []byte, arch, build string) error {
 	m := Manifest{Format: 1, OS: "linux", Arch: arch, Build: build}
+	return packManifest(w, installer, worker, supervisor, m)
+}
+
+// PackSpark builds a credential-free direct worker package. Its distinct format
+// makes legacy installers refuse it instead of installing the wrong worker.
+func PackSpark(w io.Writer, installer, worker []byte, arch, build string) error {
+	m := Manifest{Format: 2, OS: "linux", Arch: arch, Build: build,
+		AgentFlavor: "spark-light", RuntimeMode: "direct", MinimumControllerFeatures: []string{"spark_telemetry_v1"}}
+	return packManifest(w, installer, worker, nil, m)
+}
+
+func (m Manifest) Flavor() string {
+	if m.Format == 1 {
+		return "general"
+	}
+	return m.AgentFlavor
+}
+
+func (m Manifest) ValidateVariant() error {
+	switch m.Format {
+	case 1:
+		if m.AgentFlavor != "" || m.RuntimeMode != "" || len(m.MinimumControllerFeatures) != 0 {
+			return fmt.Errorf("legacy installer cannot assert a new agent variant")
+		}
+	case 2:
+		if m.AgentFlavor != "spark-light" || m.RuntimeMode != "direct" || m.Arch != "arm64" ||
+			m.Supervisor != (Part{}) || len(m.MinimumControllerFeatures) != 1 || m.MinimumControllerFeatures[0] != "spark_telemetry_v1" {
+			return fmt.Errorf("invalid Spark-light installer variant")
+		}
+	default:
+		return fmt.Errorf("unsupported installer format")
+	}
+	return nil
+}
+
+func packManifest(w io.Writer, installer, worker, supervisor []byte, m Manifest) error {
+	if err := m.ValidateVariant(); err != nil {
+		return err
+	}
 	parts := []struct {
 		data []byte
 		part *Part
-	}{{installer, &m.Installer}, {worker, &m.Worker}, {supervisor, &m.Supervisor}}
+	}{{installer, &m.Installer}, {worker, &m.Worker}}
+	if m.Format == 1 {
+		parts = append(parts, struct {
+			data []byte
+			part *Part
+		}{supervisor, &m.Supervisor})
+	}
 	for _, p := range parts {
 		sum := sha256.Sum256(p.data)
 		*p.part = Part{Size: int64(len(p.data)), SHA256: hex.EncodeToString(sum[:])}
 		if p.part.Size > MaxExecutable || p.part.Size < 64 {
 			return fmt.Errorf("invalid executable size")
 		}
-		if e := verifyPart(bytes.NewReader(p.data), 0, *p.part, arch); e != nil {
+		if e := verifyPart(bytes.NewReader(p.data), 0, *p.part, m.Arch); e != nil {
 			return e
 		}
 	}
-	if (arch != "amd64" && arch != "arm64") || build == "" || len(build) > 128 {
+	if (m.Arch != "amd64" && m.Arch != "arm64") || m.Build == "" || len(m.Build) > 128 {
 		return fmt.Errorf("invalid template platform/build")
 	}
 	payload := io.MultiReader(bytes.NewReader(installer), bytes.NewReader(worker), bytes.NewReader(supervisor))

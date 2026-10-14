@@ -22,6 +22,9 @@ type Def struct {
 }
 
 var Registry = map[string]Def{
+	"model.start":            {ID: "model.start", Scope: ScopeAgents, Risk: "sensitive", RequiresCapability: "spark_control_v1", DurableOperation: true, IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "verified_profile_runtime"},
+	"model.stop":             {ID: "model.stop", Scope: ScopeAgents, Risk: "disruptive", RequiresCapability: "spark_control_v1", DurableOperation: true, IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "verified_profile_stopped"},
+	"model.restart":          {ID: "model.restart", Scope: ScopeAgents, Risk: "disruptive", RequiresCapability: "spark_control_v1", DurableOperation: true, IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "linked_stop_fresh_start_verified"},
 	"session.revoke_others":  {ID: "session.revoke_others", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "other_sessions_revoked"},
 	"maintenance.cancel":     {ID: "maintenance.cancel", Scope: ScopeServer, Risk: "config", IdempotencyRequired: true, AuthoritativeCompletion: "committed_cancellation_interval"},
 	"enrollment.window.set":  {ID: "enrollment.window.set", Scope: ScopeServer, Risk: "sensitive", IdempotencyRequired: true, RecentAuthenticationRequired: true, AuthoritativeCompletion: "committed_admission_window"},

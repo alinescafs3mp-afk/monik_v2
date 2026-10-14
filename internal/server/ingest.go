@@ -96,7 +96,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 	_ = cred
 	agentID = ag.ID
 	var rep protocol.AgentReport
-	if err := parseJSONLimit(r, &rep, 4<<20); err != nil {
+	if err := parseReportJSON(r, &rep); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid report")
 		return
 	}
@@ -119,7 +119,15 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		a.writeErr(w, 409, "report_rejected", "report not committed: "+err.Error())
 		return
 	}
+	// Only a successfully committed authenticated report advertises request
+	// compression support. Workers also verify the controller and exact ACK.
+	w.Header().Set("Accept-Encoding", "gzip")
 	if accepted.Live {
+		// A worker may have drained an older success receipt before its matching
+		// observation arrived. Recheck the stored original without issuing a job.
+		if err := a.Store.ReconcileUnverifiedModelReceipts(ag.ID); err != nil {
+			a.Log.Error("model receipt reconciliation failed", "agent_id", ag.ID, "error", err)
+		}
 		if err := a.Store.RecordMigrationStatus(ag.ID, rep.Migration, rep.EndpointGeneration); err != nil {
 			a.Log.Warn("migration status rejected", "agent_id", ag.ID)
 		}
@@ -142,20 +150,44 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	// Historical replay must never deliver cached commands or rewrite current config.
 	if !rep.IsLive {
-		a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC()})
+		a.writeJSON(w, 200, protocol.ControlResponse{Features: protocol.SparkFeatures, Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC()})
 		return
 	}
 	receiptAcks := make([]string, 0, len(rep.JobReceipts))
 	for _, rec := range rep.JobReceipts {
 		if err := a.Store.ApplyReceipt(ag.ID, rec); err != nil {
 			a.Store.Audit("agent", "receipt_rejected", ag.ID, rec.JobID)
-		} else {
-			receiptAcks = append(receiptAcks, rec.JobID)
+			continue
 		}
+		if rec.Status == protocol.TargetSucceeded {
+			var committedOperation string
+			var targetStatus protocol.TargetStatus
+			err := a.Store.DB.QueryRowContext(r.Context(), `SELECT j.action,t.status FROM agent_jobs j JOIN operation_targets t ON t.operation_id=j.operation_id AND t.agent_id=j.agent_id AND t.job_id=j.job_id WHERE j.job_id=? AND j.agent_id=?`, rec.JobID, ag.ID).Scan(&committedOperation, &targetStatus)
+			if err != nil {
+				a.Log.Error("receipt acknowledgement lookup failed", "agent_id", ag.ID, "job_id", rec.JobID, "error", err)
+				continue
+			}
+			// Storage accepts an unproven model success as unknown, retaining the
+			// original receipt for later proof. ACK would make the worker stop
+			// disclosing it, even though the outcome is still unconfirmed.
+			if strings.HasPrefix(committedOperation, "model.") && targetStatus == protocol.TargetUnknownResult {
+				continue
+			}
+		}
+		receiptAcks = append(receiptAcks, rec.JobID)
 	}
 	fresh, err := a.Store.Agent(ag.ID)
 	if err != nil {
 		a.writeErr(w, 500, "db", "control lookup failed")
+		return
+	}
+	// A caller cannot promote an old/backfilled immutable envelope into a
+	// command poll merely by toggling IsLive. Lost replies for the current
+	// committed live sequence remain retryable without changing telemetry.
+	age := a.Clock.Now().Sub(rep.ObservedAt)
+	controlReport := rep.SessionID == fresh.SessionID && age >= -5*time.Second && age <= protocol.StaleContact && (accepted.Live || accepted.Duplicate && rep.Sequence == fresh.LastSeq)
+	if !controlReport {
+		a.writeJSON(w, 200, protocol.ControlResponse{Features: protocol.SparkFeatures, Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks})
 		return
 	}
 	var desired *protocol.DesiredConfig
@@ -194,7 +226,7 @@ func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	a.writeJSON(w, 200, protocol.ControlResponse{Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, DesiredConfig: desired, Jobs: jobs, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks})
+	a.writeJSON(w, 200, protocol.ControlResponse{Features: protocol.SparkFeatures, Ack: &protocol.IngestAck{UpToSequence: rep.Sequence, Committed: true}, DesiredConfig: desired, Jobs: jobs, ControllerID: a.ControllerID(), ServerTime: a.Clock.Now().UTC(), ReceiptAcks: receiptAcks})
 }
 
 func bearer(r *http.Request) (agentID, cred string, ok bool) {

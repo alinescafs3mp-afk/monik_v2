@@ -21,6 +21,16 @@ import (
 )
 
 func (a *App) routes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/sparks", a.needAuth(a.handleSparks))
+	mux.HandleFunc("GET /api/v1/sparks/{id}", a.needAuth(a.handleSpark))
+	mux.HandleFunc("POST /api/v1/sparks/{id}/classification", a.needAuth(a.handleSparkClassification))
+	mux.HandleFunc("GET /api/v1/sparks/{id}/history", a.needAuth(a.handleSparkHistory))
+	mux.HandleFunc("POST /api/v1/agent/spark/stage", a.handleSparkStage)
+	mux.HandleFunc("POST /api/v1/sparks/{id}/logs", a.needAuth(a.handleSparkLogCreate))
+	mux.HandleFunc("GET /api/v1/sparks/{id}/logs/{stream}/events", a.needAuth(a.handleSparkLogEvents))
+	mux.HandleFunc("DELETE /api/v1/sparks/{id}/logs/{stream}", a.needAuth(a.handleSparkLogDelete))
+	mux.HandleFunc("GET /api/v1/agent/spark/logs", a.handleAgentSparkLogLeases)
+	mux.HandleFunc("POST /api/v1/agent/spark/logs", a.handleAgentSparkLogBatch)
 	mux.HandleFunc("POST /api/v1/agents/{id}/console-config", a.needAuth(a.handleConsoleConfigure))
 	mux.HandleFunc("GET /api/v1/agent/console-channel", a.handleAgentConsoleChannel)
 	mux.HandleFunc("GET /api/v1/agents/{id}/agent-console", a.needAuth(a.handleAgentConsoleInfo))
@@ -293,6 +303,18 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 	reporting, total := 0, 0
 	cards := make([]map[string]any, 0, len(agents))
 	for _, ag := range agents {
+		flavor, e := a.Store.AgentFlavor(ag.ID)
+		if e != nil {
+			a.writeErr(w, 500, "db", "flavor lookup failed")
+			return
+		}
+		classification := ""
+		if spark, e := a.Store.SparkSnapshot(ag.ID); e == nil {
+			classification = spark.Classification
+		} else if !errors.Is(e, storage.ErrNotFound) {
+			a.writeErr(w, 500, "db", "classification lookup failed")
+			return
+		}
 		if ag.Archived {
 			continue
 		}
@@ -304,7 +326,7 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, s *storage.
 		if ag.Hidden {
 			continue
 		}
-		card := map[string]any{"id": ag.ID, "name": display(ag), "os": ag.OS, "arch": ag.Arch, "state": st, "reason": reason, "pinned": ag.Pinned, "managed_ready": ag.ManagedReady, "version": ag.WorkerVersion, "last_live_at": ag.LastLiveAt, "has_problem": st != "ok"}
+		card := map[string]any{"agent_flavor": flavor, "classification": classification, "id": ag.ID, "name": display(ag), "os": ag.OS, "arch": ag.Arch, "state": st, "reason": reason, "pinned": ag.Pinned, "managed_ready": ag.ManagedReady, "version": ag.WorkerVersion, "last_live_at": ag.LastLiveAt, "has_problem": st != "ok"}
 		host, obs, err := a.Store.LatestHost(ag.ID)
 		if err != nil && err != storage.ErrNotFound {
 			a.writeErr(w, 500, "db", "could not load measurements")
@@ -382,6 +404,18 @@ func (a *App) handleAgents(w http.ResponseWriter, r *http.Request, s *storage.Se
 	}
 	out := make([]map[string]any, 0, len(agents))
 	for _, ag := range agents {
+		flavor, e := a.Store.AgentFlavor(ag.ID)
+		if e != nil {
+			a.writeErr(w, 500, "db", "flavor lookup failed")
+			return
+		}
+		classification := ""
+		if spark, e := a.Store.SparkSnapshot(ag.ID); e == nil {
+			classification = spark.Classification
+		} else if !errors.Is(e, storage.ErrNotFound) {
+			a.writeErr(w, 500, "db", "classification lookup failed")
+			return
+		}
 		st, reason := contact(ag, a.Clock.Now())
 		migration, err := a.Store.AgentMigrationStatus(ag.ID)
 		if err != nil {
@@ -389,6 +423,7 @@ func (a *App) handleAgents(w http.ResponseWriter, r *http.Request, s *storage.Se
 			return
 		}
 		out = append(out, map[string]any{
+			"agent_flavor": flavor, "classification": classification,
 			"id": ag.ID, "display_name": display(ag), "hostname": ag.Hostname, "os": ag.OS, "arch": ag.Arch,
 			"worker_version": ag.WorkerVersion, "service_host_version": ag.ServiceHostVersion,
 			"managed_ready": ag.ManagedReady, "desired_revision": ag.DesiredRevision, "applied_revision": ag.AppliedRevision,
@@ -416,6 +451,18 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 		a.writeErr(w, 404, "not_found", "agent not found")
 		return
 	}
+	flavor, e := a.Store.AgentFlavor(id)
+	if e != nil {
+		a.writeErr(w, 500, "db", "flavor lookup failed")
+		return
+	}
+	classification := ""
+	if spark, e := a.Store.SparkSnapshot(id); e == nil {
+		classification = spark.Classification
+	} else if !errors.Is(e, storage.ErrNotFound) {
+		a.writeErr(w, 500, "db", "classification lookup failed")
+		return
+	}
 	host, obs, hostErr := a.Store.LatestHost(id)
 	if hostErr != nil && hostErr != storage.ErrNotFound {
 		a.writeErr(w, 500, "db", "could not read host data")
@@ -439,6 +486,7 @@ func (a *App) handleAgent(w http.ResponseWriter, r *http.Request, s *storage.Ses
 		return
 	}
 	a.writeJSON(w, 200, map[string]any{
+		"agent_flavor": flavor, "classification": classification,
 		"maintenance_active": maintenance, "agent": ag, "host": host, "observed_at": obs, "state": st, "reason": reason, "since": since, "services": svcs,
 		"discovery": discovery, "desired_config": json.RawMessage(orJSON(ag.DesiredConfig)),
 		"age_seconds": a.Clock.Now().Sub(obs).Seconds(), "unavailable_actions": actionAvailability(),
@@ -975,6 +1023,9 @@ func (a *App) handleBackups(w http.ResponseWriter, r *http.Request, s *storage.S
 
 func (a *App) handleControllerIdentity(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, 200, map[string]any{
+		// Pre-enrollment compatibility metadata, bound by the installer's TLS
+		// identity check. Only authenticated report negotiation enables a worker.
+		"features":      protocol.SparkFeatures,
 		"controller_id": a.ControllerID(),
 		"protocol_min":  version.ProtocolMin,
 		"protocol_max":  version.ProtocolMax,

@@ -136,7 +136,8 @@ func operationView(op *protocol.Operation, s *storage.Session) *protocol.Operati
 		return op
 	}
 	def, err := actions.Lookup(op.Action)
-	if err == nil && def.Risk != "sensitive" {
+	model := strings.HasPrefix(op.Action, "model.")
+	if err == nil && def.Risk != "sensitive" && !model {
 		return op
 	}
 	out := *op
@@ -144,6 +145,9 @@ func operationView(op *protocol.Operation, s *storage.Session) *protocol.Operati
 	out.Targets = append([]protocol.TargetResult(nil), op.Targets...)
 	for i := range out.Targets {
 		out.Targets[i].Evidence = map[string]any{"redacted": true}
+		if model {
+			out.Targets[i].Message = "Model operation details are available to the owner"
+		}
 	}
 	return &out
 }

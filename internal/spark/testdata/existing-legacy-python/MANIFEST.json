@@ -1,0 +1,17 @@
+{
+  "files": {
+    "gpt-cancelled-inert-reaped.json": "51a83608a702dbe07a8b7a9df658999b96378d14e0b8a94a1c36eb2ed15439e1",
+    "gpt-cancelled-inert-stopped.json": "51a83608a702dbe07a8b7a9df658999b96378d14e0b8a94a1c36eb2ed15439e1",
+    "gpt-pre-capture-starting.json": "97a4a88509c4491f8b3d804a6ddd17e40654e44efd7e588e668fdd02af24ab4b",
+    "gpt-ready.json": "08b71595b7fd75b5974d487831ccfc14cd8c7ec976167f88d6c4c36d8e3fab58",
+    "gpt-stopped.json": "5bf0229781c82548e2c33cc3581ed6fb9cdaab730656e99dd331f4badfc7815c",
+    "qwen-cancelled-inert-reaped.json": "5659db14eadf9d02b153d1b63c4b30c4a8e91a7b1e4aeba0bbccb64591421960",
+    "qwen-cancelled-inert-stopped.json": "03a2c7514c9a9e66c0bb57930232f4fd002568fb780bdf74ff964f19e9ad722a",
+    "qwen-pre-capture-starting.json": "9f302fc7c592da1d0adfe2ba17c3ef05e557e889d42bc8fd5456cc032b4820ae",
+    "qwen-ready.json": "13e65b83df6ac5f8b70e198d1dc7b1c34de03d3bbb33682c54cef12520e59612",
+    "qwen-stopped.json": "bc0651614fa26b1221a42b3925bcb591c166ee8a2df30f4646b3e81023937db2"
+  },
+  "generator_source_pins_sha256": "e3d4deecb0d4b9162bf2a6026a407b56b00ba8d39f8efa101b306c92c91f6e77",
+  "provenance": "Actual Controller.bridge_snapshot with injected offline host metadata; original resource fixture explicitly uses root-observed defaults; no native/model acceptance",
+  "schema_version": 1
+}

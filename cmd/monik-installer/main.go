@@ -33,9 +33,12 @@ type installedConfig struct {
 	StateDir       string `json:"state_dir"`
 	Pending        bool   `json:"pending_registration"`
 	Managed        bool   `json:"managed"`
+	AgentFlavor    string `json:"agent_flavor"`
+	RuntimeMode    string `json:"runtime_mode"`
 }
 type installationStatus struct {
 	Ready            bool   `json:"ready"`
+	AgentFlavor      string `json:"agent_flavor"`
 	AgentID          string `json:"agent_id"`
 	ControllerID     string `json:"controller_id"`
 	SessionID        string `json:"session_id"`
@@ -72,6 +75,7 @@ func main() {
 	}
 	if len(os.Args) == 2 {
 		fmt.Printf("Monik installer %s %s/%s\n", b.Manifest.Build, b.Manifest.OS, b.Manifest.Arch)
+		fmt.Printf("Agent flavor: %s\n", b.Manifest.Flavor())
 		if p := b.Manifest.Profile; p != nil {
 			fmt.Printf("Controller: %s\nProfile expires: %s\nOne machine. Enrollment credential is intentionally not printed.\n", p.ControllerURL, p.ExpiresAt.UTC().Format(time.RFC3339))
 
@@ -114,6 +118,15 @@ func execute(ctx context.Context, b *installerbundle.Bundle, s steps, out io.Wri
 		if p := b.Manifest.Profile; p != nil && existing.ControllerID != "" && existing.ControllerID != p.ControllerID {
 			return fmt.Errorf("machine already belongs to a different controller; identity was not changed")
 		}
+		if existing.Managed {
+			flavor := existing.AgentFlavor
+			if flavor == "" {
+				flavor = "general"
+			}
+			if flavor != b.Manifest.Flavor() {
+				return fmt.Errorf("existing %s agent was preserved; request an explicit local flavor conversion, not enrollment or implicit replacement", flavor)
+			}
+		}
 		if existing.Pending {
 			return fmt.Errorf("existing registration awaits owner approval; identity was preserved")
 		}
@@ -151,7 +164,10 @@ func execute(ctx context.Context, b *installerbundle.Bundle, s steps, out io.Wri
 	if existing == nil || !existing.Managed {
 		return fmt.Errorf("managed installation was not saved")
 	}
-	fmt.Fprintln(out, "[4/4] Ждём два свежих подтверждённых отчёта и связь с супервизором…")
+	if b.Manifest.Flavor() == "spark-light" && (existing.AgentFlavor != "spark-light" || existing.RuntimeMode != "direct") {
+		return fmt.Errorf("Spark light mode was not saved")
+	}
+	fmt.Fprintln(out, "[4/4] Ждём два свежих подтверждённых отчёта и живой процесс службы…")
 	if e = s.ready(ctx, existing); e != nil {
 		return e
 	}
@@ -186,18 +202,28 @@ func readResponse(ctx context.Context, client *http.Client, url, agentID, auth s
 	return jsonutil.ReadObject(resp.Body, 64<<10, dst)
 }
 func verifyController(ctx context.Context, p *installerbundle.Profile) error {
+	return verifyControllerFeatures(ctx, p, nil)
+}
+
+func verifyControllerFeatures(ctx context.Context, p *installerbundle.Profile, required []string) error {
 	client := clientFor(p.CACertPEM)
 	defer client.CloseIdleConnections()
 	var id struct {
-		ControllerID string `json:"controller_id"`
-		Product      string `json:"product"`
-		Writable     bool   `json:"writable"`
+		ControllerID string         `json:"controller_id"`
+		Product      string         `json:"product"`
+		Writable     bool           `json:"writable"`
+		Features     map[string]int `json:"features"`
 	}
 	if e := readResponse(ctx, client, strings.TrimRight(p.ControllerURL, "/")+"/api/v1/agent/identity", "", "", &id); e != nil {
 		return e
 	}
 	if id.ControllerID != p.ControllerID || id.Product != "monik" || !id.Writable {
 		return fmt.Errorf("controller identity mismatch or restore mode; no enrollment was attempted")
+	}
+	for _, feature := range required {
+		if id.Features[feature] != 1 {
+			return fmt.Errorf("controller upgrade required: missing %s v1; no enrollment attempted", feature)
+		}
 	}
 	return nil
 }

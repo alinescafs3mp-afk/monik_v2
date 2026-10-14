@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -22,6 +23,11 @@ import (
 	"github.com/alinescafs3mp-afk/monik_v2/internal/tufutil"
 )
 
+// Seed adapted from MONIK_V2_SOL_SPARK_V2 kit synthetic contract, never real models.
+//
+//go:embed spark.json
+var sparkFixture []byte
+
 func must(err error) {
 	if err != nil {
 		log.Fatal(err)
@@ -38,6 +44,7 @@ func host(at time.Time, i int) *protocol.HostMetrics {
 func main() {
 	dir := flag.String("data-dir", "", "new empty test directory, required")
 	port := flag.Int("port", 18777, "loopback port")
+	withSpark := flag.Bool("with-spark", false, "add visibly synthetic Spark telemetry")
 	flag.Parse()
 	if *dir == "" {
 		log.Fatal("--data-dir is required")
@@ -59,7 +66,11 @@ func main() {
 	}
 	raw, _ := json.Marshal(cfg)
 	hash := secure.SHA256Bytes(raw)
-	for _, id := range []string{"audit-host", "offline-host"} {
+	agentIDs := []string{"audit-host", "offline-host"}
+	if *withSpark {
+		agentIDs = append(agentIDs, "spark-fixture")
+	}
+	for _, id := range agentIDs {
 		must(app.Store.InsertAgent(&storage.AgentRow{ID: id, Hostname: id, DisplayName: map[string]string{"audit-host": "Audit host", "offline-host": "Offline fixture"}[id], OS: "linux", Arch: "amd64", DesiredRevision: 1, DesiredHash: hash, DesiredConfig: string(raw)}, "fixture-verifier"))
 		must(app.Store.SetDesired(id, 1, hash, string(raw)))
 	}
@@ -79,6 +90,26 @@ func main() {
 		at := now.Add(time.Duration(i-1200) * 5 * time.Second)
 		must(app.Store.InsertHostSample("audit-host", int64(i+1), "history", at, host(at, i)))
 	}
+	feedSpark := func(seq int64) {
+		at := time.Now().UTC()
+		var ext protocol.SparkExtensionV1
+		must(json.Unmarshal(sparkFixture, &ext))
+		for i := range ext.Metrics {
+			ext.Metrics[i].Observation.ObservedAt = at
+		}
+		ext.Inventory.ObservedAt = at
+		ext.ControlState.ObservedAt = at
+		for i := range ext.ModelStates {
+			ext.ModelStates[i].ObservedAt = at
+		}
+		h := host(at, 0)
+		h.Hostname = "SYNTHETIC Spark fixture"
+		h.Arch = "arm64"
+		h.RAMTotal = 128 << 30
+		h.RAMAvailable = 32 << 30
+		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "spark-fixture", AgentFlavor: "spark-light", SessionID: "spark-fixture-session", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "synthetic-spark", Capabilities: map[string]protocol.Capability{"spark_hardware_v1": {Status: protocol.CapSupported, Reason: "synthetic_contract_fixture_only"}}, Host: h, Spark: &ext}
+		must(retryFixture(context.Background(), 5*time.Second, func() error { _, err := app.Store.AcceptReport(rep); return err }))
+	}
 	feed := func(seq int64) {
 		at := time.Now().UTC()
 		rep := protocol.AgentReport{SchemaVersion: 3, AgentID: "audit-host", SessionID: "fixture-live", Sequence: seq, ObservedAt: at, IsLive: true, ConfigRevision: 1, ConfigHash: hash, WorkerVersion: "audit-fixture", Capabilities: map[string]protocol.Capability{"http_custom_v1": {Status: "supported"}, "selective_monitor_v1": {Status: "supported"}}, Host: host(at, int(seq))}
@@ -93,6 +124,9 @@ func main() {
 		must(retryFixture(context.Background(), 5*time.Second, func() error {
 			return app.Store.AppendEvent("metrics", "agent", "audit-host", seq, map[string]any{"fixture": true})
 		}))
+	}
+	if *withSpark {
+		feedSpark(1)
 	}
 	feed(1)
 	// Signed but deliberately non-executable payload for controller/browser tests.
@@ -120,6 +154,9 @@ func main() {
 			case <-ticker.C:
 				seq++
 				feed(seq)
+				if *withSpark {
+					feedSpark(seq)
+				}
 			}
 		}
 	}()

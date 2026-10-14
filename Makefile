@@ -7,18 +7,19 @@ LDFLAGS := -s -w -X github.com/alinescafs3mp-afk/monik_v2/internal/version.Versi
 DIST := dist
 UI := web
 
-.PHONY: all ui bin test test-race vet dist linux windows agent-linux agent-windows clean
+.PHONY: all ui bin test test-race vet dist linux windows agent-linux agent-windows spark-agent clean
 
 all: ui bin
 
 ui:
 	cd $(UI) && npm ci --no-audit --no-fund && node node_modules/esbuild/install.js && npm run build
+	touch internal/webui/dist/.gitkeep
 
 bin: ui
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-server ./cmd/monik-server
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-agent ./cmd/monik-agent
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-service-host ./cmd/monik-service-host
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-release ./cmd/monik-release
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-server ./cmd/monik-server
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-agent ./cmd/monik-agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-service-host ./cmd/monik-service-host
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-release ./cmd/monik-release
 
 linux: bin
 
@@ -30,12 +31,15 @@ windows:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/windows-amd64/monik-release.exe ./cmd/monik-release
 
 agent-linux:
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-agent ./cmd/monik-agent
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-service-host ./cmd/monik-service-host
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-agent ./cmd/monik-agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-amd64/monik-service-host ./cmd/monik-service-host
 
 agent-windows:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/windows-amd64/monik-agent.exe ./cmd/monik-agent
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/windows-amd64/monik-service-host.exe ./cmd/monik-service-host
+
+spark-agent:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/linux-arm64/monik-spark-agent ./cmd/monik-spark-agent
 
 test:
 	CGO_ENABLED=0 $(GO) test ./...

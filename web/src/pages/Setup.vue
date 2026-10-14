@@ -6,11 +6,12 @@ import { get, post } from "../api";
 const router = useRouter();
 const username = ref("owner");
 const password = ref("");
-const advertised = ref("https://46.150.103.61:8777");
+const advertised = ref("");
 const listen = ref("0.0.0.0:8777");
 const err = ref("");
 const pending = ref(false);
 const info = ref("");
+const statusLoaded=ref(false);
 
 onMounted(async () => {
   try {
@@ -19,6 +20,7 @@ onMounted(async () => {
     );
     advertised.value = st.advertised_url || st.default_url;
     listen.value = st.listen;
+    statusLoaded.value=true;
     if (!st.setup_required) await router.replace("/login");
   } catch (e) {
     err.value = (e as { message?: string }).message || "Не удалось получить статус";
@@ -26,6 +28,7 @@ onMounted(async () => {
 });
 
 async function submit() {
+  if(pending.value||!statusLoaded.value)return;
   err.value = "";
   pending.value = true;
   try {
@@ -56,7 +59,7 @@ async function submit() {
       <p><label>Listen<br /><input v-model="listen" required /></label></p>
       <p v-if="err" class="err" role="alert">{{ err }}</p>
       <p v-if="info" class="ok">{{ info }}</p>
-      <button class="primary" :disabled="pending">{{ pending ? "Сохранение…" : "Завершить настройку" }}</button>
+      <button class="primary" :disabled="pending||!statusLoaded">{{ pending ? "Сохранение…" : "Завершить настройку" }}</button>
     </form>
   </main>
 </template>

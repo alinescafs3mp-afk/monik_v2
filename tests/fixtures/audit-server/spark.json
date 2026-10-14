@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "memory_topology": "unified",
+  "metrics": [
+    {
+      "metric_id": "memory.available_bytes",
+      "observation": {
+        "value": 34359738368,
+        "unit": "bytes",
+        "source": "fixture:synthetic",
+        "observed_at": "2026-10-13T20:00:00Z",
+        "quality": "ok"
+      }
+    },
+    {
+      "metric_id": "gpu.0.utilization_percent",
+      "observation": {
+        "value": 0,
+        "unit": "percent",
+        "source": "fixture:synthetic",
+        "observed_at": "2026-10-13T20:00:00Z",
+        "quality": "ok"
+      }
+    },
+    {
+      "metric_id": "gpu.0.framebuffer_used_bytes",
+      "observation": {
+        "value": null,
+        "unit": "bytes",
+        "source": "fixture:synthetic",
+        "observed_at": "2026-10-13T20:00:00Z",
+        "quality": "unsupported",
+        "reason": "unified_memory_no_dedicated_framebuffer"
+      }
+    }
+  ],
+  "inventory": {
+    "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "complete": true,
+    "observed_at": "2026-10-13T20:00:00Z",
+    "profiles": [
+      {
+        "profile_id": "fixture-llama",
+        "display_name": "Синтетический пример, не модель владельца",
+        "profile_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "engine": "llama.cpp",
+        "supervisor": "systemd-user",
+        "control_allowed": false,
+        "control_reason": "local_control_not_enabled",
+        "configured_model_ref": "fixture/model-not-installed",
+        "settings": [
+          {
+            "name": "context_length",
+            "value": 32768,
+            "provenance": "configured"
+          }
+        ],
+        "allowed_actions": [],
+        "engine_version": null,
+        "supervisor_version": null,
+        "endpoint_hint": null,
+        "model_aliases": []
+      }
+    ]
+  },
+  "model_states": [
+    {
+      "profile_id": "fixture-llama",
+      "generation": 0,
+      "observed_at": "2026-10-13T20:00:00Z",
+      "supervisor_state": "stopped",
+      "readiness": "not_applicable",
+      "quality": "ok"
+    }
+  ],
+  "control_state": {
+    "enabled": false,
+    "epoch": null,
+    "observed_at": "2026-10-13T20:00:00Z",
+    "reason": "fixture_read_only"
+  }
+}

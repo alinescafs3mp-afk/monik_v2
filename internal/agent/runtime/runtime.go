@@ -74,6 +74,9 @@ func Open(cfgPath string) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	if st.File.AgentFlavor != "" && st.File.AgentFlavor != "general" {
+		return nil, fmt.Errorf("this general worker cannot run %s state; preserve enrollment and install the matching flavor", st.File.AgentFlavor)
+	}
 	if st.File.AgentID == "" || st.File.ControllerID == "" || st.File.StateDir == "" || st.File.SchemaVersion != protocol.SchemaVersion {
 		return nil, fmt.Errorf("incomplete enrolled agent configuration")
 	}

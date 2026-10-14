@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {computed,ref,watch} from 'vue';
 import {useRoute,useRouter} from 'vue-router';
 import {usePolling} from '../composables/usePolling';
@@ -55,13 +57,13 @@ async function reconcile(key:string){try{await reconcileOperation(key);pending.v
    <label>Прочтение <select v-model="read" aria-label="Прочтение операций" @change="filtersChanged"><option value="all">Все</option><option value="unread">Непрочитанные</option><option value="read">Прочитанные</option></select></label>
    <label>Поиск <input v-model="searchDraft" maxlength="120" type="search" placeholder="Действие, пользователь или ID" aria-label="Поиск операций"/></label><button type="submit">Найти</button><button type="button" :disabled="refreshing" @click="refresh">Перечитать</button>
   </form>
-  <div class="row operation-selection" aria-live="polite"><span>Выбрано: {{selectedCount}}</span><button :disabled="saving||!selectedCount" @click="bulk(true)">{{saving?'Сохраняем…':'Прочитать выбранные'}}</button><button :disabled="saving||!selectedCount" @click="bulk(false)">Считать выбранные непрочитанными</button><button :disabled="saving||!selectedCount" @click="selected={}">Снять выбор</button></div>
+  <div class="row operation-selection" aria-live="polite"><span>Выбрано: {{selectedCount}}</span><button :disabled="!owner||saving||!selectedCount" @click="bulk(true)">{{saving?'Сохраняем…':'Прочитать выбранные'}}</button><button :disabled="!owner||saving||!selectedCount" @click="bulk(false)">Считать выбранные непрочитанными</button><button :disabled="!owner||saving||!selectedCount" @click="selected={}">Снять выбор</button></div>
   <p role="status">{{notice}}</p><p v-if="actionError" role="alert" class="panel err">{{actionError}}</p>
   <p class="muted">Прочтение убирает красное уведомление, но не исправляет и не повторяет операцию. Новый сбой снова потребует внимания. Выбор действует только на отмеченные строки этой страницы.</p>
   <p v-if="!loading&&!rows.length" class="panel">Нет операций в этом фильтре.</p>
-  <div v-else class="table-wrap"><table class="operation-table"><thead><tr><th><input type="checkbox" aria-label="Выбрать операции на странице" :checked="pageSelected" :disabled="saving" @change="selectPage(($event.target as HTMLInputElement).checked)"/></th><th>Создана</th><th>Действие</th><th>Пользователь</th><th>Результат выполнения</th><th>Целей</th><th>Прочтение</th></tr></thead><tbody>
+  <div v-else class="table-wrap"><table class="operation-table"><thead><tr><th><input type="checkbox" aria-label="Выбрать операции на странице" :checked="pageSelected" :disabled="!owner||saving" @change="selectPage(($event.target as HTMLInputElement).checked)"/></th><th>Создана</th><th>Действие</th><th>Пользователь</th><th>Результат выполнения</th><th>Целей</th><th>Прочтение</th></tr></thead><tbody>
    <tr v-for="o in rows" :key="o.operation_id" :class="{'operation-needs-attention':requiresAttention(o),'operation-read':o.read}" :data-operation-id="o.operation_id">
-    <td><input type="checkbox" :aria-label="`Выбрать операцию ${o.operation_id}`" :checked="!!selected[o.operation_id]" :disabled="saving" @change="selectRow(o,($event.target as HTMLInputElement).checked)"/></td>
+    <td><input type="checkbox" :aria-label="`Выбрать операцию ${o.operation_id}`" :checked="!!selected[o.operation_id]" :disabled="!owner||saving" @change="selectRow(o,($event.target as HTMLInputElement).checked)"/></td>
     <td>{{new Date(o.created_at).toLocaleString()}}</td><td><router-link :to="'/operations/'+encodeURIComponent(o.operation_id)">{{o.action}}</router-link></td><td>{{o.actor}}</td>
     <td><span :class="{'err':requiresAttention(o)}">{{stateLabel(o.status)}}</span><small v-if="requiresAttention(o)&&o.status==='running'">Есть проблема у части целей</small></td><td>{{o.targets?.length||0}}</td>
     <td><OperationReadButton :operation="o" @changed="refresh"/></td>

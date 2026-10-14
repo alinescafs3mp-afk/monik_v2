@@ -3,6 +3,7 @@ defineProps<{ name: string }>();
 const paths: Record<string,string> = {
  overview:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
  machine:'M3 4h18v12H3z M8 21h8 M12 16v5',
+ spark:'M9 2h6v4h4v4h3v5h-3v4h-4v3H9v-3H5v-4H2v-5h3V6h4z M9 9h6v6H9z',
  service:'M8 4L2 12l6 8 M16 4l6 8-6 8 M14 4l-4 16',
  problem:'M12 3L2 21h20z M12 9v5 M12 17v1',
  agent:'M5 3h14v7H5z M5 14h14v7H5z M8 6h1 M8 17h1',

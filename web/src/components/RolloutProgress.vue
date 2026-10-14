@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {computed,ref} from 'vue';
 import {submitOp} from '../api';
 import {canResume,controlResult,rolloutCounts,rolloutLabel,type Rollout} from '../rollouts';
@@ -28,8 +30,8 @@ async function control(pause:boolean){
   <p v-if="rollout.reason">{{rollout.reason}}</p>
   <p v-if="rollout.state==='blocked'" class="muted">Новые задания не выдаются. Прочтение ошибки не продолжит раскатку. Отмените неотправленные цели в операции и проверьте результат перед новой попыткой.</p>
   <div class="rollout-controls">
-   <button v-if="rollout.state==='running'" :disabled="!!busy" @click="control(true)">{{busy==='pause'?'Сохраняем паузу…':'Пауза раскатки'}}</button>
-   <button v-if="canResume(rollout)" :disabled="!!busy" @click="control(false)">{{busy==='resume'?'Подтверждаем…':'Продолжить раскатку'}}</button>
+   <button v-if="rollout.state==='running'" :disabled="!owner||!!busy" @click="control(true)">{{busy==='pause'?'Сохраняем паузу…':'Пауза раскатки'}}</button>
+   <button v-if="canResume(rollout)" :disabled="!owner||!!busy" @click="control(false)">{{busy==='resume'?'Подтверждаем…':'Продолжить раскатку'}}</button>
    <button :aria-expanded="expanded" @click="expanded=!expanded">{{expanded?'Скрыть цели':'Показать цели'}}</button>
   </div>
   <p v-if="message" role="status">{{message}}</p><p v-if="error" role="alert">{{error}}</p>

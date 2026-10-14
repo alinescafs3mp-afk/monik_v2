@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {computed,ref} from 'vue';
 import {get,submitOp} from '../api';
 import {usePolling} from '../composables/usePolling';
@@ -8,9 +10,9 @@ const windows=ref<any[]>([]),purpose=ref(''),minutes=ref(60),start=ref(''),busy=
 const {loading,error,refresh}=usePolling(async()=>{const d=await get<any>('/api/v1/monitoring');windows.value=d.maintenance||[];truncated.value=d.truncated;offset.value=Date.parse(d.server_time)-Date.now();now.value=new Date(Date.now()+offset.value);});
 const visible=computed(()=>props.kind==='fleet'?windows.value:windows.value.filter(w=>w.entity_type==='fleet'||w.entity_type===props.kind&&w.entity_id===props.entityId));
 const title=computed(()=>props.kind==='fleet'?'Обслуживание парка':props.kind==='service'?'Обслуживание сервиса':'Обслуживание машины и её сервисов');
-function canCancel(w:any){return !props.locked && !w.cancelled_at && Date.parse(w.end_at)>now.value.getTime() && (props.kind==='fleet' || w.entity_type===props.kind&&w.entity_id===props.entityId);}
+function canCancel(w:any){return owner.value && !props.locked && !w.cancelled_at && Date.parse(w.end_at)>now.value.getTime() && (props.kind==='fleet' || w.entity_type===props.kind&&w.entity_id===props.entityId);}
 async function create(){
- if(busy.value||props.locked)return;
+ if(!owner.value||busy.value||props.locked)return;
  busy.value='create';notice.value='Сохраняем интервал…';
  try{
   if(!purpose.value.trim()||!Number.isInteger(minutes.value)||minutes.value<1||minutes.value>10080)throw new Error('Укажите причину и целое число минут от 1 до 10080.');
@@ -28,7 +30,7 @@ function instant(t:string){return new Date(t).toLocaleString();}
 <template><section class="panel maintenance-panel"><h2>{{title}}</h2>
  <p class="muted">Плановые работы отмечаются отдельно от здоровья. Мониторинг не выключается, красный сервис не становится зелёным. В обзоре отдельно указан счётчик проблем вне обслуживания.</p>
  <p v-if="locked" class="data-warning">Сейчас открыт исторический вид. Вернитесь в LIVE для изменения текущего обслуживания.</p>
- <form @submit.prevent="create"><fieldset :disabled="!!busy||locked"><legend>{{kind==='fleet'?'Новый интервал для всего парка':'Новый интервал для выбранного объекта'}}</legend><div class="form-grid">
+ <form @submit.prevent="create"><fieldset :disabled="!owner||!!busy||locked"><legend>{{kind==='fleet'?'Новый интервал для всего парка':'Новый интервал для выбранного объекта'}}</legend><div class="form-grid">
   <label>Причина <input v-model="purpose" required maxlength="500" placeholder="Например, замена диска"/></label>
   <label>Начало (пусто = сейчас) <input v-model="start" type="datetime-local"/></label>
   <label>Длительность, минут <input v-model.number="minutes" type="number" min="1" max="10080" required/></label>

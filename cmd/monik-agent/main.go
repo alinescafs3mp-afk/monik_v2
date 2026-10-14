@@ -50,7 +50,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `monik-agent %s
   setup                 enroll with controller
   run --config PATH     run collector/control worker
-  service plan|install|status|uninstall
+  service plan|install|convert|rollback|status|uninstall
   doctor
   identity reset
   controller show|recover
@@ -124,7 +124,7 @@ func cmdRun(args []string) int {
 
 func cmdService(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "service plan|install|status|uninstall")
+		fmt.Fprintln(os.Stderr, "service plan|install|convert|rollback|status|uninstall")
 		return 2
 	}
 	fs := flag.NewFlagSet("service", flag.ExitOnError)
@@ -140,7 +140,7 @@ func cmdService(args []string) int {
 		fmt.Println("# install with existing authority, or run the printed elevated command")
 		fmt.Printf("sudo %s service install --config %s\n", shellQuote(self), shellQuote(*cfg))
 		return 0
-	case "install":
+	case "install", "convert":
 		if os.Geteuid() != 0 {
 			fmt.Fprintf(os.Stderr, "installation requires elevation. exact command:\nsudo %s service install --config %s\n", shellQuote(self), shellQuote(*cfg))
 			return 1
@@ -155,6 +155,7 @@ func cmdService(args []string) int {
 		opts.ConfigPath = *cfg
 		opts.HostSrc = filepath.Join(filepath.Dir(self), "monik-service-host")
 		opts.WorkerSrc = self
+		opts.ConvertFlavor = args[0] == "convert"
 		if _, err := os.Stat(opts.HostSrc); err != nil {
 			fmt.Fprintln(os.Stderr, "monik-service-host must sit next to monik-agent")
 			return 1
@@ -164,6 +165,21 @@ func cmdService(args []string) int {
 			return 1
 		}
 		fmt.Println("installed service host into", opts.Prefix, "unit", opts.UnitPath)
+		return 0
+	case "rollback":
+		opts := install.LinuxDefaults()
+		stored, err := configfile.Load(*cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		opts.StateDir = stored.File.StateDir
+		opts.ConfigPath = *cfg
+		if err := install.RollbackLinux(opts); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println("previous local worker/mode restored; current enrollment and data retained")
 		return 0
 	case "status":
 		fmt.Println("run: systemctl status monik-agent.service")

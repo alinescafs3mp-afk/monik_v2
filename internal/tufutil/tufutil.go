@@ -36,8 +36,8 @@ type BundleResult struct {
 }
 
 type Artifact struct {
-	OS, Arch, Name, SHA256, Path string
-	Length                       int64
+	OS, Arch, Name, SHA256, Path, AgentFlavor string
+	Length                                    int64
 }
 
 func InitKeys(dir string) (*KeySet, error) {
@@ -398,8 +398,8 @@ func ImportBundle(bundlePath, destDir string) (*BundleResult, error) {
 		}
 		sum := secure.SHA256Bytes(b)
 		osn, arch := parsePlatform(name)
-		arts = append(arts, Artifact{OS: osn, Arch: arch, Name: name, SHA256: sum, Path: p, Length: int64(len(b))})
-		plats = append(plats, map[string]string{"os": osn, "arch": arch, "name": name})
+		arts = append(arts, Artifact{OS: osn, Arch: arch, AgentFlavor: targetFlavor(name), Name: name, SHA256: sum, Path: p, Length: int64(len(b))})
+		plats = append(plats, map[string]string{"os": osn, "arch": arch, "name": name, "agent_flavor": targetFlavor(name)})
 	}
 	res.Artifacts = arts
 	res.Platforms = plats
@@ -420,6 +420,18 @@ func ImportBundle(bundlePath, destDir string) (*BundleResult, error) {
 		res.Version = "unknown"
 	}
 	return res, nil
+}
+
+// Flavor is derived from the authenticated TUF target path, never unsigned
+// release notes. Existing platform paths retain the general agent contract.
+func targetFlavor(name string) string {
+	if strings.HasPrefix(name, "spark-light/") {
+		if name == "spark-light/linux-arm64/monik-agent" {
+			return "spark-light"
+		}
+		return "unsupported"
+	}
+	return "general"
 }
 
 func parsePlatform(name string) (osn, arch string) {
@@ -576,8 +588,8 @@ func collectArtifacts(repoDir string) ([]Artifact, []map[string]string, error) {
 		}
 		sum := secure.SHA256Bytes(b)
 		osn, arch := parsePlatform(name)
-		arts = append(arts, Artifact{OS: osn, Arch: arch, Name: name, SHA256: sum, Path: p, Length: int64(len(b))})
-		plats = append(plats, map[string]string{"os": osn, "arch": arch, "name": name})
+		arts = append(arts, Artifact{OS: osn, Arch: arch, AgentFlavor: targetFlavor(name), Name: name, SHA256: sum, Path: p, Length: int64(len(b))})
+		plats = append(plats, map[string]string{"os": osn, "arch": arch, "name": name, "agent_flavor": targetFlavor(name)})
 	}
 	return arts, plats, nil
 }

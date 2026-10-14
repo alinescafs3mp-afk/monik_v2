@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {nextTick,ref} from 'vue';
 import {submitOp} from '../api';
 const props=defineProps<{id:string;name:string;expectedName?:string}>();
@@ -11,7 +13,7 @@ async function save(){if(busy.value)return;busy.value=true;error.value='';messag
  editing.value=false;message.value='Имя сохранено';emit('saved');window.dispatchEvent(new Event('monik:refresh'));
  }catch(e){error.value=(e as Error).message;message.value='';}finally{busy.value=false;}}
 </script>
-<template><div class="inline-rename">
+<template><div v-if="owner" class="inline-rename">
  <button v-if="!editing" type="button" :aria-label="`Переименовать: ${name}`" @click="open">Переименовать</button>
  <form v-else @submit.prevent="save"><label :for="`service-name-${id}`">Новое имя сервиса</label><input ref="input" :id="`service-name-${id}`" v-model="value" maxlength="255" required :disabled="busy" autocomplete="off"/>
  <button type="submit" :disabled="busy||!value.trim()">{{busy?'Сохраняем…':'Сохранить имя'}}</button><button type="button" :disabled="busy" @click="editing=false;error='';message=''">Отмена</button></form>

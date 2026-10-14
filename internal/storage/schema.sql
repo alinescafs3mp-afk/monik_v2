@@ -530,3 +530,25 @@ CREATE TABLE IF NOT EXISTS discovery_checkpoints (
  complete INTEGER NOT NULL CHECK(complete IN (0,1)),
  listener_count INTEGER NOT NULL
 );
+-- Additive Spark telemetry; existing enrollment, trust and history stay intact.
+CREATE TABLE IF NOT EXISTS spark_samples (
+ agent_id TEXT NOT NULL REFERENCES agents(id), session_id TEXT NOT NULL, seq INTEGER NOT NULL,
+ observed_at TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(agent_id,session_id,seq)
+);
+CREATE INDEX IF NOT EXISTS spark_samples_time ON spark_samples(agent_id,observed_at);
+CREATE INDEX IF NOT EXISTS spark_samples_retention ON spark_samples(observed_at);
+CREATE TABLE IF NOT EXISTS spark_latest (
+ agent_id TEXT PRIMARY KEY REFERENCES agents(id), session_id TEXT NOT NULL, seq INTEGER NOT NULL,
+ observed_at TEXT NOT NULL, received_at TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS spark_classification (
+ agent_id TEXT PRIMARY KEY REFERENCES agents(id), classification TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_flavors (agent_id TEXT PRIMARY KEY REFERENCES agents(id), flavor TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS spark_hardware_evidence (agent_id TEXT PRIMARY KEY REFERENCES agents(id), observed_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS spark_intents (
+ operation_id TEXT PRIMARY KEY REFERENCES operations(id), agent_id TEXT NOT NULL REFERENCES agents(id),
+ owner_session_id TEXT NOT NULL, owner_user_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+ profile_revision TEXT NOT NULL, control_epoch TEXT NOT NULL, agent_session TEXT NOT NULL,
+ initial_generation INTEGER NOT NULL, stage_id TEXT NOT NULL, stage_authorization TEXT NOT NULL DEFAULT ''
+);

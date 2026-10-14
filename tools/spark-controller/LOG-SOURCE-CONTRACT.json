@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "status": "PRIVATE_SOURCE_CONTRACT_NOT_DEPLOYED_NOT_LOG_AUTHORIZATION",
+  "profiles": [
+    {
+      "profile_id": "qwen-existing-observation",
+      "engine_log": "/var/log/spark-model-collection-v4/qwen-existing-observation/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/qwen-existing-observation/actions.log",
+      "file_max_bytes": 10485760,
+      "file_backups": 3,
+      "per_file_extent_max_bytes": 41943040,
+      "docker_owned_run_log_config": {
+        "Type": "local",
+        "Config": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "capture_scope": "Shared owned worker generation only; RUN marker records immutable run_id and generation. Model private logs may contain prompt data; local filtering before any transport remains required."
+    },
+    {
+      "profile_id": "gpt-oss-120b-existing-configured",
+      "engine_log": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured/actions.log",
+      "file_max_bytes": 10485760,
+      "file_backups": 3,
+      "per_file_extent_max_bytes": 41943040,
+      "docker_owned_run_log_config": {
+        "Type": "local",
+        "Config": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "capture_scope": "Shared owned worker generation only; RUN marker records immutable run_id and generation. Model private logs may contain prompt data; local filtering before any transport remains required."
+    }
+  ],
+  "transport": "Existing authenticated owner-authorized LogHub only; rootLogEnabled explicitly configured, default transport disabled",
+  "raw_environment_exported": false,
+  "new_transport_channel": false,
+  "historical_qwen_original_adoption": {
+    "engine_log_source": "UNAVAILABLE until owned shared Supervisor launch",
+    "docker_source_extent": "unverified original local driver retained immutable; never rewritten on adoption",
+    "journal_fallback": false
+  },
+  "producer": "Same existing Supervisor.follow owns exact full-CID docker logs --follow --timestamps, stdout+stderr merged through RotatingSink; no prompt/request archival channel"
+}

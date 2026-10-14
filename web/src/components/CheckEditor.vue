@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {computed,nextTick,onBeforeUnmount,ref,watch} from 'vue';
 import {useRoute,onBeforeRouteLeave} from 'vue-router';
 import {get,submitOp} from '../api';
@@ -17,7 +19,7 @@ const suggestions=computed<any[]>(()=>service.value?.discovery?.suggestions||[])
 const secrets=computed(()=>secretList.value.filter(s=>s.agent_id===props.detail?.agent?.id&&(!s.check_id||s.check_id===f.value.id)));
 const evidence=computed(()=>operation.value?.targets?.[0]?.evidence);
 const opURL=computed(()=>operation.value?.operation_id?`/operations/${operation.value.operation_id}`:'');
-async function loadSecrets(){try{const r:any=await get('/api/v1/secrets');secretList.value=r.secrets||[]}catch{error.value='Не удалось прочитать список секретов. Повторите чтение.'}}
+async function loadSecrets(){if(!owner.value)return;try{const r:any=await get('/api/v1/secrets');secretList.value=r.secrets||[]}catch{error.value='Не удалось прочитать список секретов. Повторите чтение.'}}
 function reset(id=selected.value){const d=props.detail?.desired_config?.checks?.find((c:any)=>c.service_id===id)||{};const s=services.value.find(s=>s.id===id)||{};selected.value=id;f.value=loadCheck(d,s);draftID.value=d.id||crypto.randomUUID();baseRevision.value=props.detail.agent.desired_revision;dirty.value=false;status.value='';error.value='';}
 function choose(event:Event){const id=(event.target as HTMLSelectElement).value;if(dirty.value&&!confirm('Отменить несохранённые изменения запроса?')){(event.target as HTMLSelectElement).value=selected.value;return;}reset(id);}
 watch(()=>[props.detail?.agent?.id,services.value.length],()=>{if(!selected.value&&services.value.length){reset(services.value.some(s=>s.id===route.query.service)?String(route.query.service):services.value[0].id);void loadSecrets();}},{immediate:true});
@@ -44,7 +46,7 @@ async function poll(id:string,generation:number,until:number){if(disposed||gener
  if(feedback.done){pending.value='';emit('refresh');return;}
  }catch(e){error.value=(e as Error).message;}
  if(Date.now()<until){timer=setTimeout(()=>void poll(id,generation,until),1500);}else{pending.value='';status.value='Агент ещё не подтвердил результат. Операция сохранена в Центре операций, повтор автоматически не отправлен.';}}
-async function execute(trial:boolean){if(pending.value||props.readonly)return;error.value='';status.value='';try{const d=buildCheck(f.value,draftID.value);pending.value=trial?'trial':'save';const rev=baseRevision.value;
+async function execute(trial:boolean){if(!owner.value||pending.value||props.readonly)return;error.value='';status.value='';try{const d=buildCheck(f.value,draftID.value);pending.value=trial?'trial':'save';const rev=baseRevision.value;
  const r=await submitOp(trial?'check.trial':'check.apply',trial?d:{check:d,base_revision:rev},[props.detail.agent.id]);operation.value=r.op;status.value='Операция сохранена сервером. Ожидаем агент.';
  if(!trial){dirty.value=false;f.value.id=String(d.id);baseRevision.value=rev+1;emit('refresh');}
  emit('toast',status.value,opURL.value);clearTimeout(timer);void poll(String(r.op.operation_id),++watchGeneration,Date.now()+90000);
@@ -56,15 +58,15 @@ onBeforeUnmount(()=>{window.removeEventListener('beforeunload',beforeUnload);dis
 </script>
 <template>
 <section ref="root" id="check-editor" class="panel check-editor">
- <h3 tabindex="-1">Кастомный запрос к сервису</h3>
+ <h3 tabindex="-1">Кастомный запрос к сервису</h3><p v-if="!owner" class="muted">Изменение и пробный запуск запроса доступны владельцу.</p>
  <p>Один шаблон используется и для пробного запроса, и для периодического мониторинга. Запрос выполняется на агенте, не в браузере и не на контроллере.</p>
  <p v-if="!supported" class="data-warning" role="status">Сначала обновите агент до версии с http_custom_v1 и дождитесь его отчёта. Иначе прежний агент может не понять новые поля.</p>
  <label>Сервис <select :value="selected" :disabled="!!pending" @change="choose"><option value="">Выберите сервис</option><option v-for="s in services" :value="s.id" :key="s.id">{{s.display_name||s.url}}</option></select></label>
  <p v-if="serviceHint(service)" class="data-warning">{{serviceHint(service)}}</p>
  <div v-if="suggestions.length" class="advice"><h4>Агент предлагает проверить</h4><p class="muted">Это результаты последнего ограниченного обнаружения, не текущее здоровье. Автоопределение не заменяет уже настроенную проверку.</p>
- <div v-for="s in suggestions" :key="s.definition.path" class="panel"><strong>{{s.definition.method}} {{s.definition.path||'/'}}</strong> · HTTP {{s.http_status}} · {{s.health}}<p>{{s.reason}}</p><small>{{new Date(s.observed_at).toLocaleString()}} · {{s.confidence}} · {{s.auto_eligible?'Проверен отдельный маршрут':'Нужно проверить вручную'}}</small> <button :disabled="!!pending||readonly" @click="useSuggestion(s)">Взять в черновик</button></div></div>
+ <div v-for="s in suggestions" :key="s.definition.path" class="panel"><strong>{{s.definition.method}} {{s.definition.path||'/'}}</strong> · HTTP {{s.http_status}} · {{s.health}}<p>{{s.reason}}</p><small>{{new Date(s.observed_at).toLocaleString()}} · {{s.confidence}} · {{s.auto_eligible?'Проверен отдельный маршрут':'Нужно проверить вручную'}}</small> <button :disabled="!owner||!!pending||readonly" @click="useSuggestion(s)">Взять в черновик</button></div></div>
  <form @submit.prevent="execute(false)" @input="dirty=true" @change="dirty=true">
- <fieldset :disabled="!!pending||readonly||!selected||!supported">
+ <fieldset :disabled="!owner||!!pending||readonly||!selected||!supported">
  <label>Готовый шаблон <select value="" @change="preset(($event.target as HTMLSelectElement).value)"><option value="">Выберите, затем проверьте настройки</option><option value="ready">Readiness с явным статусом</option><option value="health">Health с явным статусом</option><option value="spring">Spring Actuator</option><option value="http200">Документированный GET /health → 200</option><option value="rpc">JSON-RPC: пример health (POST)</option></select></label>
  <div class="check-grid"><label>URL сервиса <input v-model="f.url" autocomplete="off" required aria-label="URL сервиса"/></label><label>Путь и query <input v-model="f.path" placeholder="/health?detail=brief" autocomplete="off" aria-label="Путь и query"/></label>
  <label>Метод <select v-model="f.method" aria-label="Метод"><option>GET</option><option>HEAD</option><option>OPTIONS</option><option>POST</option></select></label><label>Интервал, с <input v-model.number="f.interval" type="number" min="5" max="3600" step="5" aria-label="Интервал, с"/></label><label>Таймаут, с <input v-model.number="f.timeout" type="number" min="1" max="30" aria-label="Таймаут, с"/></label>

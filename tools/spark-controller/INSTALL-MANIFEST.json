@@ -1,0 +1,194 @@
+{
+  "status": "PROPOSAL_NOT_APPLIED",
+  "files": [
+    {
+      "path": "/etc/systemd/system/spark-sglang.service.d/99-monik-shared-controller.conf",
+      "source": "deployment/etc/systemd/system/spark-sglang.service.d/99-monik-shared-controller.conf",
+      "sha256": "391f2b2ebd45999f9ca0cba3c8a1b95eb7689f89e435a11b67937ae8d5168043",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/etc/systemd/system/spark-v4-gpt-oss-120b-existing-configured@.service",
+      "source": "deployment/etc/systemd/system/spark-v4-gpt-oss-120b-existing-configured@.service",
+      "sha256": "02f0340a58e1e650d6aea6537a345a9716a3b715f899b4500986dad9136774a4",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/home/Dest/start_gpt_oss_120b_existing_shared.sh",
+      "source": "deployment/home/Dest/start_gpt_oss_120b_existing_shared.sh",
+      "sha256": "6c19eed9ba588fff17330ac2bf1774702747bd5dd5737ce01c53964bf262e1a8",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/start_qwen_existing_shared.sh",
+      "source": "deployment/home/Dest/start_qwen_existing_shared.sh",
+      "sha256": "8d238e2ef1dc8477726cfd88869946ec5203e7bfec42c4cdef9ce5788e685f2c",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/status_gpt_oss_120b_existing_shared.sh",
+      "source": "deployment/home/Dest/status_gpt_oss_120b_existing_shared.sh",
+      "sha256": "c8da9d1287dc2d4478e553ee838ba305b1a07fd478ba6ba2d6075eb69a3a8356",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/status_qwen_existing_shared.sh",
+      "source": "deployment/home/Dest/status_qwen_existing_shared.sh",
+      "sha256": "57966119fcafae0da57ea92ed1ea34093bd6669e9c7496e026d959f614d7e0a6",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/stop_gpt_oss_120b_existing_shared.sh",
+      "source": "deployment/home/Dest/stop_gpt_oss_120b_existing_shared.sh",
+      "sha256": "389b039b299bfcfead33852673671050b3b247ca22346885e533e352fdbf9e81",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/stop_qwen_existing_shared.sh",
+      "source": "deployment/home/Dest/stop_qwen_existing_shared.sh",
+      "sha256": "5220465fc2b0a96fe4a5bde528723e68f8ccf5ba6ca4267d65793adb11d98536",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/bin/legacy_entry.py",
+      "source": "deployment/opt/spark/model-collection-v4/bin/legacy_entry.py",
+      "sha256": "a556b0630ad96ee7e5f604e723816995663231b65053cb68f2eec754561ddd82",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/bin/legacy_runtime.py",
+      "source": "deployment/opt/spark/model-collection-v4/bin/legacy_runtime.py",
+      "sha256": "492f2e50e8496efbd43abbfa59d010375b4a6face213c68056d6948728989f4d",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/bin/modelctl.py",
+      "source": "deployment/opt/spark/model-collection-v4/bin/modelctl.py",
+      "sha256": "856f7a8099abbdcf47bba1b1bb77366b8bb72c211535a63a12887872bfa70856",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/bin/monik_bridge.py",
+      "source": "deployment/opt/spark/model-collection-v4/bin/monik_bridge.py",
+      "sha256": "bf8a049802db32d6a4746414e2fb531b67e31209db58e4b9eea0d25f6f1f20a2",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/bin/supervisor.py",
+      "source": "deployment/opt/spark/model-collection-v4/bin/supervisor.py",
+      "sha256": "cecc36c0b5630b1740bf90fb140007e094e88277e47fca3f0fef2c0171a5dead",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/config/controller-manifest.json",
+      "source": "deployment/opt/spark/model-collection-v4/config/controller-manifest.json",
+      "sha256": "828838713ce04b14ffab7f3b3b155ea57be03f0db0f722650bf380c1cc89f886",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/usr/local/sbin/spark-sglang-run",
+      "source": "deployment/usr/local/sbin/spark-sglang-run",
+      "sha256": "7dfc81f4fc3757a8d588eb998bad01c094cd6d6b443ff8087dce09f2a2029013",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0750"
+    },
+    {
+      "path": "/usr/local/sbin/spark-start-gpt",
+      "source": "deployment/usr/local/sbin/spark-start-gpt",
+      "sha256": "30239c66e604b1b96ebba00a785913632cd6d7088141b2a5c1a0eb5dfa1d60bf",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0750"
+    },
+    {
+      "path": "/usr/local/sbin/spark-start-qwen",
+      "source": "deployment/usr/local/sbin/spark-start-qwen",
+      "sha256": "7dfc81f4fc3757a8d588eb998bad01c094cd6d6b443ff8087dce09f2a2029013",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0750"
+    },
+    {
+      "path": "/usr/local/sbin/spark-stop-qwen",
+      "source": "deployment/usr/local/sbin/spark-stop-qwen",
+      "sha256": "f1569dad352a2c0125fb2071741fc54f6871a6cd9d7f22765ade5b938be2423c",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0750"
+    },
+    {
+      "path": "/usr/local/sbin/spark-stop-gpt",
+      "source": "deployment/usr/local/sbin/spark-stop-gpt",
+      "sha256": "3fcfaf6c17259dd537944d978bf787e83abb386e0fcad56a61e1aecea8a544af",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0750"
+    }
+  ],
+  "directories": [
+    {
+      "path": "/var/log/spark-model-collection-v4/qwen-existing-observation",
+      "uid": 0,
+      "gid": 1000,
+      "mode": "0755"
+    },
+    {
+      "path": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured",
+      "uid": 0,
+      "gid": 1000,
+      "mode": "0755"
+    }
+  ],
+  "unchanged_required_paths": {
+    "/etc/systemd/system/spark-sglang.service": "0adf04aee52395ccabeda14971c98581d25d385a446ab4b724b0081d3706641c",
+    "/etc/systemd/system/spark-sglang.service.d/90-sol-cache2.conf": "bdd8fd1e039f02aff71774b93c4d056ad8aef614e1877b39b0dcf73eb08ee6ed",
+    "/usr/local/sbin/spark-sglang-prepare": "5795ae170df3f2005381babb483117f3ba1085bcdfa2c6c6e033a9f430579b78"
+  },
+  "preserve_existing_inode": [
+    "/var/lib/spark-model-collection-v4/collection.lock"
+  ],
+  "prohibited_effects": [
+    "model start/stop/restart/enable",
+    "Ling stop",
+    "MiniMax start",
+    "downloads",
+    "weight changes",
+    "credential changes",
+    "new coordinator",
+    "Go worktree writes"
+  ],
+  "compare_before_merge": {
+    "controller-manifest_base_sha256": "57b5dccf340b7b6be4a52ea33432fc50f08aaa99ebb4636a91bf024596bd4f7d",
+    "tui_config_base_sha256": "b51da481a46ca53a6d2553a6feff1b2553af516f454b147f20acf5aef50e62bd",
+    "on_drift": "Stop installation and merge current safe state; never overwrite concurrent/current source or state"
+  }
+}

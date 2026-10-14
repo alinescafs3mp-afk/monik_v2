@@ -32,6 +32,8 @@ type Options struct {
 	HostSrc       string
 	WorkerSrc     string
 	SkipSystemctl bool
+	// ConvertFlavor permits an explicit local conversion; enrollment is retained.
+	ConvertFlavor bool
 }
 
 func LinuxDefaults() Options {
@@ -61,11 +63,17 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return secure.AtomicWrite(dst, b, mode)
 }
 
-func InstallLinux(opts Options) error {
+func InstallLinux(opts Options) error { return installLinux(opts, false) }
+
+// InstallSparkLinux installs one direct unprivileged worker, without a resident
+// service-host. Conversion must be requested explicitly and never re-enrolls.
+func InstallSparkLinux(opts Options) error { return installLinux(opts, true) }
+
+func installLinux(opts Options, spark bool) error {
 	if runtime.GOOS != "linux" {
 		return fmt.Errorf("linux installer is not used on windows")
 	}
-	if opts.Prefix == "" || opts.StateDir == "" || opts.HostSrc == "" || opts.WorkerSrc == "" {
+	if opts.Prefix == "" || opts.StateDir == "" || (!spark && opts.HostSrc == "") || opts.WorkerSrc == "" {
 		return fmt.Errorf("prefix, state dir and binary sources are required")
 	}
 	if opts.User == "" {
@@ -99,19 +107,28 @@ func InstallLinux(opts Options) error {
 		defer unlock()
 	}
 
-	// Validate and retain both source byte sequences BEFORE stopping a healthy
+	// Validate and retain all selected source byte sequences BEFORE stopping a healthy
 	// existing service. A missing/broken source is not permission to cause outage.
-	hostBytes, err := readInstallSource(opts.HostSrc)
-	if err != nil {
-		return fmt.Errorf("read supervisor before installation: %w", err)
+	var hostBytes []byte
+	var err error
+	if !spark {
+		hostBytes, err = readInstallSource(opts.HostSrc)
+		if err != nil {
+			return fmt.Errorf("read supervisor before installation: %w", err)
+		}
 	}
 	workerBytes, err := readInstallSource(opts.WorkerSrc)
 	if err != nil {
 		return fmt.Errorf("read worker before installation: %w", err)
 	}
 	if !opts.SkipSystemctl {
-		if err = validateLinuxBinary(hostBytes, runtime.GOARCH); err != nil {
-			return err
+		if !spark {
+			if err = validateLinuxBinary(hostBytes, runtime.GOARCH); err != nil {
+				return err
+			}
+		}
+		if spark && runtime.GOARCH != "arm64" {
+			return fmt.Errorf("spark-light requires Linux ARM64")
 		}
 		if err = validateLinuxBinary(workerBytes, runtime.GOARCH); err != nil {
 			return err
@@ -153,6 +170,17 @@ func InstallLinux(opts Options) error {
 		if filepath.Clean(state.File.StateDir) != filepath.Clean(opts.StateDir) || filepath.Dir(filepath.Clean(opts.ConfigPath)) != filepath.Clean(opts.StateDir) || !withinDir(opts.StateDir, state.File.CredentialPath) {
 			return fmt.Errorf("config, credential and state must share the selected state directory; no identity is moved implicitly")
 		}
+		expected := "general"
+		if spark {
+			expected = "spark-light"
+		}
+		existingFlavor := state.File.AgentFlavor
+		if existingFlavor == "" {
+			existingFlavor = "general"
+		}
+		if state.File.Managed && existingFlavor != expected && !opts.ConvertFlavor {
+			return fmt.Errorf("existing %s agent preserved: explicit flavor conversion is required", existingFlavor)
+		}
 		u, e := ensureServiceUser(opts.User)
 		if e != nil {
 			return e
@@ -184,6 +212,14 @@ func InstallLinux(opts Options) error {
 			return fmt.Errorf("enrollment changed incompatibly during installation")
 		}
 		state.File = latest
+		plannedUnit := servicehost.PlanManagedUnit(filepath.Join(opts.Prefix, "monik-service-host"), filepath.Join(opts.StateDir, "bin", "monik-agent"), opts.ConfigPath, opts.StateDir, opts.User)
+		if spark {
+			plannedUnit = PlanSparkUnit(filepath.Join(opts.StateDir, "bin", "monik-agent"), opts.ConfigPath, opts.StateDir, opts.User)
+		}
+		if err = saveRecovery(opts, latest, workerBytes, hostBytes, plannedUnit, spark); err != nil {
+			_ = runSystemTool(systemctl, "start", "monik-agent.service")
+			return fmt.Errorf("installation backup failed before replacement: %w", err)
+		}
 	}
 	if err := os.MkdirAll(opts.Prefix, 0o755); err != nil {
 		return err
@@ -193,8 +229,10 @@ func InstallLinux(opts Options) error {
 	}
 	hostDst := filepath.Join(opts.Prefix, "monik-service-host")
 	workerDst := filepath.Join(opts.Prefix, "monik-agent")
-	if err := secure.AtomicWrite(hostDst, hostBytes, 0o755); err != nil {
-		return err
+	if !spark {
+		if err := secure.AtomicWrite(hostDst, hostBytes, 0o755); err != nil {
+			return err
+		}
 	}
 	if err := secure.AtomicWrite(workerDst, workerBytes, 0o755); err != nil {
 		return err
@@ -213,6 +251,13 @@ func InstallLinux(opts Options) error {
 	}
 	if state != nil {
 		state.File.Managed = true
+		if spark {
+			state.File.AgentFlavor = "spark-light"
+			state.File.RuntimeMode = "direct"
+		} else {
+			state.File.AgentFlavor = ""
+			state.File.RuntimeMode = ""
+		}
 		configBytes, err := json.MarshalIndent(state.File, "", "  ")
 		if err != nil {
 			return err
@@ -231,6 +276,9 @@ func InstallLinux(opts Options) error {
 		}
 	}
 	body := servicehost.PlanManagedUnit(hostDst, activeWorker, opts.ConfigPath, opts.StateDir, opts.User)
+	if spark {
+		body = PlanSparkUnit(activeWorker, opts.ConfigPath, opts.StateDir, opts.User)
+	}
 	if err := os.MkdirAll(filepath.Dir(opts.UnitPath), 0o755); err != nil {
 		return err
 	}
@@ -242,6 +290,15 @@ func InstallLinux(opts Options) error {
 			if err := runSystemTool(systemctl, args...); err != nil {
 				return fmt.Errorf("systemctl %s failed: %w; service installation is not confirmed", strings.Join(args, " "), err)
 			}
+		}
+	}
+	if !opts.SkipSystemctl {
+		flavor := "general"
+		if spark {
+			flavor = "spark-light"
+		}
+		if err = settleRecovery(opts, secure.SHA256Bytes(workerBytes), secure.SHA256Bytes(hostBytes), secure.SHA256Bytes([]byte(body)), flavor); err != nil {
+			return fmt.Errorf("service started but local recovery journal NOT settled: %w", err)
 		}
 	}
 	return nil

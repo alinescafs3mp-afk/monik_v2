@@ -15,6 +15,12 @@ import (
 )
 
 func (a *App) installerTemplate(platform string) (*os.File, *installerbundle.Bundle, error) {
+	return a.installerTemplateFlavor(platform, "general")
+}
+func (a *App) installerTemplateFlavor(platform, flavor string) (*os.File, *installerbundle.Bundle, error) {
+	if flavor != "general" && flavor != "spark-light" || flavor == "spark-light" && platform != "linux-arm64" {
+		return nil, nil, fmt.Errorf("Spark-light supports Linux ARM64 only")
+	}
 	if platform != "linux-amd64" && platform != "linux-arm64" {
 		return nil, nil, fmt.Errorf("single-file installer supports Linux amd64/arm64 with systemd")
 	}
@@ -37,6 +43,9 @@ func (a *App) installerTemplate(platform string) (*os.File, *installerbundle.Bun
 		return nil, nil, fmt.Errorf("installer template directory changed")
 	}
 	name := platform + ".bin"
+	if flavor == "spark-light" {
+		name = platform + "-spark-light.bin"
+	}
 	info, e := root.Lstat(name)
 	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
 		return nil, nil, fmt.Errorf("protected installer template is missing or invalid")
@@ -59,6 +68,14 @@ func (a *App) installerTemplate(platform string) (*os.File, *installerbundle.Bun
 		f.Close()
 		return nil, nil, fmt.Errorf("template is personalized or has a different platform")
 	}
+	manifestFlavor := b.Manifest.AgentFlavor
+	if manifestFlavor == "" {
+		manifestFlavor = "general"
+	}
+	if manifestFlavor != flavor || flavor == "spark-light" && (b.Manifest.Format != 2 || b.Manifest.RuntimeMode != "direct") {
+		f.Close()
+		return nil, nil, fmt.Errorf("installer template has a different agent flavor/runtime")
+	}
 	// A template is part of this deployment, never an old arbitrary executable.
 	expected := version.Commit
 	got := b.Manifest.Build
@@ -73,10 +90,11 @@ func (a *App) handleInstallers(w http.ResponseWriter, r *http.Request, s *storag
 		a.writeErr(w, 403, "forbidden", "owner role required")
 		return
 	}
-	result := make([]map[string]any, 0, 2)
-	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
-		f, b, e := a.installerTemplate(platform)
-		row := map[string]any{"platform": platform, "ready": e == nil}
+	result := make([]map[string]any, 0, 3)
+	for _, variant := range []struct{ platform, flavor string }{{"linux-amd64", "general"}, {"linux-arm64", "general"}, {"linux-arm64", "spark-light"}} {
+		platform, flavor := variant.platform, variant.flavor
+		f, b, e := a.installerTemplateFlavor(platform, flavor)
+		row := map[string]any{"platform": platform, "agent_flavor": flavor, "ready": e == nil}
 		if e != nil {
 			row["reason"] = e.Error()
 		} else {
@@ -110,11 +128,19 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 	}
 	defer a.installerMu.Unlock()
 	var body struct {
+		AgentFlavor        string `json:"agent_flavor"`
 		ControllerURL      string `json:"controller_url"`
 		EnableAgentConsole bool   `json:"enable_agent_console"`
 	}
 	if e := parseJSONStrictLimit(r, &body, 4096); e != nil {
 		a.writeErr(w, 400, "malformed", "invalid installer request")
+		return
+	}
+	if body.AgentFlavor == "" {
+		body.AgentFlavor = "general"
+	}
+	if body.AgentFlavor != "general" && body.AgentFlavor != "spark-light" || body.AgentFlavor == "spark-light" && (r.PathValue("platform") != "linux-arm64" || body.EnableAgentConsole) {
+		a.writeErr(w, 400, "invalid_flavor", "Spark-light requires Linux ARM64 and does not support agent console")
 		return
 	}
 	u, e := netutil.ValidateControllerURL(body.ControllerURL)
@@ -132,7 +158,7 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 		return
 	}
 	platform := r.PathValue("platform")
-	f, b, e := a.installerTemplate(platform)
+	f, b, e := a.installerTemplateFlavor(platform, body.AgentFlavor)
 	if e != nil {
 		a.writeErr(w, 409, "installer_unavailable", e.Error())
 		return
@@ -168,6 +194,7 @@ func (a *App) handleInstallerDownload(w http.ResponseWriter, r *http.Request, s 
 	w.Header().Set("Content-Disposition", `attachment; filename="monik-agent"`)
 	w.Header().Set("Content-Length", strconv.FormatInt(b.SizeWith(p), 10))
 	w.Header().Set("X-Monik-Profile-Expires", expires.UTC().Format(time.RFC3339))
+	w.Header().Set("X-Monik-Agent-Flavor", body.AgentFlavor)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if _, e = b.Write(w, p); e != nil {
 		a.Log.Warn("installer download interrupted; unused code will expire", "platform", platform)
@@ -183,11 +210,16 @@ func (a *App) handleInstallationStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := a.Clock.Now()
+	flavor, e := a.Store.AgentFlavor(ag.ID)
+	if e != nil {
+		a.writeErr(w, 500, "db", "agent variant unavailable")
+		return
+	}
 	ready := !a.Cfg.RestoreMode && !ag.Archived && !ag.Conflict && ag.ManagedReady && ag.SessionID != "" && ag.LastSeq > 0 && ag.AppliedRevision > 0 && ag.AppliedRevision == ag.DesiredRevision && ag.AppliedHash != "" && ag.AppliedHash == ag.DesiredHash && ag.LastLiveAt != nil
 	if ready {
 		age := now.Sub(*ag.LastLiveAt)
 		ready = age >= 0 && age <= 20*time.Second
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	a.writeJSON(w, 200, map[string]any{"ready": ready, "agent_id": ag.ID, "controller_id": a.ControllerID(), "session_id": ag.SessionID, "seq": ag.LastSeq, "worker_digest": ag.WorkerDigest, "last_live_at": ag.LastLiveAt})
+	a.writeJSON(w, 200, map[string]any{"agent_flavor": flavor, "ready": ready, "agent_id": ag.ID, "controller_id": a.ControllerID(), "session_id": ag.SessionID, "seq": ag.LastSeq, "worker_digest": ag.WorkerDigest, "last_live_at": ag.LastLiveAt})
 }

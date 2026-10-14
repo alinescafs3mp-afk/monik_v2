@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import { ref, watch } from 'vue';
 import {useRoute,useRouter} from 'vue-router';
 import {acknowledgementFilter} from '../monitoring';
@@ -61,7 +63,7 @@ function instant(value:string){return value?new Date(value).toLocaleString():'Н
    <tr v-for="i in incs" :key="i.id"><td>{{ instant(i.opened_at) }}<small v-if="i.resolved_at"> → {{ instant(i.resolved_at) }}</small></td>
     <td><router-link v-if="i.agent_id" :to="{path:'/machines/'+encodeURIComponent(i.agent_id),query:{at:i.opened_at,hours:1,...(i.entity_type==='service'?{service:i.entity_id}:{})},hash:i.entity_type==='service'?'#services':''}" title="Текущее имя объекта; открывается исторический интервал">{{i.display_name||i.entity_id}}</router-link><span v-else>{{i.display_name||i.entity_id}}</span><small>{{i.entity_type==='service'?'Сервис':'Машина'}}</small></td>
     <td>{{ i.metric }}</td><td>{{ incidentStateLabel(i.status) }} · {{ i.severity==='critical'?'Критическая':'Предупреждение' }}</td><td>{{ i.reason }}<small v-if="i.rule_version">Правило #{{i.rule_version}}</small><small v-if="i.maintenance_observed">Наблюдался во время обслуживания</small><small v-if="i.maintenance_active">Сейчас идёт обслуживание</small></td>
-    <td><span v-if="i.acked_at">Прочитан {{ instant(i.acked_at) }}<button :disabled="!!pending||mode==='history'" @click="ack(i.id,true)">Считать непрочитанным</button></span><button v-else :disabled="!!pending||mode==='history'" @click="ack(i.id)">{{ pending===i.id?'Сохраняем…':'Прочитано' }}</button></td>
+    <td><span v-if="i.acked_at">Прочитан {{ instant(i.acked_at) }}<button :disabled="!owner||!!pending||mode==='history'" @click="ack(i.id,true)">Считать непрочитанным</button></span><button v-else :disabled="!owner||!!pending||mode==='history'" @click="ack(i.id)">{{ pending===i.id?'Сохраняем…':'Прочитано' }}</button></td>
    </tr></tbody></table></div>
   <button v-if="next" :disabled="paging||refreshing" @click="more">{{ paging?'Загружаем…':'Ещё 100' }}</button>
   <p class="muted">{{ incs.length }} записей · {{ updated?`Данные прочитаны ${updated.toLocaleTimeString()}`:'' }}</p>

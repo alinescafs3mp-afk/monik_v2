@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {ref,watch} from 'vue';
 import {get,submitOp} from '../api';
 import {monitoringCheck,monitoringLabel} from '../serviceSelection';
@@ -7,7 +9,7 @@ const busy=ref(false),notice=ref(''),failed=ref(false),checked=ref(!!props.servi
 watch(()=>[props.service.id,props.service.monitoring_enabled,props.service.monitoring_applied],()=>{if(!busy.value)checked.value=!!props.service.monitoring_enabled;});
 async function change(event:Event){
  const input=event.target as HTMLInputElement,enabled=input.checked;input.checked=checked.value;
- if(busy.value || props.locked)return;
+ if(!owner.value||busy.value || props.locked)return;
  busy.value=true;failed.value=false;notice.value='Читаем актуальную конфигурацию…';
  try{
   const id=String(props.service.id),agent=String(props.service.agent_id);
@@ -25,7 +27,7 @@ async function change(event:Event){
 }
 </script>
 <template><div class="service-monitor-toggle">
- <label><input type="checkbox" :checked="checked" :disabled="busy||locked||!service.has_check" :aria-label="`Проверять сервис: ${service.display_name||service.url||service.id}`" @change="change"/> Проверять</label>
+ <label><input type="checkbox" :checked="checked" :disabled="!owner||busy||locked||!service.has_check" :aria-label="`Проверять сервис: ${service.display_name||service.url||service.id}`" @change="change"/> Проверять</label>
  <small :class="{'data-warning':!service.monitoring_applied}" role="status">{{monitoringLabel(service)}}</small>
  <small v-if="notice" :role="failed?'alert':'status'" :class="{err:failed}">{{notice}}</small>
 </div></template>

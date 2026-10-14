@@ -28,6 +28,16 @@ func checkTrustedTool(info os.FileInfo) error {
 // Ancestors of privileged output paths must not be writable by another account.
 // The private state leaf can be owned by the existing service identity.
 func checkRootAncestors(path string, allowPrivateLeaf bool) error {
+	return checkAncestors(path, allowPrivateLeaf, true)
+}
+
+// Recovery is root-only and intentionally not traversable by the collector.
+func checkRecoveryPath(path string) error { return checkAncestors(path, false, false) }
+
+func checkAncestors(path string, allowPrivateLeaf, publicTraversal bool) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("absolute protected path required")
+	}
 	path = filepath.Clean(path)
 	for current := path; current != "/"; current = filepath.Dir(current) {
 		info, e := os.Lstat(current)
@@ -39,6 +49,9 @@ func checkRootAncestors(path string, allowPrivateLeaf bool) error {
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("installation path contains a symlink: %s", current)
+		}
+		if e = checkSingleLink(info); e != nil {
+			return e
 		}
 		st, ok := info.Sys().(*syscall.Stat_t)
 		if !ok {
@@ -53,7 +66,7 @@ func checkRootAncestors(path string, allowPrivateLeaf bool) error {
 		if st.Uid != 0 || info.Mode().Perm()&0022 != 0 {
 			return fmt.Errorf("untrusted installation ancestor: %s; use protected /var/lib/monik-agent state", current)
 		}
-		if info.IsDir() && info.Mode().Perm()&0001 == 0 {
+		if publicTraversal && info.IsDir() && info.Mode().Perm()&0001 == 0 {
 			return fmt.Errorf("service cannot traverse installation ancestor: %s", current)
 		}
 	}

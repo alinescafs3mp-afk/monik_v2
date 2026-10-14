@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import { computed, ref } from "vue";
 import { get, submitOp } from "../api";
 import { usePolling } from "../composables/usePolling";
@@ -43,18 +45,18 @@ async function rollout(){
   <h2>Обновления агентов</h2>
   <p>Каждый релиз хранит собственные подписанные метаданные и файлы. Импорт нового комплекта не меняет уже выбранную версию.</p>
   <p class="muted">Сначала по одной пробной машине для каждой ОС/архитектуры, затем ограниченные партии. Ошибка останавливает дальнейшую выдачу. Обновление самого service-host и его независимое восстановление пока не завершены.</p>
-  <label>Путь к комплекту на контроллере <input v-model="bundle" autocomplete="off" :disabled="!!pending"/></label>
-  <label><input type="checkbox" v-model="enroll" :disabled="!!pending"/> Зачислить корневой ключ TUF root из проверенного владельцем комплекта (только первый импорт)</label>
-  <button :disabled="!bundle.trim()||!!pending" @click="importBundle">{{pending==='import'?'Проверяем и публикуем…':'Импортировать комплект'}}</button>
+  <label>Путь к комплекту на контроллере <input v-model="bundle" autocomplete="off" :disabled="!owner||!!pending"/></label>
+  <label><input type="checkbox" v-model="enroll" :disabled="!owner||!!pending"/> Зачислить корневой ключ TUF root из проверенного владельцем комплекта (только первый импорт)</label>
+  <button :disabled="!owner||!bundle.trim()||!!pending" @click="importBundle">{{pending==='import'?'Проверяем и публикуем…':'Импортировать комплект'}}</button>
   <p v-if="actionError" role="alert">{{actionError}} <router-link to="/operations">Открыть операции</router-link></p>
   <p v-if="pending" role="status">{{pending==='import'?'Проверка подписей, файлов и запись каталога':'Подготовка задания для выбранных машин'}}. Принятый запрос ещё не означает завершение установки.</p>
  </section>
  <section class="panel">
   <h3>Цели раскатки</h3>
-  <div class="update-policy"><label>Машин в обычной партии <input v-model.number="batchSize" type="number" min="1" max="10" step="1" :disabled="!!pending"/></label><label>Наблюдение после подтверждения, секунд <input v-model.number="observeSeconds" type="number" min="15" max="300" step="1" :disabled="!!pending"/></label></div>
+  <div class="update-policy"><label>Машин в обычной партии <input v-model.number="batchSize" type="number" min="1" max="10" step="1" :disabled="!owner||!!pending"/></label><label>Наблюдение после подтверждения, секунд <input v-model.number="observeSeconds" type="number" min="15" max="300" step="1" :disabled="!owner||!!pending"/></label></div>
   <p class="muted">Наблюдаем новый процесс, его хеш и свежую связь. Это не проверка исправности всех приложений машины. Срок плана: 24 часа; выданного задания: до 10 минут.</p>
   <p>Выбрано {{eligible.length}} совместимых машин. Статус окончательно проверяется сервером перед отправкой.</p>
-  <label v-for="ag in agents" :key="ag.id" class="update-target"><input type="checkbox" :value="ag.id" v-model="selected" :disabled="!!pending||!!agentUpdateReason(ag)"/>
+  <label v-for="ag in agents" :key="ag.id" class="update-target"><input type="checkbox" :value="ag.id" v-model="selected" :disabled="!owner||!!pending||!!agentUpdateReason(ag)"/>
    <span>{{ag.display_name || ag.hostname || ag.id}} · {{ag.os}}/{{ag.arch}}<small v-if="agentUpdateReason(ag)" class="muted">{{agentUpdateReason(ag)}}</small></span>
   </label>
  </section>
@@ -62,7 +64,7 @@ async function rollout(){
   <h3>Проверьте план перед запуском</h3>
   <p>Версия {{review.release.version}} · {{review.targets.length}} машин. Пробные машины идут последовательно, затем партии по {{review.batch}}. Наблюдение: {{review.observe}} с.</p>
   <p v-for="a in canaries" :key="a.id">Пробная: {{a.display_name||a.hostname||a.id}} · {{a.os}}/{{a.arch}}</p>
-  <button :disabled="!!pending||!review.targets.length" @click="rollout">Подтвердить запуск по партиям</button> <button :disabled="!!pending" @click="review=null">Отмена</button>
+  <button :disabled="!owner||!!pending||!review.targets.length" @click="rollout">Подтвердить запуск по партиям</button> <button :disabled="!owner||!!pending" @click="review=null">Отмена</button>
  </section>
  <section class="panel"><h3>Раскатки</h3><p v-if="!rollouts.length">Раскаток нового формата пока нет.</p><p class="muted">Последние 30 планов. Все операции доступны в общем журнале. Закрытие страницы не отменяет работу.</p></section>
  <RolloutProgress v-for="r in rollouts" :key="r.operation_id" :rollout="r" @changed="refresh"/>
@@ -75,7 +77,7 @@ async function rollout(){
    <code>{{r.digest}}</code>
    <small v-if="r.metadata_expires_at">Метаданные действуют до {{r.metadata_expires_at}}</small>
    <p v-if="releaseReason(r,serverTime)" role="status">{{releaseReason(r,serverTime)}}</p>
-   <button :disabled="!eligible.length||!!pending||!!releaseReason(r,serverTime)" @click="prepare(r)">{{pending===r.id?'Подготовка…':'Раскатить выбранным'}}</button>
+   <button :disabled="!owner||!eligible.length||!!pending||!!releaseReason(r,serverTime)" @click="prepare(r)">{{pending===r.id?'Подготовка…':'Раскатить выбранным'}}</button>
   </article>
  </section>
 </template>

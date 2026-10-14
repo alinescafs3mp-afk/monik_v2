@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {computed,ref} from 'vue';
 import {get,submitOp} from '../api';
 import {usePolling} from '../composables/usePolling';
@@ -13,7 +15,7 @@ const {loading,error,refresh}=usePolling(async()=>{
 });
 async function reload(){if(dirty.value&&!confirm('Отбросить несохранённые пороги и прочитать текущие?'))return;draft.value=[];original.value='[]';await refresh();}
 async function save(){
- if(busy.value||validation.value||!dirty.value)return;
+ if(!owner.value||busy.value||validation.value||!dirty.value)return;
  busy.value=true;notice.value='Сохраняем правила…';
  try{await submitOp('rule.save',{base_revision:base.value,rules:JSON.parse(JSON.stringify(draft.value))});original.value=JSON.stringify(draft.value);await refresh();notice.value='Правила сохранены. Применяются к следующим измерениям, старая история не пересчитывается.';window.dispatchEvent(new Event('monik:refresh'));}
  catch(e){notice.value=(e as Error).message;}finally{busy.value=false;}
@@ -22,7 +24,7 @@ async function save(){
 <template><section class="panel rule-editor"><h2>Пороги CPU, RAM и DISK</h2>
  <p class="muted">Общие правила для парка. RAM: занятые байты / всего; DISK: процент самого заполненного локального раздела. Изменение политики не считается восстановлением машины.</p>
  <p v-if="loading" role="status">Читаем правила…</p><p v-if="error" class="err" role="alert">{{error}} <button @click="refresh">Повторить</button></p>
- <form v-if="draft.length" @submit.prevent="save"><fieldset :disabled="busy"><legend>Ревизия {{base}}</legend>
+ <form v-if="draft.length" @submit.prevent="save"><fieldset :disabled="!owner||busy"><legend>Ревизия {{base}}</legend>
   <div class="table-wrap"><table><thead><tr><th>Метрика</th><th>Предупреждение, %</th><th>Критический, %</th><th>Восстановление ≤, %</th><th>Превышение, с</th><th>Восстановление, с</th></tr></thead><tbody><tr v-for="r in draft" :key="r.metric"><td>{{labels[r.metric]}}</td>
    <td><input v-model.number="r.warning" type="number" min="1" max="99" step="0.1" :aria-label="`${r.metric}: предупреждение`"/></td>
    <td><input v-model.number="r.critical" type="number" min="1" max="100" step="0.1" :aria-label="`${r.metric}: критический`"/></td>

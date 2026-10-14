@@ -1,0 +1,14 @@
+[Unit]
+Description=Spark exact GPT OSS 120B model owner %i
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=no
+User=root
+Group=root
+TimeoutStartSec=infinity
+TimeoutStopSec=180
+KillMode=mixed
+ExecStart=/usr/bin/python3 -I -B /opt/spark/model-collection-v4/bin/supervisor.py gpt-oss-120b-existing-configured %i

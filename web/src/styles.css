@@ -110,6 +110,17 @@ h2 { margin: .25rem 0 .6rem; } h3 { margin: 0; } h4 { margin: 1rem 0 .4rem; }
 .truncate { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card footer { margin-top: .9rem; }
 .detail-tabs,.timebar,.time-form { margin-bottom: 1rem; }
+.detail-tabs button[aria-pressed="true"] { background:var(--accent);color:var(--panel); }
+.spark-card h3,.spark-detail h2,.model-properties dd {overflow-wrap:anywhere;}
+.spark-detail .metric-grid dt,.spark-detail .metric-grid dd {overflow-wrap:anywhere;}
+.spark-metrics {grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));}
+.model-properties {display:grid;grid-template-columns:minmax(8rem,1fr) minmax(0,2fr);gap:.5rem;}
+.model-properties dt {color:var(--muted);}.model-properties dd {margin:0;}
+.model-actions {display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0;}
+.model-actions>div {flex:1 1 12rem;}.model-actions small {display:block;color:var(--muted);margin:.4rem 0;}
+.model-settings {margin:1rem 0;}.model-logs h4 {margin-top:0;}
+.log-view {height:20rem;max-height:45vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:.75rem;border:1px solid var(--line);font: .85rem/1.45 ui-monospace,monospace;}
+@media(max-width:600px){.model-properties{grid-template-columns:1fr;}.model-properties dd{margin-bottom:.5rem;}.model-actions>div{flex-basis:100%;}.spark-card .metric-grid{grid-template-columns:1fr;}}
 .chart-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; }
 .metric-chart { margin: 0; padding: .75rem; border: 1px solid var(--line); border-radius: 8px; }
 .metric-chart figcaption { display: flex; justify-content: space-between; gap: .3rem; flex-wrap: wrap; }

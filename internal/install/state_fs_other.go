@@ -9,5 +9,6 @@ import (
 
 func checkSingleLink(os.FileInfo) error     { return fmt.Errorf("Linux installer only") }
 func checkTrustedTool(os.FileInfo) error    { return fmt.Errorf("Linux installer only") }
+func checkRecoveryPath(string) error        { return fmt.Errorf("Linux installer only") }
 func checkRootAncestors(string, bool) error { return fmt.Errorf("Linux installer only") }
 func lockNativeInstall() (func(), error)    { return nil, fmt.Errorf("Linux installer only") }

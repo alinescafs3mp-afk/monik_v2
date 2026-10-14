@@ -43,6 +43,7 @@ const groups = [
     items: [
       { to: "/", label: "Обзор", icon: "overview" },
       { to: "/machines", label: "Машины", icon: "machine" },
+      { to: "/sparks", label: "Спарки", icon: "spark" },
       { to: "/services", label: "Сервисы", icon: "service" },
       { to: "/problems", label: "Проблемы и история", icon: "problem" },
     ],
@@ -133,7 +134,7 @@ onUnmounted(() => {
         <strong class="page-title">{{ (route.meta.title as string) || "Monik" }}</strong>
         <router-link class="header-operations" :class="{'err':attn>0}" :to="attn>0?'/operations?filter=attention':'/operations'" title="Выполняются / непрочитанные с проблемами">Операции {{ running<0?'?':running }}/{{ attn < 0 ? '?' : attn }}</router-link>
         <form class="global-search" @submit.prevent="$router.push({ path:'/machines', query:{ q } })"><input v-model="q" type="search" placeholder="Поиск машины" aria-label="Глобальный поиск"/></form>
-        <DisplayControls/><span class="header-user muted">{{ (me && (me.username as string)) || "" }}</span>
+        <DisplayControls/><span class="header-user muted">{{ (me && (me.username as string)) || "" }}<small v-if="me&&me.role!=='owner'"> · Только просмотр</small></span>
         <button type="button" @click="$emit('logout')">Выйти</button>
       </header>
       <p v-if="conn === 'paused'" class="connection-warning" role="status">Обновления приостановлены: восстанавливаем соединение с сервером. Данные могут быть устаревшими.</p>

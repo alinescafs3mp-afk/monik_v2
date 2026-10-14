@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import {useSession} from "../session";
+const {owner}=useSession();
+import { ref, watch } from "vue";
+import {useRoute} from 'vue-router';
 import InstallerDownload from "../components/InstallerDownload.vue";
 import AdmissionPanel from "../components/AdmissionPanel.vue";
 import { get, submitOp } from "../api";
 import {discoveryProfile as makeDiscoveryProfile,normalizedProfileURL} from "../inventory";
 const emit = defineEmits<{ toast: [string, string?] }>();
+const route=useRoute();
 const info = ref<Record<string, unknown> | null>(null);
 const created = ref<Record<string, unknown> | null>(null);
 const pending = ref(false), error = ref(''), autoProfile = ref(false);
@@ -33,9 +37,12 @@ async function downloadProfile(){
  const a=document.createElement('a');a.href=url;a.download='monik-discovery.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  emit('toast','Профиль сохранён. Доступность маршрута проверяется с самой удалённой машины.');
 }
-onMounted(async () => {
-  try{info.value = await get("/api/v1/enrollment");profileURL.value=String(info.value?.profile_url||info.value?.bootstrap_default||info.value?.advertised_url||'');}catch(e){error.value=(e as Error).message;}
-});
+let infoGeneration=0;
+watch(owner,async isOwner => {
+  const ticket=++infoGeneration;
+  if(!isOwner){info.value=null;created.value=null;return;}
+  try{const value=await get<Record<string,unknown>>("/api/v1/enrollment");if(ticket!==infoGeneration||!owner.value)return;info.value=value;profileURL.value=String(value.profile_url||value.bootstrap_default||value.advertised_url||'');}catch(e){if(ticket===infoGeneration)error.value=(e as Error).message;}
+},{immediate:true});
 async function makeCode() {
   if(pending.value || checking.value || !info.value)return;
   if(!await checkAddress())return;
@@ -78,7 +85,8 @@ async function copyYaml() {
 
 <template>
   <div>
-    <section class="panel profile-address"><h2>Адрес в профиле нового агента</h2>
+    <p v-if="!owner" class="panel">Подключение новых машин доступно владельцу.</p>
+    <section v-if="owner" class="panel profile-address"><h2>Адрес в профиле нового агента</h2>
     <label>Доступный агенту HTTPS-адрес <input v-model="profileURL" :disabled="pending||checking||installerBusy" type="url" autocomplete="off" spellcheck="false"/></label>
     <div class="row"><button :disabled="!info||checking||pending||installerBusy" @click="profileURL=String(info?.bootstrap_default||'');validation=null">Внешний адрес по умолчанию</button><button :disabled="!info||checking||pending||installerBusy" @click="profileURL=String(info?.advertised_url||'');validation=null">Адрес из настроек сервера</button><button :disabled="!info||checking||pending||installerBusy" @click="checkAddress">{{checking?'Проверяем сертификат…':'Проверить сертификат профиля'}}</button></div>
     <p class="muted">Настройки действующего контроллера: {{info?.advertised_url}}. Выбор выше меняет только новый профиль, не LAN-агентов и не маршрут работающего парка. Все профили используют прежнюю CA.</p>
@@ -86,8 +94,8 @@ async function copyYaml() {
     <p v-if="validation && !validation.tls?.matches" class="data-warning">SAN: {{validation.tls?.ip_addresses?.join(', ')}} {{validation.tls?.dns_names?.join(', ')}}. Добавление имени не требует замены CA.</p>
     </section>
     <p v-if="error" class="panel err" role="alert">{{error}}</p>
-    <InstallerDownload :controller-url="profileURL" @busy="installerBusy=$event"/>
-    <details class="panel advanced-enrollment"><summary>Другие способы подключения: профиль, код, Windows</summary>
+    <InstallerDownload :controller-url="profileURL" :initial-flavor="String(route.query.flavor||'general')" @busy="installerBusy=$event"/>
+    <details v-if="owner" class="panel advanced-enrollment"><summary>Другие способы подключения: профиль, код, Windows</summary>
     <AdmissionPanel/>
     <section class="panel"><h2>Автоматическое появление машины</h2><p>Один доверенный профиль можно раздать своим машинам. Он не содержит кода регистрации или общего API-ключа. Откройте приём выше. Каждый агент создаёт собственную идентичность и после запуска появляется в «Машинах» для подтверждения.</p>
     <button :disabled="!info||checking||pending||installerBusy" @click="downloadProfile">Скачать профиль автообнаружения</button><button :disabled="!info" @click="autoProfile=!autoProfile">Показать профиль</button><pre v-if="autoProfile">{{discoveryProfile()}}</pre>

@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+# Fixed delegation; the original Controller owns the sole collection.lock.
+exec /usr/local/sbin/spark-modelctl-v4 start qwen-existing-observation

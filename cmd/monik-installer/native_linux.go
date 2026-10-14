@@ -59,10 +59,17 @@ func runNative(ctx context.Context, b *installerbundle.Bundle, out io.Writer) er
 			return e
 		}
 		staging = dir
-		for _, x := range []struct {
+		parts := []struct {
 			name string
 			copy func(io.Writer) error
-		}{{"monik-agent", b.CopyWorker}, {"monik-service-host", b.CopySupervisor}} {
+		}{{"monik-agent", b.CopyWorker}}
+		if b.Manifest.Flavor() == "general" {
+			parts = append(parts, struct {
+				name string
+				copy func(io.Writer) error
+			}{"monik-service-host", b.CopySupervisor})
+		}
+		for _, x := range parts {
 			f, e := os.OpenFile(filepath.Join(staging, x.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0700)
 			if e != nil {
 				return e
@@ -105,7 +112,7 @@ func runNative(ctx context.Context, b *installerbundle.Bundle, out io.Writer) er
 			return nil
 		},
 		setup: func(ctx context.Context, b *installerbundle.Bundle) (*installedConfig, error) {
-			if e := verifyController(ctx, b.Manifest.Profile); e != nil {
+			if e := verifyControllerFeatures(ctx, b.Manifest.Profile, b.Manifest.MinimumControllerFeatures); e != nil {
 				return nil, e
 			}
 			if e := stage(); e != nil {
@@ -132,7 +139,11 @@ func runNative(ctx context.Context, b *installerbundle.Bundle, out io.Writer) er
 			// An old downloaded installer must not downgrade an existing/newer pair.
 			// Partial installs of this exact pair may be retried; differing bytes need
 			// explicit recovery or the signed update mechanism, never silent overwrite.
-			for _, x := range []struct{ path, digest string }{{"/usr/lib/monik/monik-service-host", b.Manifest.Supervisor.SHA256}, {stateDir + "/bin/monik-agent", b.Manifest.Worker.SHA256}} {
+			parts := []struct{ path, digest string }{{stateDir + "/bin/monik-agent", b.Manifest.Worker.SHA256}}
+			if b.Manifest.Flavor() == "general" {
+				parts = append(parts, struct{ path, digest string }{"/usr/lib/monik/monik-service-host", b.Manifest.Supervisor.SHA256})
+			}
+			for _, x := range parts {
 				got, e := fileDigest(x.path)
 				if os.IsNotExist(e) {
 					continue
@@ -153,6 +164,9 @@ func runNative(ctx context.Context, b *installerbundle.Bundle, out io.Writer) er
 			return nil
 		},
 		ready: func(ctx context.Context, c *installedConfig) error {
+			if b.Manifest.Flavor() == "spark-light" && b.Manifest.Profile != nil && b.Manifest.Profile.EnableAgentConsole {
+				return fmt.Errorf("agent console is unavailable in Spark light flavor")
+			}
 			if b.Manifest.Profile != nil && b.Manifest.Profile.EnableAgentConsole {
 				fmt.Fprintln(out, "Проверяем отдельно разрешённую непривилегированную консоль…")
 				if err := command(ctx, "/usr/lib/monik/monik-service-host", "console-enable"); err != nil {
@@ -176,9 +190,12 @@ func waitReady(ctx context.Context, c *installedConfig) error {
 	if e != nil {
 		return e
 	}
-	host, e := fileDigest("/usr/lib/monik/monik-service-host")
-	if e != nil {
-		return e
+	var host string
+	if c.AgentFlavor != "spark-light" {
+		host, e = fileDigest("/usr/lib/monik/monik-service-host")
+		if e != nil {
+			return e
+		}
 	}
 	client := clientFor(c.CACertPEM)
 	defer client.CloseIdleConnections()
@@ -195,10 +212,15 @@ func waitReady(ctx context.Context, c *installedConfig) error {
 			if e == nil {
 				var r installationStatus
 				e = readResponse(ctx, client, strings.TrimRight(c.ControllerURL, "/")+"/api/v1/agent/installation", c.AgentID, strings.TrimSpace(string(cred)), &r)
-				if e == nil && r.Ready && r.AgentID == c.AgentID && r.ControllerID == c.ControllerID && r.WorkerDigest == worker && r.SessionID != "" && r.Seq > 0 {
+				if e == nil && r.Ready && r.AgentID == c.AgentID && r.ControllerID == c.ControllerID && r.WorkerDigest == worker && r.SessionID != "" && r.Seq > 0 && (c.AgentFlavor != "spark-light" || r.AgentFlavor == "spark-light") {
 					if firstSession == r.SessionID && r.Seq > firstSeq {
 						if e = systemctl(ctx, "is-active", "--quiet", "monik-agent.service"); e == nil {
-							if e = supervisorAlive(ctx, worker, host); e == nil {
+							if c.AgentFlavor == "spark-light" {
+								e = directWorkerAlive(ctx, worker)
+							} else {
+								e = supervisorAlive(ctx, worker, host)
+							}
+							if e == nil {
 								return nil
 							}
 						}
@@ -231,6 +253,29 @@ func waitReady(ctx context.Context, c *installedConfig) error {
 		}
 	}
 }
+func directWorkerAlive(ctx context.Context, workerDigest string) error {
+	toolPath, e := tool("systemctl")
+	if e != nil {
+		return e
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(checkCtx, toolPath, "show", "monik-agent.service", "--property=MainPID", "--value")
+	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "LANG=C", "LC_ALL=C"}
+	raw, e := cmd.Output()
+	if e != nil || len(raw) > 64 {
+		return fmt.Errorf("systemd did not confirm direct worker PID")
+	}
+	pid, e := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if e != nil || pid <= 0 {
+		return fmt.Errorf("invalid direct worker PID")
+	}
+	if got, e := processDigest(pid); e != nil || got != workerDigest {
+		return fmt.Errorf("running direct worker does not match installed slot")
+	}
+	return nil
+}
+
 func supervisorAlive(ctx context.Context, workerDigest, hostDigest string) error {
 	d := net.Dialer{Timeout: time.Second}
 	conn, e := d.DialContext(ctx, "unix", stateDir+"/service-host.sock")

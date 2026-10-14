@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/alinescafs3mp-afk/monik_v2/internal/protocol"
@@ -78,7 +79,14 @@ func (s *Store) ArtifactsByRelease(releaseID string) ([]map[string]any, error) {
 		if err := rows.Scan(&osn, &arch, &name, &sha, &length, &path); err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]any{"os": osn, "arch": arch, "name": name, "sha256": sha, "length": length, "path": path})
+		flavor := "general"
+		if strings.HasPrefix(name, "spark-light/") {
+			flavor = "unsupported"
+			if name == "spark-light/linux-arm64/monik-agent" && osn == "linux" && arch == "arm64" {
+				flavor = "spark-light"
+			}
+		}
+		out = append(out, map[string]any{"agent_flavor": flavor, "os": osn, "arch": arch, "name": name, "sha256": sha, "length": length, "path": path})
 	}
 	return out, rows.Err()
 }

@@ -20,6 +20,9 @@ type lossLedger struct {
 	Dropped int64      `json:"dropped"`
 	From    *time.Time `json:"from,omitempty"`
 	To      *time.Time `json:"to,omitempty"`
+	// Schema 2 is reserved for an operator's explicit recovery of unknown
+	// prior loss. Schema 1 writers reject it instead of erasing this qualifier.
+	PriorUnknown bool `json:"prior_unknown,omitempty"`
 	// Record the retirement decision BEFORE deleting data. On restart these
 	// same paths are removed without incrementing the loss count again.
 	Pending []string `json:"pending,omitempty"`
@@ -46,7 +49,8 @@ func (s *Store) loadLossLocked() error {
 	if err = jsonutil.ReadObject(f, 128<<10, &v); err != nil {
 		return fmt.Errorf("invalid spool loss ledger: %w", err)
 	}
-	if v.Schema != 1 || v.Dropped < 0 || len(v.Pending) > lossBatchLimit || int64(len(v.Pending)) > v.Dropped {
+	validSchema := v.Schema == 1 && !v.PriorUnknown || v.Schema == 2 && v.PriorUnknown
+	if !validSchema || v.Dropped < 0 || len(v.Pending) > lossBatchLimit || int64(len(v.Pending)) > v.Dropped {
 		return fmt.Errorf("invalid spool loss ledger fields")
 	}
 	if v.Dropped > 0 && (v.From == nil || v.To == nil || v.From.IsZero() || v.To.Before(*v.From)) {
@@ -63,6 +67,7 @@ func (s *Store) loadLossLocked() error {
 		seen[p] = true
 	}
 	s.dropped, s.from, s.to, s.pendingLoss = v.Dropped, v.From, v.To, v.Pending
+	s.priorUnknown = v.PriorUnknown
 	return s.finishLossLocked()
 }
 func validLossPath(p string) bool {
@@ -88,7 +93,11 @@ func (s *Store) saveLossLocked(v lossLedger) error {
 	return secure.AtomicWrite(filepath.Join(s.dir, lossLedgerName), raw, 0600)
 }
 func (s *Store) lossSnapshotLocked() lossLedger {
-	return lossLedger{Schema: 1, Dropped: s.dropped, From: s.from, To: s.to, Pending: append([]string(nil), s.pendingLoss...)}
+	schema := 1
+	if s.priorUnknown {
+		schema = 2
+	}
+	return lossLedger{Schema: schema, Dropped: s.dropped, From: s.from, To: s.to, PriorUnknown: s.priorUnknown, Pending: append([]string(nil), s.pendingLoss...)}
 }
 func (s *Store) finishLossLocked() error {
 	if len(s.pendingLoss) == 0 {

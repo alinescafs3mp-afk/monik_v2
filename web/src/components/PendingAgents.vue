@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {ref} from 'vue';
 import {get,post,submitOp} from '../api';
 import {usePolling} from '../composables/usePolling';
 const emit=defineEmits<{changed:[]}>();
 const candidates=ref<any[]>([]),busy=ref(''),feedback=ref(''),auth=ref(false),password=ref('');
-const {loading,error,refresh}=usePolling(async()=>{const data=await get<any>('/api/v1/enrollment/pending');candidates.value=data.candidates||[];});
+const {loading,error,refresh}=usePolling(async()=>{if(!owner.value){candidates.value=[];return;}const data=await get<any>('/api/v1/enrollment/pending');candidates.value=data.candidates||[];});
 async function reauth(){if(busy.value)return;busy.value='auth';error.value='';try{await post('/api/v1/reauth',{password:password.value});auth.value=false;feedback.value='Личность подтверждена. Повторите нужное решение.';}catch(e){error.value=(e as Error).message;}finally{password.value='';busy.value='';}}
 async function decide(c:any,approve:boolean){
  if(busy.value)return;
@@ -15,7 +17,7 @@ async function decide(c:any,approve:boolean){
  finally{busy.value='';}
 }
 </script>
-<template><section v-if="candidates.length||error||feedback" class="panel pending-agents">
+<template><section v-if="owner&&(candidates.length||error||feedback)" class="panel pending-agents">
  <p><router-link to="/add">Управление окном приёма новых агентов</router-link></p>
  <h2>Ожидают подтверждения: {{candidates.length}}</h2><p class="muted">Машины обнаружены по исходящему сигналу агента. Имена и ОС пока не проверены. Сверьте отпечаток с установкой, прежде чем разрешить доступ. Метрики и команды недоступны до одобрения.</p>
  <p v-if="error" class="err" role="alert">{{error}} <button @click="refresh">Повторить</button></p><p v-if="feedback" role="status">{{feedback}}</p>

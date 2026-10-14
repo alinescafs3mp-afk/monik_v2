@@ -16,6 +16,15 @@ import (
 )
 
 func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
+	return s.insertOperation(op, reqHash, nil)
+}
+func (s *Store) InsertSparkOperation(op *protocol.Operation, reqHash string, owner *Session) error {
+	return s.insertOperation(op, reqHash, owner)
+}
+func (s *Store) insertOperation(op *protocol.Operation, reqHash string, owner *Session) error {
+	if strings.HasPrefix(op.Action, "model.") && owner == nil {
+		return fmt.Errorf("model operation requires an authenticated frozen intent")
+	}
 	if op.Action == "secret.replace" && op.Params != nil {
 		delete(op.Params, "value")
 		op.Params["redacted"] = true
@@ -29,6 +38,32 @@ func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 		dl = op.Deadline.UTC().Format(dbTimeFormat)
 	}
 	return s.WithTx(func(tx *sql.Tx) error {
+		var supersededRestarts []string
+		if owner != nil {
+			ts := &Store{DB: s.DB, Clock: s.Clock, executor: tx}
+			fresh, err := ts.RevalidateSession(owner)
+			if err != nil || fresh.Role != "owner" || fresh.RecentAuthUntil == nil || !s.now().Before(*fresh.RecentAuthUntil) {
+				return ErrConflict
+			}
+			p, err := protocol.DecodeModelActionParams(op.Params)
+			if err != nil {
+				return err
+			}
+			if len(op.Targets) != 1 {
+				return ErrConflict
+			}
+			if _, _, err = ts.ValidateSparkControl(op.Targets[0].AgentID, p, op.Action); err != nil {
+				return err
+			}
+			busy, parents, err := ts.sparkProfileReservation(op.Targets[0].AgentID, p.ProfileID, op.Action)
+			if err != nil {
+				return err
+			}
+			if busy {
+				return ErrConflict
+			}
+			supersededRestarts = parents
+		}
 		_, err := tx.Exec(`INSERT INTO operations(id,action,status,revision,client_request_key,actor_id,params,created_at,deadline,summary,parent_id,request_hash)
 			VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, op.ID, op.Action, string(op.Status), op.Revision, op.ClientRequestKey, op.Actor,
 			string(params), op.CreatedAt.UTC().Format(dbTimeFormat), dl, op.Summary, op.ParentID, reqHash)
@@ -71,6 +106,17 @@ func (s *Store) InsertOperation(op *protocol.Operation, reqHash string) error {
 					VALUES(?,?,?,?,?,?,?,?)`, jobID, op.ID, t.AgentID, op.Action, string(b), jobStatus,
 					op.CreatedAt.UTC().Format(dbTimeFormat), env.Deadline.UTC().Format(dbTimeFormat))
 				if err != nil {
+					return err
+				}
+			}
+		}
+		if owner != nil {
+			p, _ := protocol.DecodeModelActionParams(op.Params)
+			if _, err := tx.Exec(`INSERT INTO spark_intents(operation_id,agent_id,owner_session_id,owner_user_id,profile_id,profile_revision,control_epoch,agent_session,initial_generation,stage_id) VALUES(?,?,?,?,?,?,?,?,?,?)`, op.ID, op.Targets[0].AgentID, owner.ID, owner.UserID, p.ProfileID, p.ProfileRevision, p.ControlEpoch, p.ExpectedAgentSession, p.ExpectedGeneration, idgen.New()); err != nil {
+				return err
+			}
+			for _, parentID := range supersededRestarts {
+				if err := s.supersedeSparkRestartTx(tx, op.Targets[0].AgentID, parentID, op.ID); err != nil {
 					return err
 				}
 			}
@@ -219,6 +265,13 @@ func (s *Store) pendingJobs(q sqlExecutor, agentID string, limit int) ([]protoco
 		if env.NotBefore.After(now) || !env.Deadline.After(now) {
 			continue
 		}
+		if strings.HasPrefix(action, "model.") {
+			if valid, err := s.sparkDispatchAuthority(q, agentID, env); err != nil {
+				return nil, err
+			} else if !valid {
+				continue
+			}
+		}
 		out = append(out, env)
 		if len(out) >= limit {
 			break
@@ -278,11 +331,37 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 		if rec.OperationID != "" && rec.OperationID != opID {
 			return ErrConflict
 		}
+		if strings.HasPrefix(action, "model.") {
+			if err := validateSparkReceipt(rec); err != nil {
+				return err
+			}
+			if rec.Stage == "restart_start_not_attempted" {
+				stopped, ok := rec.Evidence["restart_stop_receipt"].(string)
+				if action != "model.restart" || !ok || stopped != previous {
+					// Exact replay of the new terminal receipt remains idempotent.
+					if previous != string(b) {
+						return ErrConflict
+					}
+				}
+			}
+		}
 		if status == "preparing" || status == "rollout_held" {
 			return fmt.Errorf("receipt for unpublished or held job")
 		}
-		if previous == string(b) {
+		if previous == string(b) && !(strings.HasPrefix(action, "model.") && status == string(protocol.TargetUnknownResult) && rec.Status == protocol.TargetSucceeded) {
 			return nil
+		}
+		if action == "model.restart" && status == string(protocol.TargetFailed) {
+			var targetStatus, stage, code string
+			if err := tx.QueryRow(`SELECT status,stage,error_code FROM operation_targets WHERE operation_id=? AND agent_id=?`, opID, agentID).Scan(&targetStatus, &stage, &code); err != nil {
+				return err
+			}
+			if targetStatus == string(protocol.TargetFailed) && stage == "restart_start_superseded" && code == "superseded_by_stop" {
+				// This exact server-cancelled parent cannot change again. ACK its
+				// already identity-checked/bounded late receipt so the worker can
+				// drain it, without replacing the separate restart/stop outcomes.
+				return nil
+			}
 		}
 		// Terminal evidence cannot be overwritten by delayed delivery or replay.
 		switch protocol.TargetStatus(status) {
@@ -334,6 +413,8 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 				}
 			case "agent.diagnostics":
 				proven = rec.Stage == "diagnostics" && rec.Evidence["os"] != nil
+			case "model.start", "model.stop", "model.restart":
+				proven = s.sparkReceiptProven(tx, agentID, job, rec)
 			case "secret.replace":
 				id, _ := job.Params["secret_id"].(string)
 				var version int
@@ -379,6 +460,9 @@ func (s *Store) ApplyReceipt(agentID string, rec protocol.JobReceipt) error {
 			}
 			if !proven {
 				rec.Status = protocol.TargetRejected
+				if strings.HasPrefix(action, "model.") {
+					rec.Status = protocol.TargetUnknownResult
+				}
 				rec.Stage = "unverified_result"
 				rec.ErrorCode = "missing_evidence"
 				rec.Message = "Agent reported success without matching committed observation/configuration evidence"
@@ -416,6 +500,14 @@ func (s *Store) CancelPending(opID string) error {
 		return err
 	}
 	err := s.WithTx(func(tx *sql.Tx) error {
+		// A restart's already observed stop is not rolled back. Cancellation
+		// can still prevent its unissued later start authorization.
+		if _, err := tx.Exec(`UPDATE operation_targets SET status='cancelled_before_execution',stage='restart_stopped_cancelled',message='Stop observed; later start cancelled before stage authorization',updated_at=? WHERE operation_id=? AND status='awaiting_confirmation' AND EXISTS(SELECT 1 FROM spark_intents i JOIN operations o ON o.id=i.operation_id WHERE i.operation_id=operation_targets.operation_id AND i.agent_id=operation_targets.agent_id AND o.action='model.restart' AND i.stage_authorization='')`, s.now().UTC().Format(dbTimeFormat), opID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE agent_jobs SET status='cancelled_before_execution' WHERE operation_id=? AND action='model.restart' AND status='awaiting_confirmation' AND EXISTS(SELECT 1 FROM spark_intents i WHERE i.operation_id=agent_jobs.operation_id AND i.agent_id=agent_jobs.agent_id AND i.stage_authorization='')`, opID); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE operation_targets SET status='cancelled_before_execution',stage='cancelled',message='cancelled before dispatch',updated_at=?
   WHERE operation_id=? AND status IN ('queued','waiting_offline') AND NOT EXISTS(SELECT 1 FROM agent_jobs j WHERE j.operation_id=operation_targets.operation_id AND j.agent_id=operation_targets.agent_id AND j.status NOT IN ('preparing','rollout_held','queued','waiting_offline'))`, s.now().UTC().Format(dbTimeFormat), opID); err != nil {
 			return err

@@ -1,0 +1,23 @@
+{
+  "default_resource_shape": {
+    "Memory": 0,
+    "MemorySwap": 0,
+    "MemoryReservation": 0,
+    "NanoCpus": 0,
+    "CpuQuota": 0,
+    "CpuPeriod": 0,
+    "CpuShares": 0,
+    "CpusetCpus": "",
+    "CpusetMems": "",
+    "PidsLimit": null,
+    "CgroupnsMode": "private",
+    "DeviceCgroupRules": null,
+    "SecurityOpt": null,
+    "CapDrop": null,
+    "CapAdd": null,
+    "Ulimits": [],
+    "Privileged": false,
+    "Runtime": "runc",
+    "DeviceRequests": null
+  }
+}

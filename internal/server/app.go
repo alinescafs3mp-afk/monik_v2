@@ -40,6 +40,10 @@ type Config struct {
 }
 
 type App struct {
+	writerUnlock    func()
+	closeOnce       sync.Once
+	closeErr        error
+	sparkLogs       sparkLogState
 	network         networkLimits
 	controlMu       sync.Mutex
 	installerMu     sync.Mutex
@@ -80,6 +84,18 @@ func Open(cfg Config) (*App, error) {
 			}
 		}
 	}
+	// Own the writer fence before SQLite migrations, key creation or recovery
+	// normalization. A rejected second process must not alter a live controller.
+	unlock, err := processlock.Acquire(filepath.Join(cfg.DataDir, "controller.lock"))
+	if err != nil {
+		return nil, err
+	}
+	opened := false
+	defer func() {
+		if !opened {
+			unlock()
+		}
+	}()
 	// Do not turn loss of the database into an unrelated empty controller while
 	// enrolled keys/certificates still exist next to it.
 	dbPath := filepath.Join(cfg.DataDir, "monik.db")
@@ -113,7 +129,7 @@ func Open(cfg Config) (*App, error) {
 		_ = st.Close()
 		return nil, err
 	}
-	a := &App{Cfg: cfg, Store: st, Log: cfg.Logger, Clock: cfg.Clock, Master: master}
+	a := &App{Cfg: cfg, Store: st, Log: cfg.Logger, Clock: cfg.Clock, Master: master, writerUnlock: unlock}
 	if err := st.EnsureControllerIdentity(); err != nil {
 		st.Close()
 		return nil, err
@@ -149,10 +165,22 @@ func Open(cfg Config) (*App, error) {
 		st.Close()
 		return nil, err
 	}
+	opened = true
 	return a, nil
 }
 
-func (a *App) Close() error { a.agentConsole.closeAll(); a.console.closeAll(); return a.Store.Close() }
+func (a *App) Close() error {
+	a.closeOnce.Do(func() {
+		a.agentConsole.closeAll()
+		a.console.closeAll()
+		a.closeSparkLogs()
+		a.closeErr = a.Store.Close()
+		if a.writerUnlock != nil {
+			a.writerUnlock()
+		}
+	})
+	return a.closeErr
+}
 
 func (a *App) ControllerID() string {
 	return a.Store.MustSetting("controller_id", "")
@@ -285,11 +313,6 @@ func hostOf(raw string) string {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	unlock, err := processlock.Acquire(filepath.Join(a.Cfg.DataDir, "controller.lock"))
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	if !a.SetupComplete() {
 		a.Log.Info("setup required; UI will run local setup wizard")
 	}
@@ -326,6 +349,7 @@ func (a *App) Run(ctx context.Context) error {
 		<-runCtx.Done()
 		a.agentConsole.closeAll()
 		a.console.closeAll()
+		a.closeSparkLogs()
 		shctx, stop := context.WithTimeout(context.Background(), 8*time.Second)
 		defer stop()
 		if err := a.HTTP.Shutdown(shctx); err != nil {

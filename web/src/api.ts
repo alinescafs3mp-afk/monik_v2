@@ -40,8 +40,18 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     return data as T;
   } finally { clearTimeout(timeout); init.signal?.removeEventListener("abort", abort); }
 }
-export const get = <T>(path: string) => api<T>(path);
+export const get = <T>(path: string, signal?:AbortSignal) => api<T>(path,{signal});
 export const post = <T>(path: string, body: unknown, headers: HeadersInit = {}) => api<T>(path, { method: "POST", body: JSON.stringify(body), headers });
+
+// Only an explicit pre-effect recent-auth rejection permits one repeat.
+export async function postRecentAuth<T>(path:string,body:unknown,label:string):Promise<T>{
+ try{return await post<T>(path,body);}catch(e){
+  const err=e as ApiError;
+  if(err.error!=='recent_auth_required'||![401,403].includes(err.status)||!reauthHandler)throw e;
+  if(!await reauthHandler(label))throw {error:'action_cancelled',status:400,message:'Действие отменено.'} satisfies ApiError;
+  return post<T>(path,body);
+ }
+}
 
 type Pending = { key: string; signature: string; action: string; created: string };
 const pendingKey = "monik:pending-operations:v1";
@@ -127,14 +137,17 @@ export async function markOperationsRead(targets: Array<{operation_id:string;att
 // A prepared executable is a secret-bearing download, not a new fleet command.
 // Only a definite recent-auth rejection is retried. A lost download is NOT
 // repeated automatically; an unused one-machine code expires server-side.
-export async function downloadInstaller(platform:string,controllerURL:string,enableAgentConsole=false):Promise<{blob:Blob;expires:string}> {
+export async function downloadInstaller(platform:string,controllerURL:string,enableAgentConsole=false,agentFlavor:'general'|'spark-light'='general'):Promise<{blob:Blob;expires:string}> {
  if(!['linux-amd64','linux-arm64'].includes(platform))throw {message:'Неподдерживаемая платформа установщика.'};
+ if(!['general','spark-light'].includes(agentFlavor)||agentFlavor==='spark-light'&&(platform!=='linux-arm64'||enableAgentConsole))throw {error:'invalid_flavor',message:'Spark light доступен только для Linux ARM64 и не предоставляет агентскую консоль.'};
  const request=async()=>{
   const ctl=new AbortController(), timer=setTimeout(()=>ctl.abort(),120000);
   try{
-   const r=await fetch(`/api/v1/installers/${platform}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify({controller_url:controllerURL,...(enableAgentConsole?{enable_agent_console:true}:{})}),signal:ctl.signal});
+   const r=await fetch(`/api/v1/installers/${platform}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},body:JSON.stringify({controller_url:controllerURL,...(enableAgentConsole?{enable_agent_console:true}:{}),...(agentFlavor==='spark-light'?{agent_flavor:agentFlavor}:{})}),signal:ctl.signal});
    if(!r.ok){let data:any;try{data=await r.json();}catch{data={};}throw {status:r.status,error:data.error||'http',message:data.message||'Не удалось подготовить установщик.'};}
    const length=Number(r.headers.get('Content-Length'));
+   const flavor=r.headers.get('X-Monik-Agent-Flavor');
+   if(agentFlavor==='spark-light'&&flavor!==agentFlavor||flavor&&flavor!==agentFlavor)throw {error:'invalid_flavor',message:'Сервер не подтвердил выбранный вариант агента. Установщик не сохранён.'};
    if(r.headers.get('Content-Type')?.split(';')[0]!=='application/octet-stream'||!Number.isSafeInteger(length)||length<64||length>193*1024*1024)throw {error:'invalid_download',message:'Некорректный размер или тип установщика.'};
    const expires=r.headers.get('X-Monik-Profile-Expires')||'';
    if(!Number.isFinite(Date.parse(expires)))throw {message:'Срок профиля не подтверждён.'};

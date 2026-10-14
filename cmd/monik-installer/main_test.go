@@ -26,7 +26,27 @@ func fixtureSteps(log *[]string, c **installedConfig) steps {
 	}, ready: func(context.Context, *installedConfig) error { *log = append(*log, "ready"); return nil }}
 }
 func fixtureBundle() *installerbundle.Bundle {
-	return &installerbundle.Bundle{Manifest: installerbundle.Manifest{Profile: &installerbundle.Profile{ControllerID: "controller", ExpiresAt: time.Now().Add(time.Hour)}}}
+	return &installerbundle.Bundle{Manifest: installerbundle.Manifest{Format: 1, Profile: &installerbundle.Profile{ControllerID: "controller", ExpiresAt: time.Now().Add(time.Hour)}}}
+}
+
+func TestSparkInstallerNeverImplicitlyConvertsExistingFlavor(t *testing.T) {
+	for _, pair := range [][2]string{{"general", "spark-light"}, {"spark-light", "general"}} {
+		var log []string
+		c := &installedConfig{Managed: true, AgentFlavor: pair[0], AgentID: "same", ControllerID: "controller"}
+		b := fixtureBundle()
+		if pair[1] == "spark-light" {
+			b.Manifest.Format = 2
+			b.Manifest.AgentFlavor = "spark-light"
+			b.Manifest.RuntimeMode = "direct"
+		}
+		var out bytes.Buffer
+		if err := execute(context.Background(), b, fixtureSteps(&log, &c), &out); err == nil {
+			t.Fatal("implicit conversion accepted")
+		}
+		if strings.Join(log, ",") != "preflight" || strings.Contains(out.String(), "ГОТОВО.") {
+			t.Fatal("conversion caused effects", log, out.String())
+		}
+	}
 }
 func TestV15OneRunCompletesOnlyAfterReady(t *testing.T) {
 	var log []string
@@ -137,6 +157,20 @@ func TestV15ControllerProofUsesPinnedTLSAndNoCredential(t *testing.T) {
 	}
 	if hits != 2 {
 		t.Fatal(hits)
+	}
+}
+
+func TestSparkPreEnrollmentRejectsMissingOrWrongFeature(t *testing.T) {
+	for _, version := range []int{0, 2, 1} {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]any{"product": "monik", "controller_id": "same", "writable": true, "features": map[string]int{"spark_telemetry_v1": version}})
+		}))
+		p := &installerbundle.Profile{ControllerURL: server.URL, ControllerID: "same", CACertPEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))}
+		err := verifyControllerFeatures(context.Background(), p, []string{"spark_telemetry_v1"})
+		if (err == nil) != (version == 1) {
+			t.Fatalf("feature%d: %v", version, err)
+		}
+		server.Close()
 	}
 }
 func TestV15StatusAuthHeadersAndDuplicateJSON(t *testing.T) {

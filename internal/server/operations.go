@@ -20,9 +20,24 @@ import (
 
 func (a *App) handleSubmitOp(w http.ResponseWriter, r *http.Request, s *storage.Session) {
 	var req protocol.SubmitOperation
-	if err := parseJSONLimit(r, &req, 8<<20); err != nil {
+	var raw json.RawMessage
+	if err := parseJSONLimit(r, &raw, 8<<20); err != nil {
 		a.writeErr(w, 400, "malformed", "invalid json")
 		return
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		a.writeErr(w, 400, "malformed", "invalid operation")
+		return
+	}
+	if strings.HasPrefix(req.Action, "model.") {
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal(raw, &fields)
+		for key := range fields {
+			if key != "action" && key != "client_request_key" && key != "target_ids" && key != "target_mode" && key != "params" {
+				a.writeErr(w, 400, "bad_params", "unknown model request field")
+				return
+			}
+		}
 	}
 	a.processSubmit(w, s, req)
 }
@@ -39,6 +54,10 @@ func (a *App) processSubmit(w http.ResponseWriter, s *storage.Session, req proto
 			return
 		}
 		s = fresh
+	}
+	if strings.HasPrefix(req.Action, "model.") {
+		a.processSparkSubmit(w, s, req)
+		return
 	}
 	if reason := actions.UnavailableReason(req.Action); reason != "" {
 		a.writeErr(w, 501, "not_implemented", reason)

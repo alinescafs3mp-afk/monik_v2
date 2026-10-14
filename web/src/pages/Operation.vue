@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { get, submitOp } from "../api";
@@ -22,7 +24,7 @@ async function cancel(){pending.value=true;try{const r=await submitOp('operation
  <OperationReadButton :operation="op" @changed="refresh"/>
  <p class="muted">Отметка прочтения не меняет выполнение, доказательства результата и состояние машины.</p><p>{{ op.actor }} · {{ new Date(op.created_at).toLocaleString() }} · ревизия {{ op.revision }}</p><p class="muted">{{ op.operation_id }}</p>
  <p v-if="exportDownload(op)"><a :href="exportDownload(op)!" download>Скачать исторические данные JSON</a> · ссылка доступна 24 часа после создания.</p>
- <button v-if="cancellable" :disabled="pending" @click="cancel">{{ pending?'Сохраняем отмену…':'Отменить ещё не отправленные цели' }}</button>
+ <button v-if="cancellable" :disabled="!owner||pending" @click="cancel">{{ pending?'Сохраняем отмену…':'Отменить ещё не отправленные цели' }}</button>
  <div class="table-wrap"><table><thead><tr><th>Цель</th><th>Состояние</th><th>Этап</th><th>Результат</th><th>Подтверждение</th></tr></thead><tbody><tr v-for="t in op.targets || []" :key="t.agent_id"><td>{{ t.agent_id }}</td><td>{{ stateLabel(t.status) }}</td><td>{{ t.stage }}</td><td>{{ t.message }}<small v-if="t.error_code"> · {{ t.error_code }}</small></td><td><details v-if="t.evidence"><summary>Данные результата</summary><pre style="white-space:pre-wrap">{{ JSON.stringify(t.evidence,null,2) }}</pre></details></td></tr></tbody></table></div><p class="muted">Сохранено сервером, получено агентом и подтверждено выполнением: разные этапы. Ожидание и частичный результат не являются полным успехом.</p></section>
  <p v-if="rolloutError" role="alert">{{rolloutError}}</p>
  <RolloutProgress v-if="rollout" :rollout="rollout" @changed="refresh"/>

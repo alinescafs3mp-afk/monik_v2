@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "qwen-existing-observation",
+      "name": "Qwen3.8 Flash Next ABLITERATED NVFP4",
+      "engine": "SGLang",
+      "quant": "modelopt_fp4",
+      "context": 262144,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_qwen_existing_shared.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_qwen_existing_shared.sh"
+      ],
+      "status": [
+        "/home/Dest/status_qwen_existing_shared.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/qwen-existing-observation/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/qwen-existing-observation/actions.log",
+      "controller_owned_action_log": true
+    },
+    {
+      "id": "gpt-oss-120b-existing-configured",
+      "name": "GPT OSS 120B MXFP4 ABLITERATED",
+      "engine": "vLLM",
+      "quant": "mxfp4",
+      "context": 131072,
+      "prepared": true,
+      "start": [
+        "/home/Dest/start_gpt_oss_120b_existing_shared.sh"
+      ],
+      "stop": [
+        "/home/Dest/stop_gpt_oss_120b_existing_shared.sh"
+      ],
+      "status": [
+        "/home/Dest/status_gpt_oss_120b_existing_shared.sh",
+        "--json"
+      ],
+      "engine_log": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured/engine.log",
+      "action_log": "/var/log/spark-model-collection-v4/gpt-oss-120b-existing-configured/actions.log",
+      "controller_owned_action_log": true
+    }
+  ]
+}

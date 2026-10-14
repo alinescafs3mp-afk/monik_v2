@@ -788,6 +788,7 @@ func (s *Store) retainRaw(ctx context.Context, maxAge time.Duration) error {
 		cutoff        time.Time
 	}{
 		{"host_samples", "observed_at", s.now().Add(-maxAge)},
+		{"spark_samples", "observed_at", s.now().Add(-maxAge)},
 		{"service_observations", "observed_at", s.now().Add(-maxAge)},
 		{"ingest_receipts", "received_at", s.now().Add(-2 * maxAge)},
 		{"event_log", "ts", s.now().Add(-24 * time.Hour)},

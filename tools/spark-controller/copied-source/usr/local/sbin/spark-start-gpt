@@ -1,0 +1,102 @@
+#!/bin/bash
+set -eu
+model=/srv/spark/models/Huihui-gpt-oss-120b-mxfp4-abliterated
+image=sparkarena/spark-vllm-docker:mxfp4
+test -f "$model/.download-complete"
+test -f "$model/config.json"
+docker image inspect "$image" >/dev/null
+if systemctl is-active --quiet spark-sglang.service; then
+  echo "stopping qwen"
+  systemctl stop spark-sglang.service
+fi
+if docker container inspect spark-sglang >/dev/null 2>&1; then
+  docker rm -f spark-sglang >/dev/null
+fi
+if docker container inspect spark-gptoss >/dev/null 2>&1; then
+  stat=$(docker inspect -f '{{.State.Status}}' spark-gptoss)
+  if [ "$stat" = "running" ]; then
+    echo "gpt already running"
+    exit 0
+  fi
+  docker rm -f spark-gptoss >/dev/null
+fi
+for _ in $(seq 1 90); do
+  if ! ss -ltn | awk '{print $4}' | grep -q ':30000$'; then
+    break
+  fi
+  sleep 1
+done
+if ss -ltn | awk '{print $4}' | grep -q ':30000$'; then
+  echo "port 30000 busy" >&2
+  exit 1
+fi
+avail=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+if [ "$avail" -lt 40000000 ]; then
+  echo "not enough free memory" >&2
+  exit 1
+fi
+sync
+echo 3 > /proc/sys/vm/drop_caches
+. /etc/spark-sglang-api.env
+key=${SPARK_API_KEY-}
+if [ "${#key}" -ne 48 ]; then
+  echo "api key unreadable" >&2
+  exit 1
+fi
+docker run -d --name spark-gptoss \
+  --gpus all \
+  --ipc=host \
+  --network host \
+  --shm-size=16g \
+  --ulimit memlock=-1 \
+  --ulimit stack=67108864 \
+  -v "$model":/models:ro \
+  -v /srv/spark/hf-home:/srv/spark/hf-home \
+  -v /usr/local/lib/spark-gptoss/openai_harmony_init.py:/usr/local/lib/python3.12/dist-packages/openai_harmony/__init__.py:ro \
+  -e HF_HUB_OFFLINE=1 \
+  -e TRANSFORMERS_OFFLINE=1 \
+  -e HF_HOME=/srv/spark/hf-home \
+  -e HF_HUB_DISABLE_TELEMETRY=1 \
+  -e VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 \
+  "$image" \
+  vllm serve /models \
+    --served-model-name gpt-oss-120b \
+    --host 0.0.0.0 \
+    --port 30000 \
+    --api-key "$key" \
+    --tool-call-parser openai \
+    --reasoning-parser openai_gptoss \
+    --enable-auto-tool-choice \
+    --gpu-memory-utilization 0.70 \
+    --max-model-len 131072 \
+    --max-num-seqs 8 \
+    --max-num-batched-tokens 8192 \
+    --enable-prefix-caching \
+    --load-format fastsafetensors \
+    --quantization mxfp4 \
+    --mxfp4-backend CUTLASS \
+    --mxfp4-layers moe,qkv,o,lm_head \
+    --attention-backend FLASHINFER \
+    --kv-cache-dtype fp8 \
+    --tensor-parallel-size 1 >/dev/null
+unset key
+echo "gpt loading"
+for _ in $(seq 1 360); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:30000/health || true)
+  if [ "$code" = "200" ]; then
+    echo "gpt ready"
+    exit 0
+  fi
+  if ! docker container inspect spark-gptoss >/dev/null 2>&1; then
+    echo "gpt container exited" >&2
+    exit 1
+  fi
+  stat=$(docker inspect -f '{{.State.Status}}' spark-gptoss)
+  if [ "$stat" != "running" ]; then
+    echo "gpt container $stat" >&2
+    exit 1
+  fi
+  sleep 10
+done
+echo "gpt still loading" >&2
+exit 1

@@ -61,7 +61,7 @@ func (s *Store) StorageDiagnostics(rawRetention time.Duration) (map[string]any, 
 		return nil, err
 	}
 	out["journal_mode"], out["synchronous"] = mode, syncMode
-	for _, table := range []string{"host_samples", "service_observations"} {
+	for _, table := range []string{"host_samples", "service_observations", "spark_samples"} {
 		var first, last sql.NullString
 		if err := s.db().QueryRow(`SELECT (SELECT observed_at FROM `+table+` ORDER BY observed_at LIMIT 1),(SELECT observed_at FROM `+table+` ORDER BY observed_at DESC LIMIT 1)`).Scan(&first, &last); err != nil {
 			return nil, err

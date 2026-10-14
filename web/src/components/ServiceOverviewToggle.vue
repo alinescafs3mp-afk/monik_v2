@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import {ref, watch} from 'vue';
 import {submitOp} from '../api';
 const props=defineProps<{service:any}>();
@@ -8,7 +10,7 @@ watch(()=>[props.service.id,props.service.pinned],()=>{if(!busy.value)checked.va
 async function change(event:Event){
  const input=event.target as HTMLInputElement, desired=input.checked;
  input.checked=checked.value;
- if(busy.value)return;
+ if(!owner.value||busy.value)return;
  const id=String(props.service.id), expected=checked.value;
  busy.value=true;failed.value=false;notice.value='Сохраняем…';
  try {
@@ -20,7 +22,7 @@ async function change(event:Event){
 }
 </script>
 <template><div class="service-overview-toggle">
- <label><input type="checkbox" :checked="checked" :disabled="busy" :aria-label="`Показывать в обзоре: ${service.display_name || service.url || service.id}`" @change="change"/> В обзоре</label>
+ <label><input type="checkbox" :checked="checked" :disabled="!owner||busy" :aria-label="`Показывать в обзоре: ${service.display_name || service.url || service.id}`" @change="change"/> В обзоре</label>
  <small v-if="notice" :role="failed?'alert':'status'" :class="{err:failed}">{{notice}}</small>
  <small v-if="checked&&service.hidden" class="muted">Сервис скрыт. Снимите скрытие для показа.</small>
 </div></template>

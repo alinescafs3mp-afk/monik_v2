@@ -1,0 +1,1206 @@
+{
+  "schema_version": 4,
+  "project_root": "/opt/spark/model-collection-v4",
+  "state_root": "/var/lib/spark-model-collection-v4",
+  "log_root": "/var/log/spark-model-collection-v4",
+  "verified_uid": 1000,
+  "verified_home": "/home/Dest",
+  "excluded_units": [
+    "spark-sglang.service"
+  ],
+  "models": [
+    {
+      "id": "qwen3-coder-next-80b-huihui",
+      "name": "Qwen3 Coder Next 80B Huihui abliterated",
+      "engine": "vLLM",
+      "quant": "FP8 static",
+      "context": 262144,
+      "endpoint": "http://127.0.0.1:31001/v1",
+      "prepared": true,
+      "required_memory_bytes": 109340163936,
+      "memory_budget": {
+        "resident_weights_bytes": 80349134688,
+        "cache_state_bytes": 8589934592,
+        "runtime_workspace_bytes": 8589934592,
+        "additional_loading_peak_bytes": 3221225472,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "vllm/vllm-openai@sha256:f6179fb8a4ae1b047806e5af0b8577efe9c3808c75db644126e1eb322f257a34",
+        "image_id": "sha256:f6179fb8a4ae1b047806e5af0b8577efe9c3808c75db644126e1eb322f257a34",
+        "vllm_version": "0.21.0",
+        "source_commit": "ad7125a431e176d4161099480a66f0169609a690",
+        "cuda_version": "13.0.2",
+        "python_version": "3.12",
+        "flashinfer_version": "0.6.8.post1",
+        "platform": "linux/arm64",
+        "image_source_arch_list": "8.0 8.7 8.9 9.0 10.0 11.0 12.0+PTX",
+        "entrypoint_cpu_inspection_required": "/usr/local/bin/vllm (verify installed script path without importing CUDA)",
+        "flashinfer_asset_cpu_check_required": "Check flashinfer-cubin package and image predownloaded cubins are readable by UID1000. If package is absent and image cubins live under inaccessible/root/.cache, extract them during PREPARE_ONLY into a read-only runtime asset mount and set FLASHINFER_CUBIN_DIR accordingly; no cubin downloads in first-launch scripts.",
+        "no_driver_or_global_cuda_changes": true,
+        "shm_bytes": 4294967296,
+        "runtime_validated": false,
+        "argv": [
+          "/usr/local/bin/vllm",
+          "serve",
+          "/models/coder",
+          "--served-model-name",
+          "qwen3-coder-next-80b-huihui",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31001",
+          "--quantization",
+          "fp8",
+          "--load-format",
+          "safetensors",
+          "--kv-cache-dtype",
+          "auto",
+          "--kv-cache-memory-bytes",
+          "8589934592",
+          "--max-model-len",
+          "262144",
+          "--mamba-cache-mode",
+          "align",
+          "--mamba-ssm-cache-dtype",
+          "float32",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--chat-template",
+          "/models/coder/chat_template.jinja",
+          "--dtype",
+          "bfloat16",
+          "--tensor-parallel-size",
+          "1",
+          "--gpu-memory-utilization",
+          "0.85",
+          "--max-num-seqs",
+          "1",
+          "--max-num-batched-tokens",
+          "4096",
+          "--enable-prefix-caching",
+          "--enable-chunked-prefill",
+          "--enable-auto-tool-choice",
+          "--safetensors-load-strategy",
+          "lazy",
+          "--compilation-config",
+          "{\"cudagraph_capture_sizes\":[1]}"
+        ],
+        "env": {
+          "HF_HUB_OFFLINE": "1",
+          "TRANSFORMERS_OFFLINE": "1",
+          "HF_HOME": "/tmp/hf",
+          "XDG_CACHE_HOME": "/tmp/cache",
+          "TORCHINDUCTOR_CACHE_DIR": "/tmp/torchinductor",
+          "TRITON_CACHE_DIR": "/tmp/triton",
+          "FLASHINFER_WORKSPACE_BASE": "/tmp/flashinfer",
+          "VLLM_NO_USAGE_STATS": "1",
+          "VLLM_ENABLE_CUDA_COMPATIBILITY": "0",
+          "VLLM_USE_V2_MODEL_RUNNER": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/coder",
+            "target": "/models/coder",
+            "readonly": true
+          }
+        ],
+        "kernel_policy": "Native static-FP8 scale-aware loader. Metadata/platform-driven FP8 kernel selection; FlashInfer CUTLASS and Triton sources support static per-tensor W8A8 on SM12x. CUDA graphs retained. No baseline workarounds, no eager mode, no MTP/draft.",
+        "reasoning_policy": "Native non-thinking Coder; no fake reasoning parser. Tool parser is pinned built-in qwen3_coder, not outdated repo custom code.",
+        "manifest_config_digest_provenance": "sha256:1d4a6ca97805bde1f93fa80428be23e0ddf9500a9698ee10c7a60d804fe3fb61"
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/README.md",
+          "size": 483,
+          "sha256": "8249d508bcb26137bd1b21245cefbe67b31281dc2b3a15af3b6708994e267daf"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/added_tokens.json",
+          "size": 707,
+          "sha256": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/chat_template-vl.jinja",
+          "size": 5292,
+          "sha256": "3636d0f0bd6bef02654cdffdc447b79cb2cef8ab02cc75267345946291a489e4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/chat_template.jinja",
+          "size": 6068,
+          "sha256": "c79a833039a43602150cce0902403d6e376c50930c1b2a139b2964e1f0c322a0"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/config.json",
+          "size": 2698,
+          "sha256": "7ca94521455b71d3c7bed68dcc9d03492372fec6fdb9bfe6b03072f04af2e7b6"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/generation_config.json",
+          "size": 192,
+          "sha256": "90898e4eefc460bbf0ced9df6857b3ec05ae21c04d009dd34d88e52f0460a351"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/input_scales.safetensors",
+          "size": 8672816,
+          "sha256": "c11cad1d45ce4d8a14a8a17a8cdffa740ed6677b50fcec8149cf00cef39765ed"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/merges.txt",
+          "size": 1671853,
+          "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00001-of-00032.safetensors",
+          "size": 2813700244,
+          "sha256": "cfa3a91862742843586ab6c2b42a864775c9f4e2d3be833eaca534e7a645c332"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00002-of-00032.safetensors",
+          "size": 2501629440,
+          "sha256": "c1739a58400b4f8ff39beba840149514c0d914ad063b7536fa57ca3ed16aeb40"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00003-of-00032.safetensors",
+          "size": 2502685724,
+          "sha256": "b93842cb087cf19876c5a8615ea9fc1ccbf0ab5c97017b8d75cd2e633aa90b22"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00004-of-00032.safetensors",
+          "size": 2501629432,
+          "sha256": "8174d4ef4ee189e19d2863d89be6b25e3a0c6fd7e2997c2bcd25ad0237720f29"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00005-of-00032.safetensors",
+          "size": 2502685764,
+          "sha256": "f3c9b77d660ac71f1e09530817aba09f2db6258b32d6bbf84c574781cb63b725"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00006-of-00032.safetensors",
+          "size": 2501629456,
+          "sha256": "d055b239f693bdef4f1cec949da1be8b61e13f33c6ae659637489c03f544c810"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00007-of-00032.safetensors",
+          "size": 2501832932,
+          "sha256": "56b65427cab03e3f6d64f9c5f277e88f552da024b023f598bae32c65e64811c1"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00008-of-00032.safetensors",
+          "size": 2501439644,
+          "sha256": "7e40ecf06dbc5c4e429ab2330c8ccb4ec289446b23cf40d48c618f619be393fd"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00009-of-00032.safetensors",
+          "size": 2501836180,
+          "sha256": "676e2900e19771bfa597e737d1fa4b3a2493522f78ad64322977f4251af749a1"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00010-of-00032.safetensors",
+          "size": 2501634208,
+          "sha256": "2fad0dc94798e94526b6e631e71a2e25c12931d08404bda5d3f7d88bbba53171"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00011-of-00032.safetensors",
+          "size": 2502690396,
+          "sha256": "c10c4b82dea72d76305db71944811bca93f0cb55f01188ce902da47df219d342"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00012-of-00032.safetensors",
+          "size": 2501836796,
+          "sha256": "8e96f06100380edb36cd4b558cefe27ec1c95092866eceac74d78f013b1cf1b9"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00013-of-00032.safetensors",
+          "size": 2501438996,
+          "sha256": "8a367ff5599c0693c7d17c79dda94a5c1bd429ba001fc34074a46e89c0e1cfc0"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00014-of-00032.safetensors",
+          "size": 2501836628,
+          "sha256": "82c232fbb74e18849a7c38be983a1f75bdb92435b92943f8f0eaaa554b091af4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00015-of-00032.safetensors",
+          "size": 2501633672,
+          "sha256": "e676f93ca01693230c90e90c0603a2c26c1800867e988415dd06d7dc7987919d"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00016-of-00032.safetensors",
+          "size": 2502690764,
+          "sha256": "41e4522ac06b8bcf2174ada11b73ee0d0a921560a0b7458ecf7f3f2d45f2b416"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00017-of-00032.safetensors",
+          "size": 2501633784,
+          "sha256": "f1c9ee62ca492bd392c32dde511ef7abb1f61da9157ef2e58df695c96cea21bf"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00018-of-00032.safetensors",
+          "size": 2502690684,
+          "sha256": "af257698ad2d94da1b7304eb59a407be5490ec718c3929adf4ba1ccce1cbd892"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00019-of-00032.safetensors",
+          "size": 2501633904,
+          "sha256": "ff55256fc87bdf4d71ccdf5eba32495995dc88c48d5334fd7798f23b26d18534"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00020-of-00032.safetensors",
+          "size": 2501836284,
+          "sha256": "2b9a375f7349372a3c34be1fbdc62010ce4d1d1d68e8bd88ca8988a93a7396bf"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00021-of-00032.safetensors",
+          "size": 2501439500,
+          "sha256": "96b6b6b836a141dbee92c84024fa716b395bc7d42e0e7bb83ec0e6742523f5e3"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00022-of-00032.safetensors",
+          "size": 2501836172,
+          "sha256": "ba1715795a91dcdcfde682e9ec98b5eb45fb78544ebf741ea8d8d8caa280f4d0"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00023-of-00032.safetensors",
+          "size": 2501634120,
+          "sha256": "b4495acc2951dc8e8221396ab0bea3d63a6715ca1a9c5997eacb020b61bfb342"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00024-of-00032.safetensors",
+          "size": 2502690396,
+          "sha256": "baf37162c2ab0a598792d95ff7c1724af438b3cae6344cb3ed2bde04fd1bf79e"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00025-of-00032.safetensors",
+          "size": 2501634152,
+          "sha256": "a6c1bc52977fc578e07933ab7d4ccd5ed938ebdbb7f1cbe1d08b4101be414442"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00026-of-00032.safetensors",
+          "size": 2502690444,
+          "sha256": "f6f10b01b03ecc10231886fc5dcef5e2f76b5b7d50fd8da1d9babb7ccbe3a7c4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00027-of-00032.safetensors",
+          "size": 2501634152,
+          "sha256": "a07c9bbd79d30441e6ab4a0a331e58f2d2306616f4868da108097e84c962ff04"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00028-of-00032.safetensors",
+          "size": 2501836148,
+          "sha256": "e3a31ac16f49c7a4a306a45e3cf21e4971fd049a116cc43960a28d31db1ac905"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00029-of-00032.safetensors",
+          "size": 2501439644,
+          "sha256": "675bbbbd84e68c6ff167125ba8343173f19eba1d979106a59c3bbd74a488ce5e"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00030-of-00032.safetensors",
+          "size": 2501836148,
+          "sha256": "6a4fdd5c949a6965d20bb66c9cdc1b1e4a069a80a49583d13034677062b6e4ef"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00031-of-00032.safetensors",
+          "size": 2501634152,
+          "sha256": "3a2660bd85e433be03aacef0f6e20a28e96f40c1196755f279196c8fd7d31138"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model-00032-of-00032.safetensors",
+          "size": 2495544872,
+          "sha256": "94a563f73e573bafda5478fd22de099d1fd839ee13434bfbb301719d38f87ce0"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/model.safetensors.index.json",
+          "size": 20440897,
+          "sha256": "d3838346ae1012fb095dc01ccaec1a472cd9416e3a38283e99cfd7332afaf2b4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/qwen3_coder_detector_sgl.py",
+          "size": 19855,
+          "sha256": "e5a6112dd41df1580ede5f52e928e58cb74985dfa5628fd94073fd6a0f20fb8d"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/qwen3coder_tool_parser_vllm.py",
+          "size": 31680,
+          "sha256": "e6ad932aaa29a4004d592ca655c3d1ad849525a498ba60a716909ec9c1fda297"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/special_tokens_map.json",
+          "size": 613,
+          "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/tokenizer.json",
+          "size": 11422654,
+          "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/tokenizer_config.json",
+          "size": 5405,
+          "sha256": "05a2d456eb807c8368fe6b60101b1d1160d6889071a751ed08576b96e77e01cd"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/coder/vocab.json",
+          "size": 2776833,
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        }
+      ],
+      "evidence_level": "PREPARED_NOT_RUNTIME_VALIDATED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90
+    },
+    {
+      "id": "ling-3-flash-124b-heretic-text",
+      "name": "Ling3 Flash124B Heretic TEXT",
+      "engine": "llama.cpp CUDA",
+      "quant": "MXFP4_MOE",
+      "context": 262144,
+      "endpoint": "http://127.0.0.1:31002/v1",
+      "prepared": true,
+      "required_memory_bytes": 87804970656,
+      "memory_budget": {
+        "resident_weights_bytes": 70814172832,
+        "cache_state_bytes": 3032154112,
+        "runtime_workspace_bytes": 4294967296,
+        "additional_loading_peak_bytes": 1073741824,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "argv": [
+          "/opt/llama/bin/llama-server",
+          "--model",
+          "/models/Ling-3.0-flash-heretic-MXFP4_MOE-00001-of-00004.gguf",
+          "--alias",
+          "ling-3-flash-124b-heretic-text",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31002",
+          "--ctx-size",
+          "262144",
+          "--parallel",
+          "1",
+          "--gpu-layers",
+          "all",
+          "--split-mode",
+          "none",
+          "--flash-attn",
+          "on",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--batch-size",
+          "2048",
+          "--ubatch-size",
+          "512",
+          "--load-mode",
+          "dio",
+          "--lazy-mode",
+          "off",
+          "--fit",
+          "off",
+          "--cache-ram",
+          "0",
+          "--no-context-shift",
+          "--jinja",
+          "--reasoning",
+          "on",
+          "--spec-type",
+          "draft-mtp",
+          "--spec-draft-n-max",
+          "3",
+          "--spec-draft-type-k",
+          "f16",
+          "--spec-draft-type-v",
+          "f16",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "20"
+        ],
+        "env": {
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+          "GGML_CUDA_NO_PINNED": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/ling",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/llama",
+            "target": "/opt/llama",
+            "readonly": true
+          }
+        ],
+        "tmpfs_bytes": 536870912,
+        "shm_bytes": 1073741824
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/ling/Ling-3.0-flash-heretic-MXFP4_MOE-00001-of-00004.gguf",
+          "size": 18727878368,
+          "sha256": "e9320e10934598a227055665b47f34ad35661185257ca8378c945f57dd2cc3e7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/ling/Ling-3.0-flash-heretic-MXFP4_MOE-00002-of-00004.gguf",
+          "size": 18720206784,
+          "sha256": "02015a9e940db63f79f9eec1b2b6c99d09a132c278accf6d2dead307fe048a41"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/ling/Ling-3.0-flash-heretic-MXFP4_MOE-00003-of-00004.gguf",
+          "size": 18722251328,
+          "sha256": "d95ac551fc8f30d1f584ab42b2826fa1ea47c9c00b5bf72b7353f488e62b8f39"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/ling/Ling-3.0-flash-heretic-MXFP4_MOE-00004-of-00004.gguf",
+          "size": 14643836352,
+          "sha256": "2adebec1595657402abd976ddabfe502af6ff2b62feb9f140694bd9d7e7be218"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+          "size": 876488,
+          "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+          "size": 1001960,
+          "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+          "size": 44376056,
+          "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+          "size": 78104,
+          "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+          "size": 5553784,
+          "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+          "size": 3526392,
+          "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+          "size": 4765544,
+          "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+          "size": 1834984,
+          "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+          "size": 72456,
+          "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+        }
+      ],
+      "evidence_level": "PREPARED_NOT_RUNTIME_VALIDATED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90
+    },
+    {
+      "id": "mistral-small-4-119b-heretic",
+      "name": "Mistral Small4 119B Heretic",
+      "engine": "vLLM",
+      "quant": "NVFP4 compressed-tensors",
+      "context": 256000,
+      "endpoint": "http://127.0.0.1:31003/v1",
+      "prepared": true,
+      "required_memory_bytes": 101940472672,
+      "memory_budget": {
+        "resident_weights_bytes": 70801959776,
+        "cache_state_bytes": 4294967296,
+        "runtime_workspace_bytes": 12884901888,
+        "additional_loading_peak_bytes": 5368709120,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "vllm/vllm-openai@sha256:f6179fb8a4ae1b047806e5af0b8577efe9c3808c75db644126e1eb322f257a34",
+        "image_id": "sha256:f6179fb8a4ae1b047806e5af0b8577efe9c3808c75db644126e1eb322f257a34",
+        "vllm_version": "0.21.0",
+        "source_commit": "ad7125a431e176d4161099480a66f0169609a690",
+        "cuda_version": "13.0.2",
+        "python_version": "3.12",
+        "flashinfer_version": "0.6.8.post1",
+        "platform": "linux/arm64",
+        "image_source_arch_list": "8.0 8.7 8.9 9.0 10.0 11.0 12.0+PTX",
+        "entrypoint_cpu_inspection_required": "/usr/local/bin/vllm (verify installed script path without importing CUDA)",
+        "flashinfer_asset_cpu_check_required": "Check flashinfer-cubin package and image predownloaded cubins are readable by UID1000. If package is absent and image cubins live under inaccessible/root/.cache, extract them during PREPARE_ONLY into a read-only runtime asset mount and set FLASHINFER_CUBIN_DIR accordingly; no cubin downloads in first-launch scripts.",
+        "no_driver_or_global_cuda_changes": true,
+        "shm_bytes": 4294967296,
+        "runtime_validated": false,
+        "argv": [
+          "/usr/local/bin/vllm",
+          "serve",
+          "/models/mistral-native",
+          "--served-model-name",
+          "mistral-small-4-119b-heretic",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31003",
+          "--quantization",
+          "compressed-tensors",
+          "--load-format",
+          "mistral",
+          "--config-format",
+          "mistral",
+          "--tokenizer-mode",
+          "mistral",
+          "--attention-backend",
+          "TRITON_MLA",
+          "--kv-cache-dtype",
+          "fp8",
+          "--kv-cache-memory-bytes",
+          "4294967296",
+          "--calculate-kv-scales",
+          "--max-model-len",
+          "256000",
+          "--tool-call-parser",
+          "mistral",
+          "--reasoning-parser",
+          "mistral",
+          "--limit-mm-per-prompt",
+          "{\"image\":1}",
+          "--dtype",
+          "bfloat16",
+          "--tensor-parallel-size",
+          "1",
+          "--gpu-memory-utilization",
+          "0.85",
+          "--max-num-seqs",
+          "1",
+          "--max-num-batched-tokens",
+          "4096",
+          "--enable-prefix-caching",
+          "--enable-chunked-prefill",
+          "--enable-auto-tool-choice",
+          "--safetensors-load-strategy",
+          "lazy",
+          "--compilation-config",
+          "{\"cudagraph_capture_sizes\":[1]}",
+          "--default-chat-template-kwargs",
+          "{\"reasoning_effort\":\"high\"}"
+        ],
+        "env": {
+          "HF_HUB_OFFLINE": "1",
+          "TRANSFORMERS_OFFLINE": "1",
+          "HF_HOME": "/tmp/hf",
+          "XDG_CACHE_HOME": "/tmp/cache",
+          "TORCHINDUCTOR_CACHE_DIR": "/tmp/torchinductor",
+          "TRITON_CACHE_DIR": "/tmp/triton",
+          "FLASHINFER_WORKSPACE_BASE": "/tmp/flashinfer",
+          "VLLM_NO_USAGE_STATS": "1",
+          "VLLM_ENABLE_CUDA_COMPATIBILITY": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/mistral-native",
+            "target": "/models/mistral-native",
+            "readonly": true
+          }
+        ],
+        "kernel_policy": "Fixed TRITON_MLA path with head_size320, FP8 KV/BF16 queries; metadata-driven NVFP4 MoE kernel selection. No VLLM_MLA_DISABLE and no old FLASH_ATTN workaround.",
+        "kv_scale_policy": "Explicit runtime-supported calculate_kv_scales during a separately authorized future model start; source MLA calc_kv_scales covers compressed KV. No calibration/forward executed during PREPARE_ONLY.",
+        "multimodal_policy": "Original pinned BF16 native vision/adapter restored per publisher route; one image per prompt, published1540-pixel cap. Reasoning and tool parsers preserve native Mistral capability.",
+        "manifest_config_digest_provenance": "sha256:1d4a6ca97805bde1f93fa80428be23e0ddf9500a9698ee10c7a60d804fe3fb61"
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/chat_template.jinja",
+          "size": 5919,
+          "sha256": "d2e401920cd1705145a059bb6cb2374ae74d8abb8b46e25edc44d0944c148b2a"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/consolidated-00001-of-00003.safetensors",
+          "size": 50002558328,
+          "sha256": "171d7b675036b416121414e7c807266a969d4becce998c91e80c62d773f81dbc"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/consolidated-00002-of-00003.safetensors",
+          "size": 19948575280,
+          "sha256": "a26c11141d0fb13744ac5e4fc6768a0a1d2ce4d3e1c90b96504cbcb247523509"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/consolidated-00003-of-00003.safetensors",
+          "size": 856973824,
+          "sha256": "68bdb4377ec1220f614d1d2e7f56bd0d3777f6a94e3673d601ada3500388ea36"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/consolidated.safetensors.index.json",
+          "size": 5090861,
+          "sha256": "254b1048ec7aa8537b47fb397f87cc82542e85d3ba82aac15bcb9fdccb2b50aa"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/conversion-report.json",
+          "size": 14677176,
+          "sha256": "6a1b6020e50a6bafde265d7bbccaf78108ab73ee0760afb8664922b77dc6156a"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/generation_config.json",
+          "size": 127,
+          "sha256": "d9917d41720999b872599f7fd01ce1572059c63299ea6358243f57e5bedd397b"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/params.json",
+          "size": 37555,
+          "sha256": "b88a1ca9ed21f9d0ab13753dfca6765b5a232e5694999556b770f8c19036fd42"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/tekken.json",
+          "size": 16275354,
+          "sha256": "b1272b956bd6edd2d2c674c76896c7661308c9e723997b0afb55ecb429cb5dc7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/tokenizer.json",
+          "size": 17077420,
+          "sha256": "2ba5b3330fd84d5376fcca797cfb3b42eee6241ce23e3271e6fb2a115a8751bd"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/mistral-native/tokenizer_config.json",
+          "size": 21140,
+          "sha256": "3652d4cf7e8bd9f8d4cd9fd8df4ae7f47647a9846dadc6e45b1c09d8a88fc7ec"
+        }
+      ],
+      "evidence_level": "PREPARED_NOT_RUNTIME_VALIDATED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90
+    },
+    {
+      "id": "nemotron-3-super-120b-heretic-v2",
+      "name": "Nemotron3 Super120B Heretic V2",
+      "engine": "llama.cpp CUDA",
+      "quant": "MXFP4_MOE",
+      "context": 262144,
+      "endpoint": "http://127.0.0.1:31004/v1",
+      "prepared": true,
+      "required_memory_bytes": 84857132608,
+      "memory_budget": {
+        "resident_weights_bytes": 68578317888,
+        "cache_state_bytes": 2320171008,
+        "runtime_workspace_bytes": 4294967296,
+        "additional_loading_peak_bytes": 1073741824,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "argv": [
+          "/opt/llama/bin/llama-server",
+          "--model",
+          "/models/Nemotron-3-Super-120B-A12B-MXFP4_MOE-heretic-v2.gguf",
+          "--alias",
+          "nemotron-3-super-120b-heretic-v2",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31004",
+          "--ctx-size",
+          "262144",
+          "--parallel",
+          "1",
+          "--gpu-layers",
+          "all",
+          "--split-mode",
+          "none",
+          "--flash-attn",
+          "on",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--batch-size",
+          "2048",
+          "--ubatch-size",
+          "512",
+          "--load-mode",
+          "dio",
+          "--lazy-mode",
+          "off",
+          "--fit",
+          "off",
+          "--cache-ram",
+          "0",
+          "--no-context-shift",
+          "--jinja",
+          "--reasoning",
+          "on",
+          "--spec-type",
+          "none",
+          "--temp",
+          "1.0",
+          "--top-p",
+          "0.95"
+        ],
+        "env": {
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+          "GGML_CUDA_NO_PINNED": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/nemotron",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/llama",
+            "target": "/opt/llama",
+            "readonly": true
+          }
+        ],
+        "tmpfs_bytes": 536870912,
+        "shm_bytes": 1073741824
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/nemotron/Nemotron-3-Super-120B-A12B-MXFP4_MOE-heretic-v2.gguf",
+          "size": 68578317888,
+          "sha256": "870e367f1ae025cba5ad3709d9bbb05444d9b4a51e89ca162021736cefcdd0cf"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+          "size": 876488,
+          "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+          "size": 1001960,
+          "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+          "size": 44376056,
+          "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+          "size": 78104,
+          "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+          "size": 5553784,
+          "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+          "size": 3526392,
+          "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+          "size": 4765544,
+          "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+          "size": 1834984,
+          "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+          "size": 72456,
+          "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+        }
+      ],
+      "evidence_level": "PREPARED_NOT_RUNTIME_VALIDATED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90
+    },
+    {
+      "id": "minimax-m27-229b-heretic",
+      "name": "MiniMax M2.7 229B Heretic",
+      "engine": "llama.cpp CUDA",
+      "quant": "IQ3_XS",
+      "context": 184832,
+      "endpoint": "http://127.0.0.1:31005/v1",
+      "prepared": true,
+      "required_memory_bytes": 126357324288,
+      "memory_budget": {
+        "resident_weights_bytes": 93329932800,
+        "cache_state_bytes": 19068747776,
+        "runtime_workspace_bytes": 4294967296,
+        "additional_loading_peak_bytes": 1073741824,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "argv": [
+          "/opt/llama/bin/llama-server",
+          "--model",
+          "/models/MiniMax-M2.7-BF16-ultra-uncensored-heretic.i1-IQ3_XS.gguf",
+          "--alias",
+          "minimax-m27-229b-heretic",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31005",
+          "--ctx-size",
+          "184832",
+          "--parallel",
+          "1",
+          "--gpu-layers",
+          "all",
+          "--split-mode",
+          "none",
+          "--flash-attn",
+          "on",
+          "--cache-type-k",
+          "q8_0",
+          "--cache-type-v",
+          "q4_0",
+          "--batch-size",
+          "2048",
+          "--ubatch-size",
+          "512",
+          "--load-mode",
+          "dio",
+          "--lazy-mode",
+          "off",
+          "--fit",
+          "off",
+          "--cache-ram",
+          "0",
+          "--no-context-shift",
+          "--jinja",
+          "--reasoning",
+          "on",
+          "--spec-type",
+          "none"
+        ],
+        "env": {
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+          "GGML_CUDA_NO_PINNED": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/minimax",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/llama",
+            "target": "/opt/llama",
+            "readonly": true
+          }
+        ],
+        "tmpfs_bytes": 536870912,
+        "shm_bytes": 1073741824
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/minimax/MiniMax-M2.7-BF16-ultra-uncensored-heretic.i1-IQ3_XS.gguf",
+          "size": 93329932800,
+          "sha256": "d98de2aa35de056f4f1617594260068d7b8a7bac14e4dc314dea348708a10f83"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+          "size": 876488,
+          "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+          "size": 1001960,
+          "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+          "size": 44376056,
+          "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+          "size": 78104,
+          "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+          "size": 5553784,
+          "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+          "size": 3526392,
+          "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+          "size": 4765544,
+          "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+          "size": 1834984,
+          "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+          "size": 72456,
+          "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+        }
+      ],
+      "evidence_level": "PREPARED_NOT_RUNTIME_VALIDATED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90
+    },
+    {
+      "id": "qwen-existing-observation",
+      "name": "Qwen3.8 Flash Next ABLITERATED NVFP4",
+      "engine": "SGLang",
+      "quant": "modelopt_fp4",
+      "context": 262144,
+      "endpoint": "http://127.0.0.1:30000/v1",
+      "prepared": true,
+      "legacy_fixed": true,
+      "required_memory_bytes": null,
+      "memory_policy": "Existing SGLang mem-fraction-static=0.852; no invented host RAM threshold",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 180,
+      "runtime": {
+        "image": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "argv": [
+          "sglang",
+          "serve",
+          "--model-path",
+          "/models",
+          "--served-model-name",
+          "qwen38-flash-next-abliterated",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "30000",
+          "--api-key",
+          "@SPARK_API_KEY@",
+          "--tp",
+          "1",
+          "--quantization",
+          "modelopt_fp4",
+          "--moe-runner-backend",
+          "flashinfer_cutlass",
+          "--fp4-gemm-backend",
+          "flashinfer_cudnn",
+          "--ple-offload-embedding",
+          "--ple-offload-backend",
+          "file",
+          "--ple-offload-dir",
+          "/srv/spark/ple",
+          "--context-length",
+          "262144",
+          "--mem-fraction-static",
+          "0.852",
+          "--page-size",
+          "64",
+          "--chunked-prefill-size",
+          "8192",
+          "--max-running-requests",
+          "2",
+          "--max-mamba-cache-size",
+          "8",
+          "--cuda-graph-backend-decode",
+          "full",
+          "--cuda-graph-max-bs-decode",
+          "2",
+          "--cuda-graph-backend-prefill",
+          "disabled",
+          "--speculative-algorithm",
+          "NEXTN",
+          "--speculative-num-steps",
+          "2",
+          "--speculative-eagle-topk",
+          "1",
+          "--speculative-num-draft-tokens",
+          "3",
+          "--mamba-radix-cache-strategy",
+          "extra_buffer",
+          "--disable-overlap-schedule",
+          "--mamba-ssm-dtype",
+          "float32",
+          "--linear-attn-prefill-backend",
+          "triton",
+          "--linear-attn-decode-backend",
+          "triton",
+          "--grammar-backend",
+          "xgrammar",
+          "--reasoning-parser",
+          "qwen3",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--default-chat-template-kwargs",
+          "{\"enable_thinking\": true, \"reasoning_effort\": \"xhigh\"}",
+          "--enable-cache-report"
+        ],
+        "env": {
+          "HF_HUB_OFFLINE": "1",
+          "TRANSFORMERS_OFFLINE": "1",
+          "HF_HOME": "/srv/spark/hf-home",
+          "HF_HUB_DISABLE_TELEMETRY": "1"
+        },
+        "mounts": [
+          {
+            "source": "/srv/spark/models/Qwen3.8-Flash-Next-ABLITERATED-NVFP4",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/srv/spark/ple",
+            "target": "/srv/spark/ple",
+            "readonly": false
+          },
+          {
+            "source": "/srv/spark/hf-home",
+            "target": "/srv/spark/hf-home",
+            "readonly": false
+          },
+          {
+            "source": "/usr/local/lib/sglang-qwen38/tokenizer_manager.py",
+            "target": "/sgl-workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py",
+            "readonly": true
+          },
+          {
+            "source": "/usr/local/lib/sglang-qwen38/qsa_indexer.py",
+            "target": "/sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa/qsa_indexer.py",
+            "readonly": true
+          }
+        ],
+        "secret_reference": "/etc/spark-sglang-api.env",
+        "served_model_alias": "qwen38-flash-next-abliterated",
+        "container_name": "spark-sglang",
+        "ipc": "host",
+        "network": "host",
+        "shm_bytes": 17179869184,
+        "ulimits": {
+          "memlock": -1,
+          "stack": 67108864
+        },
+        "auto_remove": true
+      },
+      "artifacts": [],
+      "evidence_level": "ROOT_METADATA_PINNED_NOT_RUNTIME_VALIDATED"
+    },
+    {
+      "id": "gpt-oss-120b-existing-configured",
+      "name": "GPT OSS 120B MXFP4 ABLITERATED",
+      "engine": "vLLM",
+      "quant": "mxfp4",
+      "context": 131072,
+      "endpoint": "http://127.0.0.1:30000/v1",
+      "prepared": true,
+      "legacy_fixed": true,
+      "required_memory_bytes": 40960000000,
+      "memory_policy": "Existing MemAvailable >=40000000 KiB, no global cache flush",
+      "startup_timeout_seconds": 4320,
+      "stop_timeout_seconds": 180,
+      "runtime": {
+        "image": "sha256:e07b3d4e9c4555d456758abf1f986811e180380a4c07f8d8d517c6ae5f66bf3c",
+        "image_id": "sha256:e07b3d4e9c4555d456758abf1f986811e180380a4c07f8d8d517c6ae5f66bf3c",
+        "argv": [
+          "vllm",
+          "serve",
+          "/models",
+          "--served-model-name",
+          "gpt-oss-120b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "30000",
+          "--api-key",
+          "@SPARK_API_KEY@",
+          "--tool-call-parser",
+          "openai",
+          "--reasoning-parser",
+          "openai_gptoss",
+          "--enable-auto-tool-choice",
+          "--gpu-memory-utilization",
+          "0.70",
+          "--max-model-len",
+          "131072",
+          "--max-num-seqs",
+          "8",
+          "--max-num-batched-tokens",
+          "8192",
+          "--enable-prefix-caching",
+          "--load-format",
+          "fastsafetensors",
+          "--quantization",
+          "mxfp4",
+          "--mxfp4-backend",
+          "CUTLASS",
+          "--mxfp4-layers",
+          "moe,qkv,o,lm_head",
+          "--attention-backend",
+          "FLASHINFER",
+          "--kv-cache-dtype",
+          "fp8",
+          "--tensor-parallel-size",
+          "1"
+        ],
+        "env": {
+          "HF_HUB_OFFLINE": "1",
+          "TRANSFORMERS_OFFLINE": "1",
+          "HF_HOME": "/srv/spark/hf-home",
+          "HF_HUB_DISABLE_TELEMETRY": "1",
+          "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8": "1"
+        },
+        "mounts": [
+          {
+            "source": "/srv/spark/models/Huihui-gpt-oss-120b-mxfp4-abliterated",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/srv/spark/hf-home",
+            "target": "/srv/spark/hf-home",
+            "readonly": false
+          },
+          {
+            "source": "/usr/local/lib/spark-gptoss/openai_harmony_init.py",
+            "target": "/usr/local/lib/python3.12/dist-packages/openai_harmony/__init__.py",
+            "readonly": true
+          }
+        ],
+        "secret_reference": "/etc/spark-sglang-api.env",
+        "served_model_alias": "gpt-oss-120b",
+        "container_name": "spark-gptoss",
+        "ipc": "host",
+        "network": "host",
+        "shm_bytes": 17179869184,
+        "ulimits": {
+          "memlock": -1,
+          "stack": 67108864
+        },
+        "auto_remove": false
+      },
+      "artifacts": [],
+      "evidence_level": "ROOT_METADATA_PINNED_NOT_RUNTIME_VALIDATED"
+    }
+  ],
+  "prepare_only": true,
+  "hardware": {
+    "MemTotal_bytes": 130663170048,
+    "nonmodel_background_bytes": 4294967296,
+    "GPU": "NVIDIA GB10",
+    "driver": "580.178.04",
+    "SwapTotal_bytes": 0,
+    "cuda_addressable_total_bytes": 130663170048
+  },
+  "configuration_status": "PREPARED_NOT_RUNTIME_VALIDATED",
+  "sealed_unix": 1791969724.843457
+}

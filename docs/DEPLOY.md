@@ -1,4 +1,12 @@
-# Deployment: current V12 gate
+# Deployment
+
+For the separate Linux ARM64 Spark light variant, use
+[V22_SPARK_LIGHT_RU.md](V22_SPARK_LIGHT_RU.md). Build and verify its own flavor;
+ordinary ARM64 worker packages are not interchangeable. Preserve enrollment,
+selected controller address, CA, spool, applied configuration and model state.
+Current native deployment evidence must be checked before applying an artifact.
+
+## Historical V12 gate
 
 The current authoritative deployment instructions are in [V12_DEPLOYMENT_GATE_RU.md](V12_DEPLOYMENT_GATE_RU.md) and [AUDIT_REVIEW_12_2026-09-15.md](AUDIT_REVIEW_12_2026-09-15.md). Run the source verification script and a permitted browser test, then a single native Linux systemd/reboot pilot with independent SSH access. No fleet-readiness claim follows from compilation alone.
 

@@ -35,8 +35,21 @@ func (s *Store) expireAndBlockJobs() error {
 				status = string(protocol.TargetUnsupported)
 				reason = why
 			} else if j.deadline <= now {
-				status = string(protocol.TargetExpired)
-				reason = "job deadline expired; result was not confirmed"
+				if j.action == "model.start" || j.action == "model.stop" || j.action == "model.restart" {
+					// The short lease bounds a NEW effect, not observation of an
+					// already attempted effect or its later independently leased stage.
+					if j.status == "accepted" || j.status == "running" || j.status == "awaiting_confirmation" {
+						continue
+					}
+					if j.status == "delivered" {
+						status = string(protocol.TargetUnknownResult)
+						reason = "Model dispatch expired after delivery; reconcile the original attempt without replay"
+					}
+				}
+				if status == "" {
+					status = string(protocol.TargetExpired)
+					reason = "job deadline expired; result was not confirmed"
+				}
 				if (j.action == "update.rollout" || j.action == "update.rollback") && j.status != "preparing" && j.status != "queued" && j.status != "waiting_offline" {
 					status = string(protocol.TargetUnknownResult)
 					reason = "Delivered update deadline expired; the remote effect is unknown and must be reconciled"

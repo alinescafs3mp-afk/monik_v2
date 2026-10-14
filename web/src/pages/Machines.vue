@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useSession} from "../session";
+const {owner}=useSession();
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { usePolling } from '../composables/usePolling';
@@ -19,7 +21,7 @@ const filtered=computed(()=>{const q=String(route.query.q || '').toLocaleLowerCa
 async function pin(row:Machine,event:Event){
   const input=event.target as HTMLInputElement, wanted=input.checked;
   input.checked=row.pinned; // Only a durable server result changes the checkmark.
-  if(pending.value.includes(row.id))return;
+  if(!owner.value||pending.value.includes(row.id))return;
   pending.value.push(row.id); feedback.value[row.id]='Сохраняем…';
   try {
     const result=await submitOp('agent.pin',{agent_id:row.id,pinned:wanted});
@@ -41,7 +43,7 @@ async function pin(row:Machine,event:Event){
     <p v-else-if="!filtered.length && !error" class="panel">Нет машин, соответствующих поиску.</p>
     <div v-if="rows.length" class="table-wrap">
       <table class="machines-table"><thead><tr><th scope="col">Показывать в обзоре</th><th scope="col">Имя</th><th scope="col">ОС</th><th scope="col">Состояние</th><th scope="col">Версия</th><th scope="col">Управляемый</th><th scope="col">Последний live</th></tr></thead>
-        <tbody><tr v-for="r in filtered" :key="r.id"><td class="overview-selection"><input type="checkbox" :checked="r.pinned" :disabled="pending.includes(r.id)||r.archived" :aria-label="`Показывать в обзоре: ${r.display_name}`" @change="pin(r,$event)"/><small v-if="feedback[r.id]" role="status">{{ feedback[r.id] }}</small><small v-if="r.archived">Машина в архиве</small></td><td><router-link :to="'/machines/'+encodeURIComponent(r.id)">{{ r.display_name }}</router-link><MachineNameEditor :id="r.id" :name="r.display_name" @saved="refresh"/></td><td>{{ r.os }}/{{ r.arch }}</td><td><span class="dot" :class="r.state"/> {{ stateLabel(r.state) }} <small class="muted">{{ r.reason }}</small></td><td>{{ r.worker_version }}</td><td>{{ r.managed_ready?'да':'нет' }}</td><td>{{ r.last_live_at?new Date(r.last_live_at).toLocaleString():'Нет данных' }}</td></tr></tbody>
+        <tbody><tr v-for="r in filtered" :key="r.id"><td class="overview-selection"><input type="checkbox" :checked="r.pinned" :disabled="!owner||pending.includes(r.id)||r.archived" :aria-label="`Показывать в обзоре: ${r.display_name}`" @change="pin(r,$event)"/><small v-if="feedback[r.id]" role="status">{{ feedback[r.id] }}</small><small v-if="r.archived">Машина в архиве</small></td><td><router-link :to="'/machines/'+encodeURIComponent(r.id)">{{ r.display_name }}</router-link><MachineNameEditor :id="r.id" :name="r.display_name" @saved="refresh"/></td><td>{{ r.os }}/{{ r.arch }}</td><td><span class="dot" :class="r.state"/> {{ stateLabel(r.state) }} <small class="muted">{{ r.reason }}</small></td><td>{{ r.worker_version }}</td><td>{{ r.managed_ready?'да':'нет' }}</td><td>{{ r.last_live_at?new Date(r.last_live_at).toLocaleString():'Нет данных' }}</td></tr></tbody>
       </table>
     </div>
   </section>

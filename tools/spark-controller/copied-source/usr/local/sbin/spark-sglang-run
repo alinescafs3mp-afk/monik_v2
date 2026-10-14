@@ -1,0 +1,59 @@
+#!/bin/bash
+set -eu
+# Standard systemd launcher; pinned stable NVFP4 engine profile.
+. /etc/spark-sglang-api.env
+: "${SPARK_API_KEY:?missing existing API credential}"
+exec docker run --rm \
+  --name spark-sglang \
+  --gpus all \
+  --ipc=host \
+  --network host \
+  --shm-size=16g \
+  --ulimit memlock=-1 \
+  --ulimit stack=67108864 \
+  -v /srv/spark/models/Qwen3.8-Flash-Next-ABLITERATED-NVFP4:/models:ro \
+  -v /srv/spark/ple:/srv/spark/ple \
+  -v /srv/spark/hf-home:/srv/spark/hf-home \
+  -v /usr/local/lib/sglang-qwen38/tokenizer_manager.py:/sgl-workspace/sglang/python/sglang/srt/managers/tokenizer_manager.py:ro \
+  -v /usr/local/lib/sglang-qwen38/qsa_indexer.py:/sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa/qsa_indexer.py:ro \
+  -e HF_HUB_OFFLINE=1 \
+  -e TRANSFORMERS_OFFLINE=1 \
+  -e HF_HOME=/srv/spark/hf-home \
+  -e HF_HUB_DISABLE_TELEMETRY=1 \
+  sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6 \
+  sglang serve \
+    --model-path /models \
+    --served-model-name qwen38-flash-next-abliterated \
+    --host 0.0.0.0 \
+    --port 30000 \
+    --api-key "${SPARK_API_KEY}" \
+    --tp 1 \
+    --quantization modelopt_fp4 \
+    --moe-runner-backend flashinfer_cutlass \
+    --fp4-gemm-backend flashinfer_cudnn \
+    --ple-offload-embedding \
+    --ple-offload-backend file \
+    --ple-offload-dir /srv/spark/ple \
+    --context-length 262144 \
+    --mem-fraction-static 0.852 \
+    --page-size 64 \
+    --chunked-prefill-size 8192 \
+    --max-running-requests 2 \
+    --max-mamba-cache-size 8 \
+    --cuda-graph-backend-decode full \
+    --cuda-graph-max-bs-decode 2 \
+    --cuda-graph-backend-prefill disabled \
+    --speculative-algorithm NEXTN \
+    --speculative-num-steps 2 \
+    --speculative-eagle-topk 1 \
+    --speculative-num-draft-tokens 3 \
+    --mamba-radix-cache-strategy extra_buffer \
+    --disable-overlap-schedule \
+    --mamba-ssm-dtype float32 \
+    --linear-attn-prefill-backend triton \
+    --linear-attn-decode-backend triton \
+    --grammar-backend xgrammar \
+    --reasoning-parser qwen3 \
+    --tool-call-parser qwen3_coder \
+    --default-chat-template-kwargs '{"enable_thinking": true, "reasoning_effort": "xhigh"}' \
+    --enable-cache-report

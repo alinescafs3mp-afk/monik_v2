@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, onErrorCaptured, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, onErrorCaptured, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { get, post, setCsrf, setStream, streamState } from "./api";
 import { isAuthenticationFailure } from "./refreshQueue";
 import RecentAuth from "./components/RecentAuth.vue";
 import AppShell from "./components/AppShell.vue";
 import { navigationFailureMessage } from "./navigationFailure";
+import { sessionKey } from './session';
 
 const routeError = ref("");
 function reloadAfterNavigationError() {
@@ -18,6 +19,7 @@ const removeRouteSuccess = router.afterEach((_to, _from, failure) => { if (!fail
 onUnmounted(() => { removeRouteError(); removeRouteSuccess(); });
 const ready = ref(false);
 const me = ref<Record<string, unknown> | null>(null);
+provide(sessionKey, me);
 const setupRequired = ref(false);
 const toast = ref("");
 const toastLink = ref("");

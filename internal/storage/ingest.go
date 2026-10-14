@@ -27,6 +27,12 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 	if len(rep.Checks) > 1000 || len(rep.JobReceipts) > 128 {
 		return out, fmt.Errorf("report exceeds item budget")
 	}
+	if err := protocol.ValidateSpark(rep.Spark, rep.ObservedAt, s.now()); err != nil {
+		return out, err
+	}
+	if rep.AgentFlavor != "" && rep.AgentFlavor != "general" && rep.AgentFlavor != "spark-light" {
+		return out, fmt.Errorf("unsupported agent flavor")
+	}
 	if err := validateInventory(rep.Discovery, rep.ObservedAt, s.now()); err != nil {
 		return out, err
 	}
@@ -125,7 +131,22 @@ func (s *Store) AcceptReport(rep protocol.AgentReport) (AcceptedReport, error) {
 				return err
 			}
 		}
+		if rep.Spark != nil {
+			if err := ts.acceptSpark(rep, out.Live); err != nil {
+				return err
+			}
+		}
 		if out.Live {
+			if rep.Capabilities["spark_hardware_v1"].Status == protocol.CapSupported {
+				if _, err := tx.Exec(`INSERT INTO spark_hardware_evidence(agent_id,observed_at) VALUES(?,?) ON CONFLICT(agent_id) DO UPDATE SET observed_at=excluded.observed_at`, rep.AgentID, rep.ObservedAt.UTC().Format(dbTimeFormat)); err != nil {
+					return err
+				}
+			}
+			if rep.AgentFlavor != "" {
+				if _, err := tx.Exec(`INSERT INTO agent_flavors(agent_id,flavor) VALUES(?,?) ON CONFLICT(agent_id) DO UPDATE SET flavor=excluded.flavor`, rep.AgentID, rep.AgentFlavor); err != nil {
+					return err
+				}
+			}
 			acceptDiscovery, e := ts.inventoryIsNew(rep.AgentID, rep.Discovery)
 			if e != nil {
 				return e

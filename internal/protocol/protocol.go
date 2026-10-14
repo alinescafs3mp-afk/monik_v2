@@ -94,6 +94,8 @@ const (
 )
 
 type AgentReport struct {
+	AgentFlavor        string                `json:"agent_flavor,omitempty"`
+	Spark              *SparkExtensionV1     `json:"spark,omitempty"`
 	SchemaVersion      int                   `json:"schema_version"`
 	AgentID            string                `json:"agent_id"`
 	SessionID          string                `json:"session_id"`
@@ -275,12 +277,14 @@ type JobReceipt struct {
 }
 
 type SpoolStatus struct {
-	Error    string     `json:"error,omitempty"`
-	Bytes    int64      `json:"bytes"`
-	Items    int        `json:"items"`
-	Dropped  int64      `json:"dropped"`
-	DropFrom *time.Time `json:"drop_from,omitempty"`
-	DropTo   *time.Time `json:"drop_to,omitempty"`
+	Error   string `json:"error,omitempty"`
+	Bytes   int64  `json:"bytes"`
+	Items   int    `json:"items"`
+	Dropped int64  `json:"dropped"`
+	// When true, Dropped and its interval cover only known loss; the total is unknown.
+	DroppedUnknown bool       `json:"dropped_unknown,omitempty"`
+	DropFrom       *time.Time `json:"drop_from,omitempty"`
+	DropTo         *time.Time `json:"drop_to,omitempty"`
 }
 
 type UpdateTxStatus struct {
@@ -299,6 +303,7 @@ type MigrationStatus struct {
 }
 
 type ControlResponse struct {
+	Features      map[string]int `json:"features,omitempty"`
 	ReceiptAcks   []string       `json:"receipt_acks,omitempty"`
 	Ack           *IngestAck     `json:"ack,omitempty"`
 	DesiredConfig *DesiredConfig `json:"desired_config,omitempty"`

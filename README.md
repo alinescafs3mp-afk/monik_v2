@@ -1,4 +1,14 @@
-## Current audit: V20
+## Current work: Spark light integration
+
+The separate Linux ARM64 `monik-spark-agent` and Russian **Спарки** view are
+implemented in this source tree. They retain the existing machine identity,
+controller trust and ordinary monitoring. Model control requires a locally
+approved typed broker; installation and discovery grant no model permissions.
+Read [the Spark operator guide](docs/V22_SPARK_LIGHT_RU.md). Native deployment
+and resource acceptance are recorded separately; source tests do not establish
+that the running installation was upgraded.
+
+## Historical V20 audit
 
 Existing-function and network-security hardening. Read [audit](docs/AUDIT_REVIEW_20_2026-09-15.md), [deployment notes](docs/V20_NETWORK_SECURITY_RU.md), [security acceptance](docs/SECURITY_ACCEPTANCE_V20.md) and [ledger](ACCEPTANCE_LEDGER.md). Run `scripts/verify-audit20.sh --with-browser`. V20 changes controller/UI only; preserve all enrolled state and rebuild matching installer templates for future downloads. Historical sections below are not current acceptance evidence.
 
@@ -14,7 +24,7 @@ Read [V14 inventory/address audit](docs/AUDIT_REVIEW_14_2026-09-15.md), [remote 
 
 Self-hosted monitoring for the owner's machines and local HTTP/HTTPS services: one Go controller with embedded Vue/TypeScript UI and SQLite, plus native agent/limited service-host builds.
 
-**Current source: V20 controller security and reliability, PRE-RELEASE, visual/native release acceptance pending.** Read [the actual status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md), [audit](docs/AUDIT_REVIEW_17_2026-09-15.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Source changes never imply the running installation has been deployed.
+**Current source includes the Spark light integration; deployment and native acceptance remain separate.** Read [the Spark guide](docs/V22_SPARK_LIGHT_RU.md), [the existing status](IMPLEMENTATION_STATUS.md), [acceptance ledger](ACCEPTANCE_LEDGER.md) and [remaining release gates](docs/RELEASE_COMPLETION_PLAN.md). Historical audit results do not establish acceptance of this integration.
 
 The corrected new-profile bootstrap URL is `https://46.150.103.61:8777`. An existing selected/persisted controller URL always takes precedence. Russian UI is default. [Operator guide](docs/V7_SCREEN_AND_MONITORING_RU.md).
 

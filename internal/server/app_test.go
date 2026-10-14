@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -13,7 +14,14 @@ import (
 
 func testApp(t *testing.T) (*App, http.Handler) {
 	t.Helper()
-	app, err := Open(Config{DataDir: t.TempDir(), Listen: "127.0.0.1:0", AdvertisedURL: "https://192.168.12.128:8777"})
+	dir := t.TempDir()
+	// Go 1.27 creates each TempDir child with 0777 subject to umask. Positive
+	// controller fixtures require the same private directory as installation;
+	// production permission refusals remain intact.
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	app, err := Open(Config{DataDir: dir, Listen: "127.0.0.1:0", AdvertisedURL: "https://192.168.12.128:8777"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,6 +32,20 @@ func testApp(t *testing.T) (*App, http.Handler) {
 	mux := http.NewServeMux()
 	app.routes(mux)
 	return app, app.csrfAndSecurity(mux)
+}
+
+func TestConsoleRejectsWritableControllerDirectory(t *testing.T) {
+	app, _ := testApp(t)
+	if _, _, err := app.readConsoleConfiguration(); err != nil {
+		t.Fatal("private controller fixture refused:", err)
+	}
+	if err := os.Chmod(app.Cfg.DataDir, 0o770); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(app.Cfg.DataDir, 0o700) })
+	if _, _, err := app.readConsoleConfiguration(); err == nil {
+		t.Fatal("group-writable controller directory accepted")
+	}
 }
 
 func TestLoginOverviewEnrollReport(t *testing.T) {
