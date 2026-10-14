@@ -1,0 +1,179 @@
+{
+  "schema": "monik-v22-spark-native-summary-v1",
+  "recorded_at_unix": 1792015572.1695275,
+  "scope": "Installed ARM64 Spark monitoring and existing seven-profile controller integration; no seven-engine cold-start or inference acceptance",
+  "base_commit": "dc6511eeeb2df9b85b5be59a1b6074648f0cdc08",
+  "source_build_id": "source-sha256-517cb70f62b92ede4dc936fe6295d50d67a9a34d1800d4a1e63407222725f39f",
+  "binary_sha256": {
+    "binaries/linux-arm64/monik-spark-agent": "087c714caf6d9a780abf319b6df19895c765c0e40093f14ff827f8479b4227e3",
+    "binaries/windows-amd64/monik-agent.exe": "21edcc4ac4b536af0a993669eea59641f974e82a4a2af7783722b7232f77233d",
+    "binaries/windows-amd64/monik-server.exe": "ef21b3abc9b88d9e4902849bf256abe6f0f819704f309b03473b5929a2c4ddd7",
+    "binaries/windows-amd64/monik-release.exe": "50f43305089c4f56c7afcc6eb3334b7e21ee25877b428eba675f439764d303f6",
+    "binaries/windows-amd64/monik-service-host.exe": "87bd8a9721cd23218283cdab915dc2410c1c02f7042332b33fa0ee470f688d5d",
+    "binaries/linux-amd64/monik-service-host": "d564af50c11144a1fd17c28a3adc1740d2162cafb81cf85c5b1a15c09a8ae4bf",
+    "binaries/linux-amd64/monik-agent": "b10d1aefcc52e7248b52e7932b757cc29ad6f6607a9118811a6e93c9abddbcba",
+    "binaries/linux-amd64/monik-server": "56af7ec0a8cd4e5e090770195dff02fbcff606dbe9e6ec5802fe3c6ea09ef939",
+    "binaries/linux-amd64/monik-release": "de38e1e6924016eeadbf130350eab2c693ef70f56b0b7281375ca54027de2225"
+  },
+  "template_sha256": {
+    "linux-amd64.bin": "39314a3e7e9e1a5fe31b39dbae39ad9af78aa4bf26d467bc479f82ba7cd21afe",
+    "linux-arm64.bin": "4c9be3437396a7e290b03c1980c98de1aa98534cec5be3ad6120c4b7805e08e2",
+    "linux-arm64-spark-light.bin": "65bb867870cc030a1be57c0e9f5ca1709ad6493b0a3b37d75977e2be49c0c898"
+  },
+  "checks": {
+    "whole_go_race": "PASS",
+    "go_vet": "PASS",
+    "go_module_integrity": "PASS",
+    "frontend_tests": 215,
+    "frontend_types_and_production_build": "PASS",
+    "copied_python_offline": {
+      "passed": 342,
+      "duration_seconds": 14.141,
+      "host_effects": "injected at adapter seam; native observations separately below"
+    },
+    "producer_consumer_fixtures": {
+      "status": "PASS_OFFLINE",
+      "actual_python_frames": 10
+    },
+    "source_reviews": "PASS scoped independent reviews and changed-area re-reviews",
+    "native_upgrade": {
+      "status": "PASS",
+      "preserved_enrollment_identities": 3,
+      "keys_trust_settings_history_preserved": true,
+      "original_collection_lock_preserved": true,
+      "original_model_arguments_and_client_budgets_preserved": true,
+      "old_model_scripts_and_TUI_names_preserved": true,
+      "one_original_coordinator": true
+    },
+    "native_model_observations": {
+      "status": "PASS",
+      "profiles": 7,
+      "quality_ok": 7,
+      "ready": 1,
+      "stopped": 6,
+      "ready_profile": "ling-3-flash-124b-heretic-text",
+      "same_previous_inference_instance": true
+    },
+    "native_noop_actions": {
+      "status": "PASS",
+      "cases": [
+        "already-running Ling start keeps same instance/generation",
+        "inactive legacy Qwen stop returns shutdown proof",
+        "inactive legacy GPT stop returns shutdown proof"
+      ],
+      "controller_status": "completed",
+      "target_status": "succeeded",
+      "limitations": "Does not exercise a real engine start or stop."
+    },
+    "native_logs": {
+      "status": "PASS",
+      "stale_epoch_http": 409,
+      "bounded_tail_records_retained": 200,
+      "active_stream_seconds_approx": 65,
+      "sampled_content_real_api_key_absent": true,
+      "log_content_published": false,
+      "source": "fixed existing Ling engine/action logs",
+      "cleanup": "viewer disconnected and source lease released"
+    },
+    "browser": {
+      "status": "PASS",
+      "viewports": [
+        "desktop1440",
+        "mobile390",
+        "TV1920"
+      ],
+      "screenshots": 15,
+      "errors": 0,
+      "horizontal_overflow": false,
+      "same_production_controller": true,
+      "physical_TV": "NOT_RUN",
+      "viewer_role": "source tests and earlier canary authority checks; no new owner-account change"
+    },
+    "bundle_preparation": {
+      "status": "PASS",
+      "profiles": 7,
+      "five_V4_full_SHA256_bytes": 384181506686,
+      "two_legacy": "original pinned source/image/config stat qualification; no claim of full legacy weight hashing",
+      "normal_seal_rechecks": "PASS all seven",
+      "duration_seconds": 496.3049,
+      "unrelated_state_and_inference_preserved": true
+    }
+  },
+  "resource_measurements": {
+    "hardware": "NVIDIA DGX Spark GB10 ARM64 unified memory",
+    "default_cadence_seconds": 5,
+    "idle": {
+      "duration_seconds": 30.017121828997915,
+      "cpu_percent_one_core": 23.641576294377884,
+      "pss_mean_bytes": 53752798.42622951,
+      "pss_sampled_peak_bytes": 87308288,
+      "rss_sampled_peak_bytes": 100601856,
+      "cgroup_memory_lifetime_peaks_sum_bytes": 162463744,
+      "tcp_ipv4_duplex_Bps": 2331.5895435971534,
+      "l2_duplex_lowerbound_Bps": 2379.1736837160133,
+      "capture_kernel_drops": 0
+    },
+    "engineering_targets": {
+      "steady_PSS_bytes": 33554432,
+      "logview_PSS_bytes": 67108864,
+      "CPU_percent_one_core": 0.5,
+      "duplex_wire_Bps": 2048
+    },
+    "targets": "MISSED; measured engineering aims, not represented as PASS",
+    "optimization": "Seven singleton sealed Python observation helpers replaced with one fresh batch; fresh binding remains. Nominal helpers per round8→2. Idle CPU49.204%→23.642% (about52% reduction). Physical identity/release/readiness checks remain; no effect or cross-round authority cache.",
+    "remaining_cost": "Broker fresh systemctl/Docker helpers dominate reaped-child CPU; collector includes nvidia-smi/proc probing. Safety checks retained.",
+    "limitations": [
+      "PSS/RSS peaks are sampled lower bounds when short-lived children disappear between samples.",
+      "Cgroup memory lifetime peaks include charged memory outside sampled process PSS; they are a separate measure.",
+      "Shared dockerd CPU outside product cgroups remains UNKNOWN.",
+      "L2 estimate excludes FCS/preamble/inter-frame gap; a lower bound, not total physical wire.",
+      "Actual wire includes HTTPS/control/ACK traffic; generation requests are outside this stream.",
+      "Quiet bounded log view is not a synthetic flood or multi-viewer stress test."
+    ],
+    "one_active_bounded_log_view": {
+      "duration_seconds": 30.020031888998346,
+      "cpu_percent_one_core": 24.28806150539873,
+      "pss_mean_bytes": 55102866.885245904,
+      "pss_sampled_peak_bytes": 88467456,
+      "rss_sampled_peak_bytes": 103333888,
+      "cgroup_memory_lifetime_peaks_sum_bytes": 162463744,
+      "tcp_ipv4_duplex_Bps": 2541.4754116106656,
+      "l2_duplex_lowerbound_Bps": 2589.0437566893734,
+      "capture_kernel_drops": 0,
+      "kind": "Quiet actual tail/live source; not artificial flood or multi-viewer stress",
+      "stream_covered_full_measurement_interval": true
+    }
+  },
+  "not_run": [
+    "real seven-engine start/stop/restart/cancellation/cold-start and full-context inference",
+    "synthetic log flood/multi-viewer stress",
+    "physical TV",
+    "fleet/soak and complete disaster restore/perimeter gates"
+  ],
+  "cleanup": {
+    "old_private_fixture_and_reverse_SSH": "exact owned PID/birth/argv verified then terminated",
+    "native_canaries_and_inert_container": "retired with independent read-only closure",
+    "actual_Ling_inference_and_owner_stops": "preserved",
+    "new_monitoring_services": "intentionally running",
+    "Astra_messages": "none"
+  },
+  "evidence_sha256": {
+    "observation-cost-fix/RESULT.json": "770f4dcc59fa49530fd9e64e0797622ae5e4d885200d946b574abc27d17242fa",
+    "batch-deploy-review/RESULT.json": "73879bccaced90f9282e03acf9e6c7d664ee7d3870a7deb5b14a2815f510fea9",
+    "production-browser-final7-batch-20261015T0059/results.json": "d887f2b3f1901c72532b5e4655ee9a0da6bc7dad53318e30dd0936e2ca7bf1ee",
+    "final7-bundle-preparation/parent-correct-numeric-credential-events.json": "b4f652927d9995a7ea82e4b9976a291a406198ab89353a401cd9b70c9f7a6913",
+    "final7-batch-native-api/safe-operations-RESULT.json": "5db4be82e70ccaecdc390a8f8fb4657ae203f7d40cbf9ab199165d346725e7c4",
+    "final7-logfootprint-api/logs-RESULT.json": "de3459cfa5ed556a8815fa73136dac5cac442344d88142c517fd481aca4c2be1",
+    "final7-batch-native-footprint/footprint-final7-batch-production.json": "02362a91fac4016a4fc12b2e2ef6efefe0352ae8b8372eebd0ca6236acb1dc7f",
+    "final7-batch-native-footprint/footprint-final7-batch-under-logview.json": "fda1a90284cfc30c8999d65f3cd50efeebe85666f3bfb3d35a7addaffd30a833",
+    "final7-batch-native-footprint/RESULT.json": "d07ff7d85a98690ac83738b33d824fa125fec0bf334cf33475491bca29effea8",
+    "final-publication-delta/RESULT.json": "9d045ed1a4aafe007756fcb872535eed0cc21568047ab0ae948fd7462d6dab91"
+  },
+  "source_commit": "b298673014e692fb3e897f5400aa45e6d5dc3322",
+  "source_commit_exact_build_bytes_verified": true,
+  "acceptance_documentation_boundary": "This post-deployment documentation is separate from the frozen build-source commit.",
+  "upgrade_history": [
+    "Initial F4 monitor-only upgrade stopped at guarded owner/systemd metadata boundaries; exact partial continuations completed without model effects or trust reset. Original failed receipts and backups remain private and immutable.",
+    "F5 finite-upgrade review found writable-directory publication and backup-directory durability gaps before execution; corrected exclusive publication windows and bottom-up fsync were independently reviewed before deployment."
+  ]
+}

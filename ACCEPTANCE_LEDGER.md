@@ -1,52 +1,57 @@
 # V22 Spark acceptance ledger (2026-10-15)
 
-Base `dc6511eeeb2df9b85b5be59a1b6074648f0cdc08`. This ledger separates source, installed deployment and native/runtime acceptance. [Operator guide](docs/V22_SPARK_LIGHT_RU.md). A PASS applies to the stated artifact and scope; earlier candidate results do not transfer to changed executables or backend code.
+Base `dc6511eeeb2df9b85b5be59a1b6074648f0cdc08`. [Operator guide](docs/V22_SPARK_LIGHT_RU.md); [sanitized native evidence](docs/audit/validation-v22-spark-2026-10-15.json). Source, deployment, runtime and engineering targets have separate dispositions.
 
-## Artifact boundaries
+## Frozen build and installed artifacts
 
-Go/UI release `release-final7-20261015T0012` has the following identifiers. Its build source ID covers that build's Go/UI inputs; later Python backend corrections are pinned separately and are not attributed to that build source ID.
+Code commit `b298673014e692fb3e897f5400aa45e6d5dc3322` was verified byte-for-byte against all 651 inputs of the paired build. Final acceptance documentation follows that source commit; it does not change the installed binaries.
 
-| Artifact | SHA-256 / source identifier |
+| Artifact | SHA-256 / identifier |
 |---|---|
-| Go/UI build source ID | `29cdcdb471291d4fa4ac714dd622b758034110d547d9ca17d9585aef5ec51abd` |
-| Linux AMD64 controller ELF | `56458f88b7465e0c6963ddd0b085db0f48881099d476347c0181e880a972429d` |
-| Linux ARM64 Spark light ELF | `d854f0b4050b41c5c1901d3ca4eda149489a44735b2aa3df3812a62bda378bc6` |
-| Later `modelctl.py` backend | `856f7a8099abbdcf47bba1b1bb77366b8bb72c211535a63a12887872bfa70856` |
-| Later `legacy_runtime.py` backend | `492f2e50e8496efbd43abbfa59d010375b4a6face213c68056d6948728989f4d` |
+| Build source | `517cb70f62b92ede4dc936fe6295d50d67a9a34d1800d4a1e63407222725f39f` |
+| Linux AMD64 controller | `56af7ec0a8cd4e5e090770195dff02fbcff606dbe9e6ec5802fe3c6ea09ef939` |
+| Linux ARM64 Spark light | `087c714caf6d9a780abf319b6df19895c765c0e40093f14ff827f8479b4227e3` |
+| Existing `modelctl.py` | `856f7a8099abbdcf47bba1b1bb77366b8bb72c211535a63a12887872bfa70856` |
+| Existing `legacy_runtime.py` | `492f2e50e8496efbd43abbfa59d010375b4a6face213c68056d6948728989f4d` |
 
-The installation inputs and original launcher fixtures have distinct roles in [the controller source package](tools/spark-controller/README.md). Fixture launchers are not deployment inputs. Exact installed ownership/modes, loaded-unit qualification, policy/source pins and native outcomes need their own evidence below.
+The source/install manifest and launcher fixtures have distinct roles in [the controller package](tools/spark-controller/README.md). Fixtures are not deployment inputs. All three matched installer templates are served by the installed controller. Native unit ownership/modes, local policy/source pins and preserved trust were verified separately.
 
-## Current evidence
+## Final checks
 
-| Gate | Result and actual scope |
+| Gate | Result and scope |
 |---|---|
-| Go/UI source and builds | **PASS**: whole Go race, vet, module verification; UI 215 tests, type check and production build; all three installer templates; AMD64 and ARM64 builds. Cross-builds do not prove native boot or model operation. |
-| Final copied Python controls | **PASS**: 342 tests in 14.141 s, including fixed systemd template metadata and strict typed D-Bus proof of omitted empty optional commands. Real Coordinator/StateStore transactions execute with host effects injected at the adapter seam. |
-| Producer/consumer contract | **PASS_OFFLINE**: 10 actual Python-produced fixture frames accepted by strict Go consumer; scoped independent review PASS. They are generated fixtures, not ten native model observations. |
-| Legacy/coordinator fixes | **PASS_OFFLINE**: strict captured declarations, source bootstrap, immutable re-adoption, explicit resource shape, typed cancellation/reaper authority and noarg legacy stop delegate. Later native metadata/empty-command source deltas also reviewed independently. Installed/runtime acceptance remains separate. |
-| Logs/retention/codec fixes | **PASS_OFFLINE**: independent changed-scope review closes redaction pin-custody, malformed-receipt retention and declared-legacy composition findings. Actual reader/emission revalidation, bounded buffers and replay guards covered. Unchanged bounded authenticated gzip review reused on the same codec bytes. |
-| Source publication hygiene | **PASS_SOURCE**: no real credentials/private state found in the reviewed public source/package; portable offline bundle and installation manifests checked. Subsequent source changes still require scoped publication checks. Private reports/caches are not publication inputs. |
-| Deployment checkpoint | **DEPLOYED**: F4 controller and both Spark monitors running; three existing enrollment/trust identities retained. Seven profiles route through one pre-existing Coordinator; original five-profile V4 manifest and script/TUI interfaces preserved. This row is not final runtime acceptance. |
-| Runtime preservation checkpoint | **OBSERVED**: Ling READY on the same previous instance; Qwen owner STOP and GPT/MiniMax stop intent preserved. No model generation/cold start performed during the Monik upgrade. No claim that all seven engines ran. |
-| F4 installed/backend native acceptance | **PASS bounded native observation/control slice**: seven real profiles report `quality=ok`, Ling READY and six stopped; same three enrollment/trust identities retained. Existing Ling start was a no-op at the same generation; stopped legacy Qwen/GPT returned completed/succeeded with shutdown proof. Fixed Ling log SSE returned ten records with the local API key absent; stale log epoch was refused. No real cold-start, running-engine stop or restart acceptance is claimed. |
-| F4 served browser | **PASS rendering**: final served F4 bundle, 15 screenshots at desktop/mobile/TV viewports, no browser errors, horizontal overflow or unexpected requests. Owner model controls were rendered. Source tests cover viewer denial; this browser run did not create a viewer account. Physical-TV hardware remains separate. |
-| F4 incremental footprint | **MEASURED, targets missed**: idle 30.018 s, collector 0.858% + broker 48.346% of one core, PSS mean 52.49 MiB / sampled peak 84.08 MiB, RSS sampled peak 94.06 MiB. Transient child races make memory peaks lower bounds; shared dockerd CPU unknown. Actual duplex TCP L3 2331 B/s, L2 lower bound 2377 B/s, packet drops zero. Repeated sealed Python/single-profile probes are the confirmed main cost; a Go batching correction is under validation. No active-log stress or model generation in this run. |
-| Real seven-engine lifecycle | **NOT_RUN**: maintenance-owner execution required for actual start/stop/restart, live cancellation/release/no-victim, full-context concurrency, inference and cold-start measurements. No extrapolation from injected adapters or Ling passive readiness. |
-| F4 log stress / inference cold start | **NOT_RUN** unless an actual bounded observation is added. Offline stream bounds and redaction controls do not establish stress resource behavior. |
+| Whole source/build | **PASS** Go race/vet/module verification; UI 215 tests/types/production build; AMD64/ARM64 and all three installer packages. Cross-build is not native boot. |
+| Python and coupling | **PASS_OFFLINE** 342 copied Python controls; ten actual Python-produced fixture frames through strict Go consumer. Host effects in Python tests are injected at the adapter seam. |
+| Independent reviews | **PASS** final coordinator/legacy/log-retention/codec and changed-area metadata/batch fixes. No weakened effect or replay checks. Deployment namespace/durability findings were fixed before F5 execution. |
+| Publication | **PASS_SOURCE** 651 exact frozen inputs, 19/19 install hashes, 5/5 source copies; 637 previously audited unchanged hashes reused, 12 changed + 2 added reviewed. Real credentials/private state absent. |
+| Local integrity preparation | **PASS** seven normal seals/rechecks. Five V4 bundles fully SHA-256 checked over **384181506686 bytes**; two legacy profiles use their original protected source/image/config qualification, not full legacy weight hashing. 496.305 s; unrelated state, collection lock and Ling identity unchanged. |
+| Installed upgrade | **PASS bounded deployment** matched controller/templates + two monitor ELFs, three existing enrollment/trust identities and keys/settings/history/locks preserved. Model args/budgets/scripts/TUI retained. Earlier guarded partial F4 attempts and their exact continuations remain immutable private evidence. |
+| Seven native observations | **PASS** one Ling READY on the same pre-existing instance, six stopped, all seven quality=ok. Original five-profile manifest unchanged; one Coordinator/StateStore/exclusion lock. |
+| Native safe actions | **PASS** already-running Ling start no-op preserves instance/generation; inactive legacy Qwen/GPT stop no-ops return shutdown proof. Final controller status completed / each target succeeded. No real engine launch/stop claimed. |
+| Native fixed logs | **PASS quiet tail/live** Ling fixed source, stale epoch refused409, bounded200 retained records, ~65s stream covered the under-log measurement, sampled content lacks the real local API key. Source and synthetic controls establish redaction behavior; no real secret was seeded in owner logs. Stream released. |
+| Served browser | **PASS rendering** 15 screenshots desktop/mobile/TV viewport, final served artifact, no uncaught errors/overflow/unexpected mutation. Owner controls render. Viewer denial has source/earlier canary evidence; no new user account created. Physical TV NOT_RUN. |
+| Real seven-engine lifecycle | **NOT_RUN** actual starts/stops/restarts/cancellation/cold start/full-context inference require a maintenance observation preserving owner intent. No extrapolation from fixtures or passive readiness. |
+| Other gates | **NOT_RUN** synthetic flood/multi-viewer resource stress, physical TV, fleet/soak, perimeter and complete disaster restore. This is not a whole-product release declaration. |
 
-Engineering targets: steady PSS <=32 MiB; bounded-log PSS <64 MiB; CPU <0.5% of one core; background wire traffic <2 KiB/s. CPU is a target rather than an automatic release blocker. Record missed targets and the measured scope honestly.
+## Actual whole incremental resources
 
-## Historical F3 evidence — does not close F4
+Each final passive run lasted ~30 seconds. Product cgroup CPU includes spawned helpers/reaped descendants and is normalized to one core. PSS/RSS use paired process/child samples; disappearing children make peaks lower bounds. Charged cgroup memory lifetime peaks are a separate reported measure. Shared dockerd cost outside these cgroups is UNKNOWN.
 
-| Gate | Earlier actual result and limit |
-|---|---|
-| Native installation/recovery | **PASS** in isolated ARM64 fixture: install, preserved-identity full-to-light conversion/reinstall and rollback. Fixture trust is distinct from production enrollment. |
-| Native lifecycle | **PASS**, 18 CPU-only native canary controls. Actual dispatch/reconciliation, staged restart, safety stop, revocation and bounded logs; no model/GPU workload. |
-| Browser | **PASS**, 15 screens. Earlier served artifact; neither F4 seven-backend acceptance nor physical-TV proof. |
-| Steady resources | CPU **1.144%** of one core, above the **0.5%** target; PSS **30.7 MiB**, within **32 MiB**. Earlier sample does not establish F4 footprint or log stress. |
-| Traffic | Spark JSON alone **3474 B/s**, above **2 KiB/s**; this is not total wire traffic and does not include later gzip behavior. F4 wire measurement is pending. |
+| Run | CPU one core | Mean / sampled peak PSS | Sampled peak RSS | Duplex L2 lower bound |
+|---|---:|---:|---:|---:|
+| First F4, before batch | 49.20% | 52.49 / 84.08 MiB | 94.06 MiB | 2377 B/s |
+| Final batch idle | 23.64% | 51.26 / 83.26 MiB | 95.94 MiB | 2379 B/s |
+| Final batch, one quiet log view | 24.29% | 52.55 / 84.37 MiB | 98.55 MiB | 2589 B/s |
 
-Final dispositions use PASS/FAIL/BLOCKED/NOT_RUN/PENDING with explicit scope and reasons. Production database/state, credentials, raw owner logs, enrollment profiles, private machine IDs/paths and personal handoff artifacts are excluded from publication. Historical V21 limits below remain open where not genuinely exercised.
+**Engineering targets MISSED**: <=32 MiB steady PSS, <64 MiB bounded-log PSS, <0.5% of one core, <2 KiB/s background wire. They are aims, not represented as passed release gates. Batch reduces nominal Bind+Snapshot helpers 8→2 and measured CPU by **51.95%**; all fresh physical checks remain. Final broker idle is approximately 1.63% main +21.03% reaped children; fresh systemctl/Docker/Python and collector nvidia/proc probes remain the measured cost. No cross-round effect/authority cache was introduced to improve the number.
+
+Packet capture retained headers only, matched actual collector HTTPS/control connections and recorded zero kernel drops. It includes HTTP/TLS/control/ACK traffic. L2 excludes FCS/preamble/inter-frame gaps, so this is a conservative lower bound, not full physical wire. The quiet log view is not a flood test.
+
+## Earlier F3 evidence, separate artifact
+
+F3 passed isolated native ARM64 install/convert/reinstall/rollback with preserved identity, 18 CPU-only native canary controls and 15 served-browser screenshots. Those establish the stated fixture behaviors, not final seven-engine operation. Old resources: CPU1.144% / PSS30.7MiB, Spark JSON alone3474B/s. F3 lacked final seven-backend native work and cannot be compared as identical workload. Current native outcomes above are recorded on the installed batch build.
+
+Private databases/backups, keys, raw owner logs, enrollment profiles, identifiers and handoffs are not published. Obsolete private fixture/reverse SSH and old canaries were closed; intentionally running monitors and Ling were preserved. Historical V21 gates below remain open where not genuinely exercised.
 
 ## Historical V21 acceptance ledger (2026-09-16)
 
