@@ -1,5 +1,9 @@
 # Existing Spark controller integration
 
+The [2026-10-15 source checkpoint](SOURCE-STATUS-2026-10-15.md) links the Nemo
+metadata/Unicode repair, final LAN model guard, GPT fixed declarations and
+Mistral compiler-cache correction, with explicit native and acceptance limits.
+
 This directory contains the existing Spark V4 controller, its Monik typed bridge,
 and the fixed Qwen/GPT adapters. They share the original StateStore and collection
 lock. Monik does not introduce a second inference or memory reservation owner.

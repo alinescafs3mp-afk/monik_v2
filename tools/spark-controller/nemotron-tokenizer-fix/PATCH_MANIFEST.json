@@ -1,0 +1,23 @@
+{
+  "base_revision": "df18bee11e96557b07aa7b12db0976f3c7ac9165",
+  "source_files": {
+    "src/llama-vocab.cpp": {
+      "before_sha256": "ff2ec59299af84c51814020169177302003d8c14cdd30f2c44f333359bc17b41",
+      "after_sha256": "f7355e9690a88d7ed1ee5a1167bbfa5c7763a86cae7d58a3550a20615bf7e521"
+    },
+    "src/unicode.cpp": {
+      "before_sha256": "f8d45a5b238f64423ec30d5420bbcb9c35c8c7db314bb316899d3a14939a14f2",
+      "after_sha256": "0ea3deda97f69272d52b68fe59f3e6846a3f4592384d9b0edee9f14629e9dfad"
+    }
+  },
+  "classification_sha256": "c73c7fe7ebe42817eb36d08739566231eb662130a9d443b83f4e17a49113b9e4",
+  "classification_range_records": 2363,
+  "tokenizer_sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7",
+  "new_files": {
+    "src/unicode-tekken.h": "4782ef18c727981c195df2ffb7ea1dc3e06ac1c2bc3800a53da33e5c75badece",
+    "src/unicode-tekken-data.h": "a10f124716d9d80bb68314bf23c856871153592c058e777914026ab0006aea42"
+  },
+  "patch_sha256": "d2d025053ecd38762109a51e75c633975d0be7cccc7a53fb456a2f1108b3c336",
+  "no_build_or_runtime_effects": true,
+  "classification_reference_note": "Classification data is embedded completely in the exact patch; rebuilding does not require the original classification-generation harness."
+}

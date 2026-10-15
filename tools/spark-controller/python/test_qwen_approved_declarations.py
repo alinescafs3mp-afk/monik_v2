@@ -152,7 +152,7 @@ class ApprovedQwenDeclarations(unittest.TestCase):
             with self.subTest(variant=legacy.digest(row), changed=changed), self.assertRaises(core.Refusal):
                 legacy.validate_row(changed)
 
-    def test_gpt_has_no_variants_and_cannot_adopt_qwen_exceptions(self):
+    def test_gpt_cannot_adopt_qwen_exceptions(self):
         original = legacy.definitions()[1]
         self.assertIsNone(legacy.validate_row(original))
         for row in legacy.approved_qwen_declarations():

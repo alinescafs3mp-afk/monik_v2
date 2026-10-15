@@ -83,6 +83,9 @@ class LegacyAdapter(unittest.TestCase):
             'Privileged':False,'ReadonlyRootfs':False,'CgroupParent':'','AutoRemove':True,'RestartPolicy':{'Name':'no'},'DeviceRequests':[{'Count':-1,'Capabilities':[['gpu']],'Driver':'nvidia'}],'LogConfig':{'Type':'local','Config':{'max-size':'10m','max-file':'3'}}},
           'Mounts':[{'Source':m['source'],'Destination':m['target'],'RW':not m['readonly'],'Type':'bind'} for m in r['mounts']],
           'State':{'Running':True,'Pid':10002,'StartedAt':'2026-10-14T01:00:01Z'}}
+        defaults=json.loads((base.CANDIDATE.parent/'ROOT-RESOURCE-DEFAULTS.json').read_text())['default_resource_shape']
+        for field,value in defaults.items():self.container['HostConfig'].setdefault(field,value)
+        self.container['HostConfig']['OomKillDisable']=False
         self.unit={'LoadState':'loaded','ActiveState':'active','SubState':'running','InvocationID':'e'*32,'MainPID':'10001','ControlGroup':'/system.slice/spark-sglang.service'}
         self.present=True;self.named=True;self.commands=[]
         self.adapter=core.SystemAdapter({'models':legacy.definitions()},command=self.command)

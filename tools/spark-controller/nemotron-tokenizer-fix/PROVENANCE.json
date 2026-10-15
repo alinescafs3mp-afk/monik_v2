@@ -1,0 +1,59 @@
+{
+  "evidence_date": "2026-10-15",
+  "artifacts": [
+    {
+      "public_artifact": "repair_gguf_metadata.py",
+      "original_artifact_name": "repair_gguf_metadata.py",
+      "original_sha256": "f30e148f3ce9036dd2cb63ea9ea6dc1316d11c9b4ebd08602f49a82025de3ae3",
+      "adaptation": "Exact byte copy; already parameterized and import-inert; CLI keeps source and tokenizer SHA pins."
+    },
+    {
+      "public_artifact": "nemotron-exact-tekken.patch",
+      "original_artifact_name": "nemotron-exact-tekken.patch",
+      "original_sha256": "d2d025053ecd38762109a51e75c633975d0be7cccc7a53fb456a2f1108b3c336",
+      "adaptation": "Exact byte copy; includes both complete private headers and all generated classification data."
+    },
+    {
+      "public_artifact": "import-ggml/ggml-config.cmake",
+      "original_artifact_name": "ggml-config.cmake",
+      "original_sha256": "1305c8c772afb79e7bd9d8101d0dc5ecd97da416b703c221e4d57a8797cdedb4",
+      "adaptation": "Exact byte copy; paths are explicit CMake inputs, libraries SHA-pinned."
+    },
+    {
+      "public_artifact": "PATCH_MANIFEST.json",
+      "original_artifact_name": "PATCH_MANIFEST.json",
+      "original_sha256": "d430c3f801171678440f5bf87cc02ef6c15ee65ce7a4b8df1768e40c04638c08",
+      "adaptation": "Removed one private absolute classification-reference path; all byte/hash pins preserved; embedded data needs no unpublished generator."
+    },
+    {
+      "public_artifact": "runtime-original.json",
+      "original_artifact_name": "old-bin-before.json",
+      "original_sha256": "a68ff6babe901ec8994e25ed0c826b73bf9a43bfc47cd9ab4d650b5055667ac6",
+      "adaptation": "Exact byte copy; relative filenames, file sizes, SHA values and symlink targets only."
+    },
+    {
+      "public_artifact": "runtime-observed-candidate.json",
+      "original_artifact_name": "bundle-bin-sha256.json",
+      "original_sha256": "71398949b4d1dff09d385ed34a1f041e42a9944af37769c1b8417509dacff44e",
+      "adaptation": "Exact byte copy; observed reference binary hashes, not a promise of compiler-independent identical rebuild."
+    },
+    {
+      "public_artifact": "BUILD.md",
+      "original_artifact_name": "build_attempt_02.py",
+      "original_sha256": "a79d298b338b30f480315b2c88794c4e7bd4a344c2a35ea53a883f11d0f7fe53",
+      "adaptation": "Documented adaptation of actual attempt02 configure/build/input/ABI recipe; explicit fresh output paths replace private hardcoded paths; no automatic deployment or execution."
+    },
+    {
+      "public_artifact": "README.md",
+      "original_artifact_name": "materialize_nemo_metadata.py",
+      "original_sha256": "d4a9b7a2168689b878d924babcd1f178b2e2fd1ba8b20c1120ab5c1635aa25d2",
+      "adaptation": "Documented adaptation of root-only copy wrapper to explicit plan/copy CLI of the exact verified helper; ownership/container/resource enforcement remains operator deployment policy."
+    }
+  ],
+  "new_materials": [
+    "verify_inputs.py: read-only hash/inventory checker",
+    "test_metadata_guards.py: synthetic bounded safety controls",
+    "PINS.json and SELECTED-EVIDENCE.json: selected sanitized facts"
+  ],
+  "private_inputs_redistributed": false
+}

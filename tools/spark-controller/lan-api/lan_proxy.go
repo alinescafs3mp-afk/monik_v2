@@ -36,6 +36,7 @@ const (
 	writeTimeout    = 30 * time.Second
 	shutdownTimeout = 10 * time.Second
 	lingModel       = "ling-3-flash-124b-heretic-text"
+	nemoModel       = "nemotron-3-super-120b-heretic-v2"
 )
 
 var fixedPorts = [...]int{31001, 31002, 31003, 31004, 31005}
@@ -44,8 +45,8 @@ type gateway struct {
 	key       []byte
 	inFlight  chan struct{}
 	transport http.RoundTripper
-	// Ling's full JSON validation retains the exact accepted bytes. A shared
-	// byte budget bounds those buffers independently of the 16 request slots.
+	// Ling and Nemo retain exact validated JSON bytes. The existing Ling byte
+	// budget is shared by both, independently of the 16 request slots.
 	lingBodyBytes atomic.Int64
 }
 
@@ -118,9 +119,25 @@ func fail(w http.ResponseWriter, status int) {
 	http.Error(w, http.StatusText(status), status)
 }
 
+func failNemoModel(w http.ResponseWriter) {
+	w.Header().Set("Connection", "close")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	// Fixed OpenAI error shape; never echo the supplied model or request.
+	_, _ = io.WriteString(w, "{\"error\":{\"message\":\"Invalid model for this endpoint.\",\"type\":\"invalid_request_error\",\"param\":\"model\",\"code\":\"model_not_found\"}}\n")
+}
+
 func (g *gateway) handler(port int) (http.Handler, error) {
 	if !fixedPort(port) {
 		return nil, errors.New("port is outside the fixed V4 collection")
+	}
+	var requiredModel string
+	switch port {
+	case 31002:
+		requiredModel = lingModel
+	case 31004:
+		requiredModel = nemoModel
 	}
 	target := "127.0.0.1:" + strconv.Itoa(port)
 	proxy := &httputil.ReverseProxy{
@@ -193,7 +210,7 @@ func (g *gateway) handler(port int) (http.Handler, error) {
 			body.remaining.Store(r.ContentLength)
 			r.Body = body
 		}
-		if port == 31002 && r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions" {
+		if requiredModel != "" && r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions" {
 			if !g.reserveLingBody(r.ContentLength) {
 				fail(w, http.StatusServiceUnavailable)
 				return
@@ -204,8 +221,16 @@ func (g *gateway) handler(port int) (http.Handler, error) {
 			// extra copies, and forwarding preserves every accepted byte.
 			body := make([]byte, int(r.ContentLength))
 			_, err := io.ReadFull(r.Body, body)
-			if err != nil || !exactLingModel(body) {
+			if err != nil {
 				fail(w, http.StatusBadRequest)
+				return
+			}
+			if !exactModel(body, requiredModel) {
+				if port == 31004 {
+					failNemoModel(w)
+				} else {
+					fail(w, http.StatusBadRequest)
+				}
 				return
 			}
 			_ = r.Body.Close()
@@ -227,10 +252,14 @@ func (g *gateway) reserveLingBody(size int64) bool {
 	}
 }
 
-// exactLingModel first delegates all JSON grammar/escaping/depth validation to
+func exactLingModel(body []byte) bool {
+	return exactModel(body, lingModel)
+}
+
+// exactModel first delegates all JSON grammar/escaping/depth validation to
 // encoding/json. The following scan only locates top-level members in that
 // already-valid document; it never materializes large messages or other values.
-func exactLingModel(body []byte) bool {
+func exactModel(body []byte, requiredModel string) bool {
 	if !json.Valid(body) {
 		return false
 	}
@@ -261,7 +290,7 @@ func exactLingModel(body []byte) bool {
 				return false
 			}
 			var model string
-			if json.Unmarshal(body[valueStart:modelEnd], &model) != nil || model != lingModel {
+			if json.Unmarshal(body[valueStart:modelEnd], &model) != nil || model != requiredModel {
 				return false
 			}
 			found = true

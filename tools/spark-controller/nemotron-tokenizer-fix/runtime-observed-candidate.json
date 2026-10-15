@@ -1,0 +1,80 @@
+{
+  "libggml-base.so": {
+    "symlink": "libggml-base.so.0"
+  },
+  "libggml-base.so.0": {
+    "symlink": "libggml-base.so.0.26.0"
+  },
+  "libggml-base.so.0.26.0": {
+    "size": 876488,
+    "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+  },
+  "libggml-cpu.so": {
+    "symlink": "libggml-cpu.so.0"
+  },
+  "libggml-cpu.so.0": {
+    "symlink": "libggml-cpu.so.0.26.0"
+  },
+  "libggml-cpu.so.0.26.0": {
+    "size": 1001960,
+    "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+  },
+  "libggml-cuda.so": {
+    "symlink": "libggml-cuda.so.0"
+  },
+  "libggml-cuda.so.0": {
+    "symlink": "libggml-cuda.so.0.26.0"
+  },
+  "libggml-cuda.so.0.26.0": {
+    "size": 44376056,
+    "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+  },
+  "libggml.so": {
+    "symlink": "libggml.so.0"
+  },
+  "libggml.so.0": {
+    "symlink": "libggml.so.0.26.0"
+  },
+  "libggml.so.0.26.0": {
+    "size": 78104,
+    "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+  },
+  "libllama-common.so": {
+    "symlink": "libllama-common.so.0"
+  },
+  "libllama-common.so.0": {
+    "symlink": "libllama-common.so.0.6.0"
+  },
+  "libllama-common.so.0.6.0": {
+    "size": 5553784,
+    "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+  },
+  "libllama-server-impl.so": {
+    "size": 3526392,
+    "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+  },
+  "libllama.so": {
+    "symlink": "libllama.so.0"
+  },
+  "libllama.so.0": {
+    "symlink": "libllama.so.0.6.0"
+  },
+  "libllama.so.0.6.0": {
+    "size": 4831368,
+    "sha256": "f973c8e13bf9bea0ef1e012c60283f7296229ad8b9598c882d6e19abc387d146"
+  },
+  "libmtmd.so": {
+    "symlink": "libmtmd.so.0"
+  },
+  "libmtmd.so.0": {
+    "symlink": "libmtmd.so.0.6.0"
+  },
+  "libmtmd.so.0.6.0": {
+    "size": 1834984,
+    "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+  },
+  "llama-server": {
+    "size": 72456,
+    "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+  }
+}

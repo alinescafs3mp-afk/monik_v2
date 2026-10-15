@@ -116,9 +116,32 @@ def approved_qwen_declarations():
     del argv[start:start + 8]
     return original, client_effort, no_speculation
 
+def approved_gpt_declarations():
+    """Six exact GPT precision/cache controls, not runtime qualifications.
+
+    definitions() remains the frozen historical deployment. Preserve its image,
+    CUTLASS selection, parsers, limits and mounts in every complete candidate.
+    Cache controls use only the existing read-write HF_HOME mount. Each row
+    requires its own normal full-integrity approval before a tracked launch.
+    """
+    original = definitions()[1]
+    moe = copy.deepcopy(original)
+    argv = moe['runtime']['argv']
+    argv[argv.index('--mxfp4-layers') + 1] = 'moe'
+    scaled_original = copy.deepcopy(original)
+    scaled_original['runtime']['argv'].append('--calculate-kv-scales')
+    scaled_moe = copy.deepcopy(moe)
+    scaled_moe['runtime']['argv'].append('--calculate-kv-scales')
+    cached_moe = copy.deepcopy(moe)
+    cached_moe['runtime']['env']['XDG_CACHE_HOME'] = '/srv/spark/hf-home/gptoss-runtime-cache'
+    cached_scaled_moe = copy.deepcopy(scaled_moe)
+    cached_scaled_moe['runtime']['env']['XDG_CACHE_HOME'] = '/srv/spark/hf-home/gptoss-runtime-cache'
+    return original, moe, scaled_original, scaled_moe, cached_moe, cached_scaled_moe
+
 def validate_row(row):
     expected = next(x for x in definitions() if x['id']==row['id'])
-    approved = approved_qwen_declarations() if row['id']==QWEN else (expected,)
+    approved = (approved_qwen_declarations() if row['id']==QWEN else
+                approved_gpt_declarations() if row['id']==GPT else (expected,))
     if not any(row == candidate for candidate in approved):
         raise Refusal('Legacy definition differs from exact compiled approved declaration')
 

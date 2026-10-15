@@ -1,0 +1,56 @@
+{
+  "source": {
+    "repository": "https://github.com/ggml-org/llama.cpp",
+    "revision": "df18bee11e96557b07aa7b12db0976f3c7ac9165",
+    "patch_sha256": "d2d025053ecd38762109a51e75c633975d0be7cccc7a53fb456a2f1108b3c336",
+    "classification_reference_sha256": "c73c7fe7ebe42817eb36d08739566231eb662130a9d443b83f4e17a49113b9e4",
+    "classification_range_records": 2363
+  },
+  "tokenizer": {
+    "url": "https://huggingface.co/trohrbaugh/NVIDIA-Nemotron-3-Super-120B-A12B-BF16-heretic-v2/resolve/5bc66df2c1d6c4c3a00bf5d55df3ff21f13b3b42/tokenizer.json",
+    "sha256": "623c34567aebb18582765289fbe23d901c62704d6518d71866e0e58db892b5b7"
+  },
+  "tokenizer_config": {
+    "url": "https://huggingface.co/trohrbaugh/NVIDIA-Nemotron-3-Super-120B-A12B-BF16-heretic-v2/resolve/5bc66df2c1d6c4c3a00bf5d55df3ff21f13b3b42/tokenizer_config.json",
+    "sha256": "10f93eabcb9b1602fbb991d6308e787ce1df28ee9cd7a1c6d1e8c3f338b957bc",
+    "nvidia_identical_config_revision": "2dc98e2afe4face0e4ce40972a915c45368bd34a"
+  },
+  "gguf": {
+    "source_size": 68578317888,
+    "source_sha256": "870e367f1ae025cba5ad3709d9bbb05444d9b4a51e89ca162021736cefcdd0cf",
+    "candidate_sha256": "601aa97e15921593ece860c8d962cbba3c4499b0845211977eb9a4cbdb2f746f",
+    "new_file_size": 68578330784,
+    "source_payload_offset": 7906880,
+    "new_payload_offset": 7919776,
+    "payload_shift": 12896,
+    "payload_sha256": "1971be0201ddf7a6591b3357f7de502d25e5b32eb1843da9050e72b5604a083f",
+    "payload_bytes": 68570411008,
+    "tensor_directory_sha256": "0884079c77bb4ca7ecf450e64739f3e75a50c459082ed1bb25928d33ae978b7f",
+    "tensor_count": 763,
+    "replacement_count": 994
+  },
+  "build": {
+    "architecture": "AArch64",
+    "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+    "compiler": "g++ 13.3.0 (Ubuntu 24.04)",
+    "cmake": "3.31.1",
+    "generator": "Unix Makefiles",
+    "build_type": "Release",
+    "target": "llama",
+    "jobs": 2,
+    "observed_core_sha256": "f973c8e13bf9bea0ef1e012c60283f7296229ad8b9598c882d6e19abc387d146",
+    "original_core_sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79",
+    "bitwise_rebuild_claim": false
+  },
+  "qualification_reference": {
+    "python_package": "tokenizers==0.22.1",
+    "native_scope": "vocabulary only; no context, eval, inference or endpoint",
+    "driver_library": {
+      "name": "libcuda.so.580.178.04",
+      "sha256": "b11359b073ae9e49df81dc4f5c156378bd97fb9f6197ef64edc46e22c670bed4"
+    },
+    "corpus_sha256": "6ad025c12f7254315b362bf10a92f080bd01306328db05d54b3df847696590cc",
+    "corpus_redistributed": false
+  },
+  "license_note": "Upstream source, tokenizer, model and toolchain retain their own licenses; no model or runtime binary is distributed here."
+}

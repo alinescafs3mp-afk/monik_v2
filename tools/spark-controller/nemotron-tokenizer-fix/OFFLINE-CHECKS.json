@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "scope": "Tiny synthetic copy tests; exact patch applied to two isolated source inputs; import guard; no compiler/build/model/runtime/network activity.",
+  "checks": [
+    {
+      "name": "synthetic-metadata-copy-guards",
+      "status": "PASS",
+      "tests": 6
+    },
+    {
+      "name": "patch-source-before",
+      "status": "PASS"
+    },
+    {
+      "name": "patch-source-after",
+      "status": "PASS"
+    },
+    {
+      "name": "all-python-modules-import-inert-under-io-process-network-denials",
+      "status": "PASS",
+      "modules": 3
+    },
+    {
+      "name": "exact-helper-and-patch-sha-pins",
+      "status": "PASS"
+    },
+    {
+      "name": "json-python-doc-shell-syntax-and-local-links",
+      "status": "PASS"
+    },
+    {
+      "name": "public-content-scan",
+      "status": "PASS",
+      "note": "No absolute private/workspace paths, raw corpora, credentials or binary artifacts included."
+    }
+  ],
+  "NOT_RUN": [
+    "ARM64 rebuild",
+    "real GGUF copy or hash",
+    "native vocabulary gate",
+    "private corpus replay",
+    "inference or endpoint",
+    "deployment or activation"
+  ]
+}

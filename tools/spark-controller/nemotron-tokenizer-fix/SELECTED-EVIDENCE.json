@@ -1,0 +1,187 @@
+{
+  "scope": "Selected historical metadata-copy, build and native ARM64 vocabulary evidence; package preparation executes none of those operations.",
+  "metadata_copy": {
+    "source_size": 68578317888,
+    "new_file_size": 68578330784,
+    "source_sha256": "870e367f1ae025cba5ad3709d9bbb05444d9b4a51e89ca162021736cefcdd0cf",
+    "candidate_sha256": "601aa97e15921593ece860c8d962cbba3c4499b0845211977eb9a4cbdb2f746f",
+    "payload_sha256": "1971be0201ddf7a6591b3357f7de502d25e5b32eb1843da9050e72b5604a083f",
+    "payload_bytes": 68570411008,
+    "payload_verified_by_reread": true,
+    "source_unchanged": true,
+    "replacement_count": 994,
+    "all_ordered_merges_equal": true,
+    "all_token_types_equal": true,
+    "ordinary_tokens_unchanged": true,
+    "tensor_directory_sha256": "0884079c77bb4ca7ecf450e64739f3e75a50c459082ed1bb25928d33ae978b7f"
+  },
+  "build": {
+    "status": "BUILT_OFFLINE_ABI_PASS",
+    "actual_cxx_units": 43,
+    "actual_cuda_units": 0,
+    "actual_ggml_units": 0,
+    "actual_vendor_hash_units": 0,
+    "global_compile_commands_entries": 47,
+    "unbuilt_vendor_hash_entries": 4,
+    "export_count_old": 5884,
+    "export_count_new": 5884,
+    "missing_exports": 0,
+    "added_exports": 0,
+    "new_runpath": [
+      "$ORIGIN"
+    ],
+    "inherited_unchanged_dso_runpath": [
+      "$ORIGIN:"
+    ],
+    "unchanged_runtime_entries": 22,
+    "changed_runtime_entry": "libllama.so.0.6.0",
+    "old_source_unchanged": true,
+    "old_runtime_unchanged": true,
+    "first_attempt": "FAILED before compilation: harness incorrectly rejected four unrelated vendor/hash entries in the global generated compile database. Second attempt checked the actual target-llama dry graph and preserved source/product patch."
+  },
+  "native_arm64_candidate": {
+    "status": "PASS",
+    "total_rows": 145820,
+    "counts": {
+      "conversation": 24,
+      "special": 1000,
+      "ordinary": 130072,
+      "unicode": 14724
+    },
+    "failed_rows": 0,
+    "ordered_native_ids_sha256": "ec1d39fe5e8847f7e872781959315fa607e73e0a155f6dc8b879888d554fdb9d",
+    "special_spellings_sha256": "7488d957ce81322a1ba8ae8dc06be0689dd21060a7d32f92836c04d6ba1ebe9c",
+    "all_add_special_true_false_equal": true,
+    "corpus_sha256": "6ad025c12f7254315b362bf10a92f080bd01306328db05d54b3df847696590cc",
+    "explicit_empty_devices": true,
+    "vocab_only": true,
+    "n_gpu_layers": 0,
+    "load_mode": "NONE",
+    "no_alloc": true,
+    "backend_init_called": false,
+    "context_created": false,
+    "model_eval_called": false,
+    "load_rchar_delta": 7926178,
+    "elapsed_seconds": 5.69584059715271
+  },
+  "old_core_with_repaired_metadata": {
+    "status": "EXPECTED_OLD_CORE_MISMATCH",
+    "negative_observed": true,
+    "controls": [
+      {
+        "name": "Arabic combining mark",
+        "text": "اً",
+        "expected": [
+          3360
+        ],
+        "actual": [
+          1280,
+          2213
+        ]
+      },
+      {
+        "name": "Devanagari mark",
+        "text": " के",
+        "expected": [
+          4306
+        ],
+        "actual": [
+          2098,
+          1803
+        ]
+      },
+      {
+        "name": "Bengali mark",
+        "text": "য়",
+        "expected": [
+          6011
+        ],
+        "actual": [
+          34787,
+          19514
+        ]
+      }
+    ]
+  },
+  "old_metadata_with_new_core": {
+    "status": "EXPECTED_OLD_METADATA_MISMATCH",
+    "raw_empty_special_strings": 994,
+    "empty_special_strings_after_native_normalization": 0,
+    "placeholder_special_strings": 994,
+    "controls": [
+      {
+        "text": "<|im_start|>",
+        "expected": [
+          10
+        ],
+        "actual": [
+          1060,
+          1124,
+          1329,
+          18993,
+          1124,
+          1062
+        ],
+        "actual_add_special": [
+          1,
+          1060,
+          1124,
+          1329,
+          18993,
+          1124,
+          1062
+        ]
+      },
+      {
+        "text": "<|im_end|>",
+        "expected": [
+          11
+        ],
+        "actual": [
+          1060,
+          1124,
+          1329,
+          23836,
+          1124,
+          1062
+        ],
+        "actual_add_special": [
+          1,
+          1060,
+          1124,
+          1329,
+          23836,
+          1124,
+          1062
+        ]
+      }
+    ]
+  },
+  "first_whole_gate_status": "FAIL_PRESERVED",
+  "first_whole_gate_error": "AssertionError(('old-metadata-negative', 'exit', 1))",
+  "negative_only_rerun": "Only original-metadata negative control was rerun after correcting the oracle: the engine normalizes 994 raw empty strings to [EMPTY_i] placeholders. Candidate 145820-row PASS and old-core Unicode controls were not rerun. This is a composite result, not a second complete gate.",
+  "integrity_observations": {
+    "old_runtime_unchanged": true,
+    "new_bundle_unchanged": true,
+    "old_source_unchanged": true,
+    "models_stat_unchanged": true,
+    "owned_children_reaped": true,
+    "gpu_device_fds_after": []
+  },
+  "acceptance_boundary": {
+    "model_inference_executed": false,
+    "friday_accepted": false,
+    "full_model_sha_recomputed_by_vocab_gate": false,
+    "full_model_sha_provenance": "Separate metadata-copy proof hashes source, written full candidate, and unchanged payload with verification reread."
+  },
+  "raw_evidence_sha256": {
+    "qualification-02-output/RESULT.json": "9e5b5f3282a134e3540a66877ae95ca84a4e5c05dc5c51b7785619e7fc4d6f2b",
+    "qualification-02-output/candidate.json": "b641605a605623ed5cf00db7ddcb073433431fd7c8212ad7299a8c7027069711",
+    "qualification-02-output/old-core-negative.json": "bb99b3b6d8b0c6cf8d39c02df061fdf98dd8c62807ab5fbba87983218e5080d8",
+    "qualification-03-output/negative.json": "2e86e1faed93f6862fba1870b664d875a057dc9f63c6a742683c640f91e12801",
+    "nemotron-build/old_metadata_negative_v2.py": "fdcffea1946e2847aabf7fffbdfb637c03e426de9ef0e1dbd0a2097c9593c378",
+    "nemotron-build/old-metadata-negative-v2.argv.json": "d7d441d2029e87e96f74157168a5ac612bcb74878ee4a3668d04e5b7a29a6173"
+  },
+  "qualification_summary_source_sha256": "233a2e7e43dadb0b2dee8367b35220d6d6a9d1eebe40a3a45f5758df7e8e80cc",
+  "metadata_copy_summary_source_sha256": "7d464c9d5febbb83161d79b091d1be1d2f4a505b44d04ad8e848991984050b77"
+}
