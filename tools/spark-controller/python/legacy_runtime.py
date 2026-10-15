@@ -479,6 +479,19 @@ def reap_stopped(ctl,data,row,run,before_effect=None):
     ctl.store.write(data)
     return True
 
+def _same_birth_zombie(pid,birth):
+    """Positive bounded observation only; a zombie is not a released process."""
+    try:
+        fd=os.open(Path('/proc')/str(pid)/'stat',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        with os.fdopen(fd,'rb') as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode): return False
+            raw=stream.read(4097)
+        if len(raw)>4096 or not raw.startswith((str(pid)+' (').encode()): return False
+        fields=raw.rsplit(b')',1)[1].split()
+        return len(fields)>=20 and fields[0]==b'Z' and fields[19]==birth.encode('ascii')
+    except (OSError,IndexError,ValueError,UnicodeError):
+        return False
+
 def observe(adapter,row,run):
     unit=adapter.unit(row['id'],run['run_id']); active=unit.get('ActiveState') in {'active','activating','deactivating','reloading'}
     if not {'LoadState','ActiveState','InvocationID','MainPID','ControlGroup'}<=unit.keys(): raise ObservationError('Legacy supervisor evidence unavailable')
@@ -535,19 +548,40 @@ def observe(adapter,row,run):
                 if not frozen: raise ObservationError('Legacy engine active before immutable declaration capture')
                 birth=proc_birth(epid)
                 if not birth or (run.get('engine_pid') and (epid!=run['engine_pid'] or birth!=run.get('engine_birth'))):
-                    error=ObservationError('Legacy engine PID birth replaced')
-                    # Still refuse this running snapshot. Only a positively gone
-                    # exact PID in an already cancelled Qwen stop may request a
-                    # separate full release proof; PID reuse never gets this tag.
-                    if (row['id']==QWEN and run.get('model_id')==QWEN
-                            and run.get('state')=='STOPPING' and run.get('cancelled') is True
-                            and not birth and type(epid) is int and epid>0
-                            and epid==run.get('engine_pid')
-                            and isinstance(run.get('engine_birth'),str)
-                            and re.fullmatch('[0-9]+',run['engine_birth'])
-                            and adapter.process_released(epid,run['engine_birth']) is True):
-                        error.qwen_stopping_run=copy.deepcopy(run)
-                    raise error
+                    # Preserve ACTIVE during the exact cancelled Qwen teardown.
+                    # proc_birth intentionally hides zombies; only a fresh raw Z
+                    # with the same captured tick may wait for the normal full
+                    # release proof. Never call this process released/READY.
+                    stopping_zombie=(row['id']==QWEN and run.get('model_id')==QWEN
+                        and run.get('state')=='STOPPING' and run.get('cancelled') is True
+                        and not birth and type(epid) is int and epid>0
+                        and epid==run.get('engine_pid')
+                        and isinstance(run.get('engine_birth'),str)
+                        and re.fullmatch('[0-9]+',run['engine_birth'])
+                        and c.get('Id')==cid and isinstance(frozen,str)
+                        and re.fullmatch('[0-9a-f]{64}',frozen)
+                        and isinstance(owner,dict)
+                        and owner.get('unit')==unit_name(row['id'],run['run_id'])
+                        and unit.get('LoadState')=='loaded'
+                        and unit.get('ActiveState')=='deactivating'
+                        and unit.get('InvocationID')==owner.get('invocation_id')
+                        and isinstance(owner.get('invocation_id'),str)
+                        and re.fullmatch('[0-9a-f]{32}',owner['invocation_id'])
+                        and _same_birth_zombie(epid,run['engine_birth']))
+                    if not stopping_zombie:
+                        error=ObservationError('Legacy engine PID birth replaced')
+                        # Still refuse this running snapshot. Only a positively gone
+                        # exact PID in an already cancelled Qwen stop may request a
+                        # separate full release proof; PID reuse never gets this tag.
+                        if (row['id']==QWEN and run.get('model_id')==QWEN
+                                and run.get('state')=='STOPPING' and run.get('cancelled') is True
+                                and not birth and type(epid) is int and epid>0
+                                and epid==run.get('engine_pid')
+                                and isinstance(run.get('engine_birth'),str)
+                                and re.fullmatch('[0-9]+',run['engine_birth'])
+                                and adapter.process_released(epid,run['engine_birth']) is True):
+                            error.qwen_stopping_run=copy.deepcopy(run)
+                        raise error
     return {'active':active or engine,'engine_active':engine,'supervisor_active':active,'engine_pid':epid}
 
 def idle(adapter,row):

@@ -76,7 +76,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/legacy_runtime.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/legacy_runtime.py",
-      "sha256": "926fc5c2444a1dc4a7be1be50ecd6b8ea15aeba2fe3b7827154f50136f1e921d",
+      "sha256": "360865b7ff10870aec6ee658cf6d6527dcf1d99558aab70a8a99ae4e898ab219",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
