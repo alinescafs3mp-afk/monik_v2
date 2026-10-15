@@ -58,6 +58,11 @@ class ObservationError(RuntimeError):
     pass
 
 
+class CommandTimeout(ObservationError):
+    """The local command client timed out; any daemon effect is unconfirmed."""
+    pass
+
+
 _LEGACY_SUPPORT = None
 
 def legacy_support():
@@ -256,8 +261,10 @@ class Command:
             result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, env=BASE_ENV, cwd='/',
                                     timeout=timeout, check=False, close_fds=True)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise ObservationError(type(exc).__name__ + ': bounded command failed')
+        except subprocess.TimeoutExpired as exc:
+            raise CommandTimeout(type(exc).__name__ + ': bounded command failed') from exc
+        except OSError as exc:
+            raise ObservationError(type(exc).__name__ + ': bounded command failed') from exc
         if len(result.stdout) > 1024**2 or len(result.stderr) > 65536:
             raise ObservationError('Command output exceeds bound')
         if result.returncode:
@@ -598,6 +605,9 @@ class SystemAdapter:
             raise Refusal('Foreign GPU workload active; no signals sent')
         port = int(row['endpoint'].split(':')[2].split('/')[0])
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            # Match llama-server: closed connections in TIME_WAIT may be reused;
+            # an existing listener still prevents this loopback bind.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.settimeout(.1)
             try:
                 sock.bind(('127.0.0.1', port))
@@ -1898,8 +1908,13 @@ class Controller:
             if time.monotonic() >= deadline:
                 if forced:
                     raise Refusal('STOP_UNCONFIRMED: exact owner/resources still active; reservation retained')
-                self.adapter.force(row, current)
+                # A client timeout does not undo a daemon's exact-CID kill.
+                # Never repeat the effect: use the existing bounded physical proof.
                 forced = True
+                try:
+                    self.adapter.force(row, current)
+                except CommandTimeout:
+                    self.log(mid, 'FORCE command timeout; checking exact resources without effect replay')
                 deadline = time.monotonic() + 10
             time.sleep(.15)
 

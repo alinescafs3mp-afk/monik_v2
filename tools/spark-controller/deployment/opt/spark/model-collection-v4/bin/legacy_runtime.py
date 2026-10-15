@@ -98,9 +98,28 @@ def definitions():
           'artifacts':[],'evidence_level':'ROOT_METADATA_PINNED_NOT_RUNTIME_VALIDATED'})
     return rows
 
+def approved_qwen_declarations():
+    """Three exact local Qwen declarations; no manifest-supplied overrides.
+
+    Keep definitions() as the frozen historical deployment. The two reviewed
+    endpoint variants let the client select reasoning effort, with the same
+    NEXTN configuration or with speculation entirely absent. Each candidate is
+    a complete compiled row and still requires its own full-integrity approval.
+    """
+    original = definitions()[0]
+    client_effort = copy.deepcopy(original)
+    argv = client_effort['runtime']['argv']
+    argv[argv.index('--default-chat-template-kwargs') + 1] = '{"enable_thinking": true}'
+    no_speculation = copy.deepcopy(client_effort)
+    argv = no_speculation['runtime']['argv']
+    start = argv.index('--speculative-algorithm')
+    del argv[start:start + 8]
+    return original, client_effort, no_speculation
+
 def validate_row(row):
     expected = next(x for x in definitions() if x['id']==row['id'])
-    if row != expected:
+    approved = approved_qwen_declarations() if row['id']==QWEN else (expected,)
+    if not any(row == candidate for candidate in approved):
         raise Refusal('Legacy definition differs from exact compiled approved declaration')
 
 def read_secret():
@@ -469,7 +488,23 @@ def observe(adapter,row,run):
         raise ObservationError('Legacy preparation invocation replaced')
     if active:
         if owner and (unit.get('InvocationID')!=owner['invocation_id'] or int(unit.get('MainPID') or 0)!=owner['pid'] or proc_birth(owner['pid'])!=owner['birth']):
-            raise ObservationError('Legacy supervisor invocation/PID birth replaced')
+            # Native ExecStop may run after the cancelled Qwen supervisor exits.
+            # Permit only that exact deactivating invocation, with positive proof
+            # the old PID is gone and its full running-container capture intact.
+            stopping_owner_gone=(row['id']==QWEN and run.get('model_id')==QWEN
+                and run.get('state')=='STOPPING' and run.get('cancelled') is True
+                and unit.get('LoadState')=='loaded' and unit.get('ActiveState')=='deactivating'
+                and unit.get('MainPID')=='0' and owner.get('unit')==unit_name(row['id'],run['run_id'])
+                and isinstance(owner.get('invocation_id'),str) and re.fullmatch('[0-9a-f]{32}',owner['invocation_id'])
+                and unit.get('InvocationID')==owner['invocation_id']
+                and isinstance(owner.get('birth'),str) and re.fullmatch('[0-9]+',owner['birth'])
+                and all(isinstance(run.get(k),str) and re.fullmatch('[0-9a-f]{64}',run[k]) for k in ('container_id','legacy_declaration_sha256'))
+                and isinstance(run.get('container_created'),str) and bool(run['container_created'])
+                and type(run.get('engine_pid')) is int and run['engine_pid']>0
+                and isinstance(run.get('engine_birth'),str) and re.fullmatch('[0-9]+',run['engine_birth'])
+                and adapter.process_released(owner.get('pid'),owner['birth']) is True)
+            if not stopping_owner_gone:
+                raise ObservationError('Legacy supervisor invocation/PID birth replaced')
         if not owner and not unit.get('InvocationID'): raise ObservationError('Legacy supervisor invocation unavailable')
     elif owner and unit.get('InvocationID') and unit['InvocationID']!=owner['invocation_id']:
         raise ObservationError('Legacy stopped invocation replaced')
