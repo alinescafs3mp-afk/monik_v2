@@ -103,10 +103,20 @@ class Supervisor:
             raise ObservationError('Docker create did not return exact full ID')
         with self.ctl.store.lock():
             data = self.ctl.store.read(); run = self.current(data)
-            run['container_id'] = cid  # Persist exact ID BEFORE any engine start.
+            run['container_id'] = cid
+            try:
+                observed = self.ctl.adapter.inspect_container(cid)
+                created = observed.get('Created')
+                if not isinstance(created, str) or not 1 <= len(created) <= 128:
+                    raise ObservationError('Docker create lacks exact creation identity')
+            except Exception:
+                # Preserve an unresolved create outcome, never infer release.
+                self.ctl.store.write(data)
+                raise
+            # Publish the exact CID/Created pair together. Read-only observers do
+            # not take this lock; a CID-only intermediate snapshot is ambiguous.
+            run['container_created'] = created
             self.ctl.store.write(data)
-            observed = self.ctl.adapter.inspect_container(cid)
-            run['container_created'] = observed['Created']
             if row['id'] in IDS[5:]:
                 legacy = legacy_support()
                 run['legacy_declaration_sha256'] = legacy.check_declaration(row, observed, legacy.read_secret(), self.ctl.adapter)

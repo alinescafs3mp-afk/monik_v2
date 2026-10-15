@@ -21,6 +21,9 @@ def _setup_with_observed_resource_shape(self):
     for key,value in legacy.RESOURCE_DEFAULTS.items():
         assert key in _root_defaults and type(value) is type(_root_defaults[key]) and value==_root_defaults[key]
         self.container['HostConfig'].setdefault(key,copy.deepcopy(_root_defaults[key]))
+    # Root's separate 2026-10-15 real create/start fixture observed false -> null.
+    # Keep the earlier resource evidence file unchanged.
+    self.container['HostConfig'].setdefault('OomKillDisable',False)
     self.run['legacy_declaration_sha256']=legacy.declaration_digest(self.container)
 old.LegacyAdapter.setUp=_setup_with_observed_resource_shape
 

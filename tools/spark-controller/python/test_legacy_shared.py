@@ -13,6 +13,15 @@ legacy=core.legacy_support()
 KEY='K'*48
 CID='c'*64
 
+def qwen_worker_info_fixture():
+    alias=legacy.definitions()[0]['runtime']['served_model_alias']
+    return {'served_model_name':alias,'context_length':262144,'quantization':'modelopt_fp4',
+            'tp_size':1,'dp_size':1,'version':'0.0.0.dev1+g4ccff141d',
+            'startup_time':{'tokenizer_e2e':835.18},
+            'internal_states':[{'served_model_name':alias,'model_path':'/models','tp_size':1,'dp_size':1,
+                'memory_usage':{'token_capacity':267904},
+                'startup_time':{'load_weight':726.48,'kv_cache_allocation':4.64,'scheduler_e2e':824.82}}]}
+
 class LegacyDefinitions(unittest.TestCase):
     def test_seven_ids_same_manifest_and_bridge(self):
         m=json.loads((base.SOURCE_ROOT/'config/controller-manifest.json').read_text())
@@ -224,10 +233,12 @@ class LegacyPassiveHealth(unittest.TestCase):
                 def __enter__(self):return self
                 def __exit__(self,*a):pass
                 def read(self,size):return self.body
-            adapter.http=MagicMock();adapter.http.open.side_effect=[Reply(b''),Reply(json.dumps({'data':[{'id':row['runtime']['served_model_alias']}]}).encode())]
+            passive=json.dumps(qwen_worker_info_fixture()).encode() if row['id']==legacy.QWEN else b''
+            adapter.http=MagicMock();adapter.http.open.side_effect=[Reply(passive),Reply(json.dumps({'data':[{'id':row['runtime']['served_model_alias']}]}).encode())]
             with patch.object(legacy,'read_secret',return_value=KEY):self.assertTrue(adapter.api_ready(row)[0])
             requests=[c.args[0] for c in adapter.http.open.call_args_list]
-            self.assertEqual(['http://127.0.0.1:30000/health','http://127.0.0.1:30000/v1/models'],[r.full_url for r in requests])
+            path='/server_info' if row['id']==legacy.QWEN else '/health'
+            self.assertEqual(['http://127.0.0.1:30000'+path,'http://127.0.0.1:30000/v1/models'],[r.full_url for r in requests])
             self.assertTrue(all(r.get_header('Authorization')=='Bearer '+KEY for r in requests))
     def test_arbitrary_html_health_never_ready(self):
         from unittest.mock import MagicMock

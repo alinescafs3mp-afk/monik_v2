@@ -1,0 +1,77 @@
+{
+  "status": "DEPLOYED_AND_VERIFIED_SAME_RUNNING_QWEN",
+  "date": "2026-10-15",
+  "problem": "Existing Qwen home launcher was routed through the shared model controller; first launch failed on Docker default normalization and exposed an incomplete CID-only creation snapshot. A subsequent launch started the model but falsely failed immutable observation after Docker start changed OomKillDisable from false to null.",
+  "changes": [
+    "Publish successful container creation ID and Created together before declaration qualification; preserve unresolved ID on inspect failure and never start it.",
+    "Normalize absent image user to Docker empty container user while retaining exact entrypoint/workdir/image qualification.",
+    "Accept only the additional exact host-IPC SecurityOpt default [label=disable]; reject other options/combinations.",
+    "Canonicalize only mount array order, retaining every field and duplicate.",
+    "Normalize explicitly present OomKillDisable false/null only; reject true, missing and wrong types. Preserve current and historical canonical/raw digests without rewriting immutable records.",
+    "During the original bounded startup wait, only the two exact transient API timeout observations continue waiting. Read-only status remains UNKNOWN on that sample; every other identity/policy error still fails immediately, and READY requires successful exact observation. No deadline extension or engine effect retry.",
+    "Use Qwen /server_info plus exact /v1/models identity for passive initialized-worker readiness. Actual pinned SGLang /health generates a test token and sleeps one second; it cannot fit the original 0.45 second passive observation budget. Preserve that budget and avoid health-generated monitoring traffic."
+  ],
+  "source_sha256": {
+    "legacy_runtime.py": "95c6c8585a887337f5e9ae31a349a037c85e1d77aae6a5da59e2e3f002e77e2d",
+    "supervisor.py": "7fe7dc1588ae476d87ec7f2aa0f4c97225e4e56a34c85a3dc10b6393108395e5",
+    "modelctl.py": "598b4e5c787d54a3e85b81d45d5a691ba5211be37321045691229922bf8ca72d"
+  },
+  "validation": {
+    "python_suite_tests": 367,
+    "python_suite_seconds": 15.567,
+    "all_pass": true,
+    "independent_source_and_recovery_review": "PASS",
+    "installation_manifest_hashes": "PASS",
+    "actual_docker_evidence": {
+      "mount_enumeration_order_changes_without_record_changes": true,
+      "metadata_fixture_no_gpu_no_model_mounts_no_credentials": true,
+      "fixture_only_create_to_start_declaration_change": "HostConfig.OomKillDisable: false -> null",
+      "fixture_removed": true,
+      "same_field_normalization_reproduced_exact_frozen_live_run_hash": true,
+      "actual_qwen_health_seconds": [
+        1.0101,
+        1.0058
+      ],
+      "actual_qwen_passive_server_info_seconds": [
+        0.0741,
+        0.1016
+      ]
+    },
+    "runtime": {
+      "same_running_qwen_native_ready_publication": true,
+      "notebook_hermes_transport_json_positive": true,
+      "notebook_hermes_transport_tool_call_positive": true,
+      "hermes_config_unchanged_by_checks": true,
+      "model_or_client_penalty_overrides_added": false,
+      "broad_loop_resistance_or_performance_benchmark": "NOT_RUN",
+      "original_home_start_script": "PASS: returns READY as same-instance no-op; full run record unchanged",
+      "native_single_profile_rpc_seconds": 0.5941,
+      "native_single_profile_budget_seconds": 2,
+      "native_seven_profile_rpc_seconds": 2.1372,
+      "native_seven_profile_budget_seconds": 5,
+      "model_states": {
+        "qwen": "READY",
+        "other_six": "STOPPED"
+      },
+      "model_supervisor_and_engine_not_restarted_after_successful_creation": true
+    },
+    "focused_launch_regressions": 15,
+    "focused_transient_waiter_controls": 4,
+    "focused_passive_worker_controls": 8,
+    "all_seven_profile_integrity_approvals_current": true
+  },
+  "recovery": {
+    "first_never_started_failed_container": "Explicit exact-ID non-force removal after fresh qualification; original failed run archived unchanged and generation counter preserved.",
+    "second_false_failure": "Archived unchanged then restored same active run to STARTING with exact CID/Created/image/owner/PID births and original immutable digest; no model restart or repeated launch.",
+    "policy": "Native source/profile reapproval preserved existing enrollment and trust. Native full integrity preparation and current revision seals confirmed for all seven profiles.",
+    "historical_receipts_rewritten": false,
+    "model_tuning_or_client_budgets_changed": false,
+    "cold_start_deadline_extended": false,
+    "third_false_failure": "Archived unchanged and explicitly restored the same healthy physical instance after passive worker observation. Native READY publication used the remaining original created_at+1800 startup window; original home start then returned READY without changing the run."
+  },
+  "limits": [
+    "No extra stop/start cycle of the loaded model is performed solely for this fix. Native exact ExecStop uses a fresh repaired process; an already-running supervisor retains old imported Python code until its next lifecycle.",
+    "Private recovery artifacts and credential-bearing Docker/log records are excluded from publication.",
+    "Passive readiness certifies an initialized responding scheduler/KV allocation and exact model API, not a fresh generation quality test or a per-sample warmup benchmark. Separate live Hermes positives passed after startup."
+  ]
+}

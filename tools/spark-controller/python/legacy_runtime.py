@@ -269,12 +269,44 @@ def inspect_name(adapter,row):
     if len(ids)>1 or any(not re.fullmatch(r'[a-f0-9]{64}',x) for x in ids): raise ObservationError('Ambiguous exact legacy named identity')
     return ids[0] if ids else None
 
-def declaration_digest(container):
+def declaration_digest(container,normalize_oom=True):
     # Secret-bearing raw inspect stays local; only a one-way digest is durable.
-    return digest({k:container.get(k) for k in ('Name','Image','Config','HostConfig','Mounts')})
+    declaration={k:container.get(k) for k in ('Name','Image','Config','HostConfig','Mounts')}
+    mounts=declaration['Mounts']
+    if isinstance(mounts,list):
+        # Docker inspect may enumerate the same mounts in a different order.
+        # Keep every field and duplicate; normalize only this unordered list.
+        declaration['Mounts']=sorted(mounts,key=lambda m:json.dumps(m,sort_keys=True,separators=(',',':'),allow_nan=False))
+    hc=declaration['HostConfig']
+    if normalize_oom and isinstance(hc,dict) and 'OomKillDisable' in hc and hc['OomKillDisable'] is None:
+        # Docker start changes this default from false to null. Both leave the
+        # OOM killer enabled; keep every other host field exact.
+        declaration['HostConfig']={**hc,'OomKillDisable':False}
+    return digest(declaration)
+
+def valid_oom_default(hc):
+    return (isinstance(hc,dict) and 'OomKillDisable' in hc and
+            (hc['OomKillDisable'] is False or hc['OomKillDisable'] is None))
+
+def declaration_matches(container,frozen):
+    # Old immutable records keep their exact original representation/hash.
+    # Never rewrite them or guess a historical mount order after a mismatch.
+    if not valid_oom_default(container.get('HostConfig')):
+        return False
+    raw={k:container.get(k) for k in ('Name','Image','Config','HostConfig','Mounts')}
+    normalized_raw={**raw,'HostConfig':{**raw['HostConfig'],'OomKillDisable':False}}
+    return (declaration_digest(container)==frozen or
+            declaration_digest(container,normalize_oom=False)==frozen or
+            digest(raw)==frozen or digest(normalized_raw)==frozen)
 
 def validate_resource_defaults(hc):
+    if not valid_oom_default(hc):
+        raise ObservationError('Legacy OOM killer default differs or unavailable')
     for field,expected in RESOURCE_DEFAULTS.items():
+        # Docker may add this exact SELinux label default for host IPC. Other
+        # security options, combinations and missing fields remain unqualified.
+        if field == 'SecurityOpt' and hc.get(field) == ['label=disable']:
+            continue
         if field not in hc or type(hc[field]) is not type(expected) or hc[field]!=expected:
             raise ObservationError('Legacy explicit resource/default field differs or unavailable: '+field)
 
@@ -284,7 +316,9 @@ def check_declaration(row,c,key,adapter,allow_original_logs=False):
     image=json.loads(adapter.command(['/usr/bin/docker','image','inspect',r['image_id']],2))
     if len(image)!=1 or image[0].get('Id')!=r['image_id'] or digest(image[0].get('Config'))!=IMAGE_CONFIG_PINS[r['image_id']]: raise ObservationError('Legacy image declaration missing/changed')
     defaults=image[0].get('Config',{})
-    if c.get('Name')!='/'+r['container_name'] or any(config.get(k)!=defaults.get(k) for k in ('Entrypoint','User','WorkingDir')):
+    if (c.get('Name')!='/'+r['container_name']
+        or any(config.get(k)!=defaults.get(k) for k in ('Entrypoint','WorkingDir'))
+        or config.get('User')!=(defaults.get('User') or '')):
         raise ObservationError('Legacy image entrypoint/user/workdir differs')
     env=config.get('Env')
     if not isinstance(env,list) or any(not isinstance(x,str) or '=' not in x for x in env) or len(env)>256: raise ObservationError('Legacy environment unavailable')
@@ -303,7 +337,7 @@ def check_declaration(row,c,key,adapter,allow_original_logs=False):
     if (hc.get('NetworkMode')!='host' or hc.get('IpcMode')!='host' or hc.get('ShmSize')!=r['shm_bytes'] or ul!={'memlock':(-1,-1),'stack':(67108864,67108864)}
       or hc.get('Privileged') is not False or hc.get('CgroupParent') or hc.get('AutoRemove') is not r['auto_remove']
       or hc.get('RestartPolicy',{}).get('Name') not in {'','no'} or hc.get('ReadonlyRootfs') is not False
-      or any(hc.get(k) for k in ('CapAdd','Devices','SecurityOpt','Sysctls','ExtraHosts','Dns','PidMode','UTSMode','UsernsMode'))): raise ObservationError('Legacy effective Docker resources/policy differ')
+      or any(hc.get(k) for k in ('CapAdd','Devices','Sysctls','ExtraHosts','Dns','PidMode','UTSMode','UsernsMode'))): raise ObservationError('Legacy effective Docker resources/policy differ')
     logging=hc.get('LogConfig')
     fixed_logging={'Type':'local','Config':{'max-size':'10m','max-file':'3'}}
     if allow_original_logs:
@@ -386,7 +420,7 @@ def reap_stopped(ctl,data,row,run,before_effect=None):
     binding=reap_binding(row,run)
     if (container.get('Id')!=cid or container.get('Created')!=run['container_created']
         or container.get('Image')!=row['runtime']['image_id']
-        or declaration_digest(container)!=run['legacy_declaration_sha256']):
+        or not declaration_matches(container,run['legacy_declaration_sha256'])):
         raise ObservationError('Legacy immutable container replaced before removal')
     if not marker:
         marker={'phase':'prepared','binding':binding,'resources_verified':True,
@@ -452,7 +486,7 @@ def observe(adapter,row,run):
             if c.get('Created')!=run.get('container_created') or c.get('Image')!=row['runtime']['image_id']: raise ObservationError('Legacy immutable creation/image replaced')
             frozen=run.get('legacy_declaration_sha256')
             if frozen:
-                if declaration_digest(c)!=frozen: raise ObservationError('Legacy effective declaration replaced')
+                if not declaration_matches(c,frozen): raise ObservationError('Legacy effective declaration replaced')
             else:
                 labels=c.get('Config',{}).get('Labels') or {}
                 if any(labels.get(k)!=v for k,v in {'spark.v4.model':row['id'],'spark.v4.run':run['run_id'],'spark.v4.generation':str(run['generation']),'spark.v4.attempt':run['attempt']}.items()):
@@ -525,12 +559,14 @@ def adopt(ctl,mid):
         c=ctl.adapter.inspect_container(cid)
         if previous:
             captured=ctl.captured_legacy_declaration(previous)
-            if captured is None or declaration_digest(c)!=captured:
+            if captured is None or not declaration_matches(c,captured):
                 raise Refusal('Existing adopted immutable declaration changed; never rebind same CID')
         original=not policy['control_safe'] or bool(previous and previous.get('legacy_original_adopted'))
         if policy['control_safe'] and not previous:
             raise Refusal('An original running Qwen must be adopted before safe-unit migration')
         frozen=check_declaration(row,c,key,ctl.adapter,allow_original_logs=original)
+        if previous:
+            frozen=captured  # Qualification never rewrites a historical binding.
         pid=int(unit.get('MainPID') or 0);epid=c.get('State',{}).get('Pid')
         if not pid or not proc_birth(pid) or c.get('State',{}).get('Running') is not True or not proc_birth(epid): raise Refusal('Legacy physical process birth unavailable')
         if not policy['control_safe']:
@@ -556,7 +592,7 @@ def adopt(ctl,mid):
         run.update(owner=owner,container_id=cid,container_created=c.get('Created'),engine_pid=epid,engine_birth=proc_birth(epid),legacy_declaration_sha256=frozen,legacy_unit_qualification=policy,legacy_original_adopted=original,message='Explicit local immutable legacy adoption; readiness independently observed')
         observe(ctl.adapter,row,run)
         ctl.adapter.recheck_bundle(witnesses)
-        if ctl.adapter.unit(mid,None)!=unit or declaration_digest(ctl.adapter.inspect_container(cid))!=frozen: raise Refusal('Legacy identity changed while adopting')
+        if ctl.adapter.unit(mid,None)!=unit or not declaration_matches(ctl.adapter.inspect_container(cid),frozen): raise Refusal('Legacy identity changed while adopting')
         data['runs'][mid]=run;data['reservation']=mid
         ctl.store.write(data)
     return {'profile_id':mid,'run_id':run['run_id'],'generation':run['generation'],'adopted':True,'control_safe':policy['control_safe']}

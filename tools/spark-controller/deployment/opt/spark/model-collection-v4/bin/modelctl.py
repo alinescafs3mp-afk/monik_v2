@@ -11,6 +11,7 @@ import importlib.util
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -272,6 +273,45 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def reject_nonfinite_json(value):
+    raise ValueError('Non-finite JSON number')
+
+
+def qualify_qwen_worker_info(row, data):
+    """The pinned SGLang server_info awaits initialized scheduler state.
+
+    Its health route generates a token; this endpoint only reads worker state.
+    The response may contain credentials, so errors never include its contents.
+    """
+    alias = row['runtime']['served_model_alias']
+    expected = {'served_model_name': alias, 'context_length': row['context'],
+                'quantization': row['quant'], 'tp_size': 1, 'dp_size': 1,
+                'version': '0.0.0.dev1+g4ccff141d'}
+    if not isinstance(data, dict) or any(type(data.get(k)) is not type(v) or data[k] != v
+                                         for k, v in expected.items()):
+        raise ObservationError('Qwen passive server identity differs')
+    workers = data.get('internal_states')
+    if not isinstance(workers, list) or len(workers) != 1 or not isinstance(workers[0], dict):
+        raise ObservationError('Qwen passive worker population differs')
+    worker = workers[0]
+    expected_worker = {'served_model_name': alias, 'model_path': '/models', 'tp_size': 1, 'dp_size': 1}
+    if any(type(worker.get(k)) is not type(v) or worker[k] != v for k, v in expected_worker.items()):
+        raise ObservationError('Qwen passive worker identity differs')
+    startup = worker.get('startup_time')
+    top_startup = data.get('startup_time')
+    memory = worker.get('memory_usage')
+    if not isinstance(startup, dict) or not isinstance(top_startup, dict) or not isinstance(memory, dict):
+        raise ObservationError('Qwen passive initialization evidence unavailable')
+    timings = [startup.get(k) for k in ('load_weight', 'kv_cache_allocation', 'scheduler_e2e')]
+    timings.append(top_startup.get('tokenizer_e2e'))
+    if any(type(v) not in (int, float) or v <= 0 or type(v) is float and not math.isfinite(v)
+           for v in timings):
+        raise ObservationError('Qwen passive worker initialization incomplete')
+    capacity = memory.get('token_capacity')
+    if type(capacity) is not int or capacity <= 0:
+        raise ObservationError('Qwen passive KV capacity unavailable')
+
+
 @contextlib.contextmanager
 def total_api_deadline(seconds=.45):
     """One-shot hard request deadline, including drip-fed headers and bodies.
@@ -397,7 +437,16 @@ class SystemAdapter:
             headers['Authorization'] = 'Bearer ' + legacy_support().read_secret()
         req = urllib.request.Request(row['endpoint'] + '/models', headers=headers)
         try:
-            if row['id'] in IDS[5:]:
+            if row['id'] == IDS[5]:
+                info = urllib.request.Request(row['endpoint'].removesuffix('/v1') + '/server_info', headers=headers)
+                with self.http.open(info, timeout=.45) as response:
+                    if response.status != 200:
+                        return False, 'Qwen passive worker state is not ready'
+                    info_body = response.read(65537)
+                    if len(info_body) > 65536:
+                        raise ObservationError('Qwen passive worker body exceeds bound')
+                    qualify_qwen_worker_info(row, json.loads(info_body, parse_constant=reject_nonfinite_json))
+            elif row['id'] == IDS[6]:
                 health = urllib.request.Request(row['endpoint'].removesuffix('/v1') + '/health', headers=headers)
                 with self.http.open(health, timeout=.45) as response:
                     health_body = response.read(4097)
@@ -1716,7 +1765,10 @@ class Controller:
                     self.store.write(data)
                 self.log(mid, 'READY run=' + run_id)
                 return snap
-            if snap['state'] in {'FAILED', 'UNKNOWN', 'BLOCKED', 'STOPPED'}:
+            transient_api_timeout = (snap['state'] == 'UNKNOWN' and snap['message'] in {
+                'API identity probe timed out',
+                'API identity absolute request deadline expired'})
+            if snap['state'] in {'FAILED', 'UNKNOWN', 'BLOCKED', 'STOPPED'} and not transient_api_timeout:
                 self._fail(mid, run_id, snap['message'])
                 raise Refusal('Start failed: ' + snap['message'] + '; engine log=' + snap['engine_log'])
             time.sleep(.15)
