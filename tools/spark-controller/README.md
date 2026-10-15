@@ -39,3 +39,12 @@ redaction. The key values file is generated only on the host, is root-private an
 must never enter this repository. Unknown ownership, ambiguous deletion and
 incomplete physical release remain explicit failures. Durable unresolved receipts
 are retained; retirement of verified completed records preserves replay guards.
+
+During a cancelled Qwen shutdown, Docker's running snapshot can race the exit of
+the captured engine PID. The observer still rejects that snapshot. Only positive
+absence of that exact PID on the same cancelled STOPPING run permits the CLI to
+attempt one fresh, complete release proof under the unchanged state lock. It
+never repeats stop or kill. Reused PIDs, replaced identities, active resources or
+an incomplete fresh proof retain the failure and reservation. The focused
+`test_qwen_stop_exit_race.py` controls exercise this path with the real controller
+and release checks; actual host stop/restart acceptance is a separate gate.

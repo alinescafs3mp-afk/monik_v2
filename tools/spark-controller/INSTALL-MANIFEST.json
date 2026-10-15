@@ -76,7 +76,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/legacy_runtime.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/legacy_runtime.py",
-      "sha256": "390e945f2cdc232341c0049d0139090195a420589e833bf2cf2d63bf0c295fc1",
+      "sha256": "926fc5c2444a1dc4a7be1be50ecd6b8ea15aeba2fe3b7827154f50136f1e921d",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -84,7 +84,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/modelctl.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/modelctl.py",
-      "sha256": "6080953556ada9cf35a2930e08c2ffd0d014d7f6571ec4c1e34e10ec2569ed2a",
+      "sha256": "61fcd6cda7ad7acf0e4bb39cc3f2d3f2b3285777414d95d1490158a8b3e236e7",
       "uid": 0,
       "gid": 0,
       "mode": "0644"

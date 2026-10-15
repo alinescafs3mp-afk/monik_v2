@@ -1807,6 +1807,39 @@ class Controller:
                 self.log(mid, 'STOP REFUSED/FAILED: ' + str(exc)[:400])
             raise
 
+    def _finish_qwen_stop_exit(self, row, expected, original_error):
+        """One read-only full proof after an exact cancelled engine vanished.
+
+        This never repeats termination or changes running identity acceptance.
+        All other observation failures, including a reused PID, keep refusing.
+        """
+        if (row['id'] != IDS[5] or expected.get('model_id') != IDS[5]
+                or expected.get('state') != 'STOPPING' or expected.get('cancelled') is not True
+                or str(original_error) != 'Legacy engine PID birth replaced'
+                or getattr(original_error, 'qwen_stopping_run', None) != expected):
+            raise original_error
+        mid = row['id']
+        with self.store.lock():
+            data = self.store.read(); latest = data['runs'].get(mid)
+            if latest != expected:
+                raise Refusal('Stop identity/cancellation changed after engine exit observation') from original_error
+            try:
+                if not self.adapter.resources_released(row, latest):
+                    raise ObservationError('STOP_UNCONFIRMED: fresh exact Qwen release proof still active')
+            except (ObservationError, OSError, ValueError, KeyError, TypeError) as exc:
+                raise exc from original_error
+            if latest != expected or self.store.read()['runs'].get(mid) != expected:
+                raise Refusal('Stop identity/cancellation changed during engine exit release proof') from original_error
+            latest.update(state='STOPPED', message='Exact resources stopped after observation: ' + str(original_error))
+            latest['stop_observation_recovery'] = {'original_error': str(original_error),
+                                                 'classification': 'exact_cancelled_qwen_engine_exited',
+                                                 'release_proof': 'fresh_full_exact_resources_released'}
+            if data['reservation'] == mid:
+                data['reservation'] = None
+            self.store.write(data)
+        self.log(mid, 'STOPPED after exact engine-exit observation; original error: ' + str(original_error))
+        return self.snapshot(row, 'STOPPED', False, False, latest['message'], latest)
+
     def _stop(self, mid, typed=None, wait=True):
         row = self.row(mid)
         with self.store.lock():
@@ -1885,26 +1918,32 @@ class Controller:
                 self.store.write(data)
                 return receipt
         self.log(mid, 'STOP run=' + run_id + ' (late readiness waiters invalidated)')
-        self.adapter.terminate(row, run)
+        try:
+            self.adapter.terminate(row, run)
+        except ObservationError as exc:
+            return self._finish_qwen_stop_exit(row, run, exc)
         deadline = time.monotonic() + row.get('stop_timeout_seconds', 90)
         forced = False
         while True:
             current = self.store.read()['runs'].get(mid)
             if not current or current['run_id'] != run_id:
                 raise Refusal('Stop identity replaced; no further effects')
-            if self.adapter.resources_released(row, current):
-                with self.store.lock():
-                    data = self.store.read(); latest = data['runs'].get(mid)
-                    if not latest or latest['run_id'] != run_id:
-                        raise Refusal('Stop run replaced before release')
-                    if not self.adapter.resources_released(row, latest):
-                        continue
-                    latest.update(state='STOPPED', message='Exact owner and resources stopped; logs retained')
-                    if data['reservation'] == mid:
-                        data['reservation'] = None
-                    self.store.write(data)
-                self.log(mid, 'STOPPED run=' + run_id)
-                return self.snapshot(row, 'STOPPED', False, False, 'Exact owned instance stopped', latest)
+            try:
+                if self.adapter.resources_released(row, current):
+                    with self.store.lock():
+                        data = self.store.read(); latest = data['runs'].get(mid)
+                        if not latest or latest['run_id'] != run_id:
+                            raise Refusal('Stop run replaced before release')
+                        if not self.adapter.resources_released(row, latest):
+                            continue
+                        latest.update(state='STOPPED', message='Exact owner and resources stopped; logs retained')
+                        if data['reservation'] == mid:
+                            data['reservation'] = None
+                        self.store.write(data)
+                    self.log(mid, 'STOPPED run=' + run_id)
+                    return self.snapshot(row, 'STOPPED', False, False, 'Exact owned instance stopped', latest)
+            except ObservationError as exc:
+                return self._finish_qwen_stop_exit(row, current, exc)
             if time.monotonic() >= deadline:
                 if forced:
                     raise Refusal('STOP_UNCONFIRMED: exact owner/resources still active; reservation retained')
@@ -1915,6 +1954,8 @@ class Controller:
                     self.adapter.force(row, current)
                 except CommandTimeout:
                     self.log(mid, 'FORCE command timeout; checking exact resources without effect replay')
+                except ObservationError as exc:
+                    return self._finish_qwen_stop_exit(row, current, exc)
                 deadline = time.monotonic() + 10
             time.sleep(.15)
 

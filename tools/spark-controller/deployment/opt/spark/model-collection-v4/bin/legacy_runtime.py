@@ -534,7 +534,20 @@ def observe(adapter,row,run):
             if engine:
                 if not frozen: raise ObservationError('Legacy engine active before immutable declaration capture')
                 birth=proc_birth(epid)
-                if not birth or (run.get('engine_pid') and (epid!=run['engine_pid'] or birth!=run.get('engine_birth'))): raise ObservationError('Legacy engine PID birth replaced')
+                if not birth or (run.get('engine_pid') and (epid!=run['engine_pid'] or birth!=run.get('engine_birth'))):
+                    error=ObservationError('Legacy engine PID birth replaced')
+                    # Still refuse this running snapshot. Only a positively gone
+                    # exact PID in an already cancelled Qwen stop may request a
+                    # separate full release proof; PID reuse never gets this tag.
+                    if (row['id']==QWEN and run.get('model_id')==QWEN
+                            and run.get('state')=='STOPPING' and run.get('cancelled') is True
+                            and not birth and type(epid) is int and epid>0
+                            and epid==run.get('engine_pid')
+                            and isinstance(run.get('engine_birth'),str)
+                            and re.fullmatch('[0-9]+',run['engine_birth'])
+                            and adapter.process_released(epid,run['engine_birth']) is True):
+                        error.qwen_stopping_run=copy.deepcopy(run)
+                    raise error
     return {'active':active or engine,'engine_active':engine,'supervisor_active':active,'engine_pid':epid}
 
 def idle(adapter,row):
