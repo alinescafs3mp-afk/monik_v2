@@ -34,8 +34,18 @@ IDS = ('qwen3-coder-next-80b-huihui', 'ling-3-flash-124b-heretic-text',
        'mistral-small-4-119b-heretic', 'nemotron-3-super-120b-heretic-v2',
        'minimax-m27-229b-heretic', 'qwen-existing-observation',
        'gpt-oss-120b-existing-configured')
+BASE_IDS = IDS
+LEGACY_IDS = ('qwen-existing-observation', 'gpt-oss-120b-existing-configured')
+MIDRANGE_IDS = ('glm45-air-106b-derestricted', 'gemma4-31b-deckard-heretic',
+                'nemotron-super-49b-v15-abliterated')
+IDS = (*BASE_IDS, *MIDRANGE_IDS)
+MIDRANGE_ENGINE_QUANTS = {
+    MIDRANGE_IDS[0]: {('llama.cpp CUDA', 'MXFP4_MOE')},
+    MIDRANGE_IDS[1]: {('vLLM', 'NVFP4_AWQ')},
+    MIDRANGE_IDS[2]: {('llama.cpp CUDA', 'Q5_K_M')},
+}
 HEX64 = re.compile(r'[a-f0-9]{64}\Z')
-ENV_KEYS = {'VLLM_ATTENTION_BACKEND', 'VLLM_USE_FLASHINFER_MOE_FP4',
+ENV_KEYS = {'VLLM_NVFP4_GEMM_BACKEND', 'VLLM_ATTENTION_BACKEND', 'VLLM_USE_FLASHINFER_MOE_FP4',
             'VLLM_ENABLE_CUDAGRAPH_GC', 'CUDA_DEVICE_ORDER', 'NCCL_P2P_DISABLE',
             'OMP_NUM_THREADS', 'TOKENIZERS_PARALLELISM', 'HF_HUB_OFFLINE',
             'TRANSFORMERS_OFFLINE', 'VLLM_LOGGING_LEVEL', 'CUDA_CACHE_PATH',
@@ -123,12 +133,14 @@ def validate_manifest(data):
     if any(not re.fullmatch(r'[a-zA-Z0-9_.@-]+\.service', x) or x.startswith('spark-v4-') for x in exclusions):
         raise Refusal('Invalid excluded service')
     rows = data.get('models')
-    if not isinstance(rows, list) or len(rows) not in (5, 7) or {r.get('id') for r in rows if isinstance(r, dict)} not in (set(IDS[:5]), set(IDS)):
-        raise Refusal('Exactly five V4 or seven shared fixed model IDs required')
+    row_ids = {r.get('id') for r in rows if isinstance(r, dict)} if isinstance(rows, list) else set()
+    if (not isinstance(rows, list) or len(rows) != len(row_ids)
+            or not (row_ids == set(BASE_IDS[:5]) or set(BASE_IDS) <= row_ids <= set(IDS))):
+        raise Refusal('Exactly five V4, seven shared, or seven plus fixed midrange IDs required')
     ports = set()
     for row in rows:
         mid = row['id']
-        if mid in IDS[5:]:
+        if mid in LEGACY_IDS:
             legacy_support().validate_row(row)
             continue
         if type(row.get('prepared')) is not bool:
@@ -140,6 +152,7 @@ def validate_manifest(data):
                      else {('vLLM', 'NVFP4'), ('vLLM', 'NVFP4 compressed-tensors')} if mid == IDS[2]
                      else {('llama.cpp CUDA', 'IQ3_XS')} if mid == IDS[4]
                      else {('llama.cpp CUDA', 'MXFP4_MOE')})
+        supported = MIDRANGE_ENGINE_QUANTS.get(mid, supported)
         if (row['engine'], row['quant']) not in supported:
             raise Refusal(mid + ': selected artifact-to-engine mapping differs from V4')
         context = row.get('context')
@@ -357,7 +370,7 @@ class SystemAdapter:
         return result
 
     def validate_run_definition(self, row, run):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().effective_unit(self, row, run)
         # An instance can have drop-ins that do not appear on its template.
         raw = self.command(['/usr/bin/systemctl', 'show', unit_name(row['id'], run['run_id']),
@@ -382,7 +395,7 @@ class SystemAdapter:
             raise ObservationError('Invalid exact container observation') from exc
 
     def observe(self, row, run):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().observe(self, row, run)
         unit = self.unit(row['id'], run['run_id'])
         if not {'LoadState', 'ActiveState', 'InvocationID', 'MainPID', 'ControlGroup'} <= unit.keys():
@@ -419,7 +432,7 @@ class SystemAdapter:
                 'supervisor_active': active_unit, 'engine_pid': engine_pid}
 
     def idle(self, row):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().idle(self, row)
         raw = self.command(['/usr/bin/systemctl', 'list-units', '--all', '--plain', '--no-legend',
                             '--no-pager', '--state=active,activating,deactivating,reloading',
@@ -440,7 +453,7 @@ class SystemAdapter:
 
     def _api_ready(self, row):
         headers = {'Accept': 'application/json'}
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             headers['Authorization'] = 'Bearer ' + legacy_support().read_secret()
         req = urllib.request.Request(row['endpoint'] + '/models', headers=headers)
         try:
@@ -494,7 +507,7 @@ class SystemAdapter:
             raise ObservationError('Invalid API identity JSON') from exc
 
     def verify_bundle(self, row):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().verify_bundle(self, row)
         witnesses = []
         for item in row['artifacts']:
@@ -632,7 +645,7 @@ class SystemAdapter:
         self.command(['/usr/bin/systemctl', 'start', '--no-block', unit_name(row['id'], run['run_id'])], 2.0)
 
     def terminate(self, row, run):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().request_terminate(self, row, run)
         observation = self.observe(row, run)  # Verify before each effect.
         if run.get('container_id') and observation['engine_active']:
@@ -647,7 +660,7 @@ class SystemAdapter:
                 self.command(['/usr/bin/systemctl', 'stop', '--no-block', unit_name(row['id'], run['run_id'])], 2.0)
 
     def request_terminate(self, row, run):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().request_terminate(self, row, run)
         """Bounded bridge effect. The existing independent supervisor owns shutdown.
 
@@ -671,7 +684,7 @@ class SystemAdapter:
             self.command(['/usr/bin/systemctl', 'kill', '--kill-whom=all', '--signal=KILL', unit_name(row['id'], run['run_id'])], 2.0)
 
     def resources_released(self, row, run):
-        if row['id'] in IDS[5:]:
+        if row['id'] in LEGACY_IDS:
             return legacy_support().resources_released(self, row, run)
         if not Path('/proc').is_dir():
             raise ObservationError('Process resource namespace unavailable')
@@ -974,7 +987,7 @@ class Controller:
     def profile_revision(self, mid):
         # Runtime PIDs, counters and readiness are absent from approved manifest rows.
         binding = {'model': self.row(mid), 'excluded_units': self.manifest.get('excluded_units', [])}
-        if self.protected and mid in IDS[5:]:
+        if self.protected and mid in LEGACY_IDS:
             binding.update(legacy_support().profile_binding(self, self.row(mid)))
         elif self.protected:
             # systemd cannot load a bare template as a runtime unit. Inspect a
@@ -1012,7 +1025,7 @@ class Controller:
         value = run.get('legacy_declaration_sha256') if run else None
         if value is None:
             return None
-        if run.get('model_id') not in IDS[5:]:
+        if run.get('model_id') not in LEGACY_IDS:
             raise ObservationError('Captured legacy declaration is not valid for this profile')
         if not isinstance(value, str) or not HEX64.fullmatch(value):
             raise ObservationError('Invalid captured immutable legacy declaration')
@@ -1175,7 +1188,7 @@ class Controller:
         row = self.row(mid)
         if not row['prepared']:
             raise Refusal('Bundle is not prepared')
-        if self.protected and mid not in IDS[5:]:
+        if self.protected and mid not in LEGACY_IDS:
             for artifact in row['artifacts']:
                 protect(Path(artifact['path']))
             for mount in row['runtime']['mounts']:
@@ -1203,7 +1216,7 @@ class Controller:
                 protect(path)
             for mount in row['runtime']['mounts']:
                 path = Path(mount['source'])
-                protect(path, directory=path.is_dir() if row['id'] in IDS[5:] else True)
+                protect(path, directory=path.is_dir() if row['id'] in LEGACY_IDS else True)
             # Original image identity check is preserved without weight rehashing.
             image = json.loads(self.adapter.command(['/usr/bin/docker', 'image', 'inspect', row['runtime']['image']], 2.0))
             if len(image) != 1 or image[0].get('Id') != row['runtime']['image_id'] or image[0].get('Architecture') != 'arm64' or image[0].get('Os') != 'linux':
@@ -1690,7 +1703,7 @@ class Controller:
                     self.store.write(data)
                     self.log(ident, 'RECONCILED inactive run=' + run['run_id'] + '; resources released')
             for ident, historical in data['runs'].items():
-                if ident in IDS[5:] and historical.get('container_id'):
+                if ident in LEGACY_IDS and historical.get('container_id'):
                     before_reap = (lambda: self._check_typed_effect(data, row, request, lease)) if typed else None
                     legacy_support().reap_stopped(self, data, self.rows[ident], historical, before_reap)
             for item in self.rows.values():
@@ -1840,8 +1853,42 @@ class Controller:
         self.log(mid, 'STOPPED after exact engine-exit observation; original error: ' + str(original_error))
         return self.snapshot(row, 'STOPPED', False, False, latest['message'], latest)
 
+    def _finish_gpt_stop_exit(self, row, expected, original_error):
+        """One read-only full proof after an exact cancelled engine vanished.
+
+        This never repeats termination or changes running identity acceptance.
+        All other observation failures, including a reused PID, keep refusing.
+        """
+        if (row['id'] != IDS[6] or expected.get('model_id') != IDS[6]
+                or expected.get('state') != 'STOPPING' or expected.get('cancelled') is not True
+                or str(original_error) != 'Legacy engine PID birth replaced'
+                or getattr(original_error, 'gpt_stopping_run', None) != expected):
+            raise original_error
+        mid = row['id']
+        with self.store.lock():
+            data = self.store.read(); latest = data['runs'].get(mid)
+            if latest != expected:
+                raise Refusal('Stop identity/cancellation changed after engine exit observation') from original_error
+            try:
+                if not self.adapter.resources_released(row, latest):
+                    raise ObservationError('STOP_UNCONFIRMED: fresh exact GPT release proof still active')
+            except (ObservationError, OSError, ValueError, KeyError, TypeError) as exc:
+                raise exc from original_error
+            if latest != expected or self.store.read()['runs'].get(mid) != expected:
+                raise Refusal('Stop identity/cancellation changed during engine exit release proof') from original_error
+            latest.update(state='STOPPED', message='Exact resources stopped after observation: ' + str(original_error))
+            latest['stop_observation_recovery'] = {'original_error': str(original_error),
+                                                 'classification': 'exact_cancelled_gpt_engine_exited',
+                                                 'release_proof': 'fresh_full_exact_resources_released'}
+            if data['reservation'] == mid:
+                data['reservation'] = None
+            self.store.write(data)
+        self.log(mid, 'STOPPED after exact engine-exit observation; original error: ' + str(original_error))
+        return self.snapshot(row, 'STOPPED', False, False, latest['message'], latest)
+
     def _stop(self, mid, typed=None, wait=True):
         row = self.row(mid)
+        finish_exit = self._finish_gpt_stop_exit if mid == IDS[6] else self._finish_qwen_stop_exit
         with self.store.lock():
             data = self.store.read(); run = data['runs'].get(mid)
             if typed:
@@ -1861,7 +1908,7 @@ class Controller:
                     self.store.write(data)
                     return receipt
                 return result
-            if mid in IDS[5:]:
+            if mid in LEGACY_IDS:
                 legacy_support().effective_unit(self.adapter, row, run)
             # Refuse stale/replaced identities before cancellation/effects.
             observation = self.adapter.observe(row, run)
@@ -1921,7 +1968,7 @@ class Controller:
         try:
             self.adapter.terminate(row, run)
         except ObservationError as exc:
-            return self._finish_qwen_stop_exit(row, run, exc)
+            return finish_exit(row, run, exc)
         deadline = time.monotonic() + row.get('stop_timeout_seconds', 90)
         forced = False
         while True:
@@ -1943,7 +1990,7 @@ class Controller:
                     self.log(mid, 'STOPPED run=' + run_id)
                     return self.snapshot(row, 'STOPPED', False, False, 'Exact owned instance stopped', latest)
             except ObservationError as exc:
-                return self._finish_qwen_stop_exit(row, current, exc)
+                return finish_exit(row, current, exc)
             if time.monotonic() >= deadline:
                 if forced:
                     raise Refusal('STOP_UNCONFIRMED: exact owner/resources still active; reservation retained')
@@ -1955,7 +2002,7 @@ class Controller:
                 except CommandTimeout:
                     self.log(mid, 'FORCE command timeout; checking exact resources without effect replay')
                 except ObservationError as exc:
-                    return self._finish_qwen_stop_exit(row, current, exc)
+                    return finish_exit(row, current, exc)
                 deadline = time.monotonic() + 10
             time.sleep(.15)
 
@@ -1983,7 +2030,7 @@ def main(args=None):
         if action == 'status':
             result = ctl.status(mid)
         elif action == 'prepare-legacy':
-            if mid not in IDS[5:]:
+            if mid not in LEGACY_IDS:
                 raise Refusal('prepare-legacy accepts only fixed legacy IDs')
             print(json.dumps(ctl.prepare_bundle(mid), sort_keys=True))
             return 0

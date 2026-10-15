@@ -33,6 +33,7 @@ SOURCE_PINS = {
  '/usr/local/lib/sglang-qwen38/tokenizer_manager.py': 'dd44027271b33a2bd34ffce9970c6f72ee9a5697eb9be8f3a8cb11601caa64af',
  '/usr/local/lib/sglang-qwen38/qsa_indexer.py': 'abfa6b6f3e21071a12ba4d34183bdcad432cf4965a8c16fddf309c1968ea1c06',
  '/usr/local/lib/spark-gptoss/openai_harmony_init.py': '18eeaa3dbbaf9b0516da89b0b62e3763f770c6a14cd8d42aec28205f132a636f',
+ '/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py': '443bcfc4b8f98d03072b01d6edd72cfec50ec81fd1973c9d2cab9272d5815616',
  '/usr/local/sbin/spark-sglang-prepare': '5795ae170df3f2005381babb483117f3ba1085bcdfa2c6c6e033a9f430579b78',
 }
 ORIGINAL_QWEN_UNIT_SHA = '0adf04aee52395ccabeda14971c98581d25d385a446ab4b724b0081d3706641c'
@@ -117,7 +118,7 @@ def approved_qwen_declarations():
     return original, client_effort, no_speculation
 
 def approved_gpt_declarations():
-    """Six exact GPT precision/cache controls, not runtime qualifications.
+    """Seven exact GPT precision/cache/stream controls, not runtime qualifications.
 
     definitions() remains the frozen historical deployment. Preserve its image,
     CUTLASS selection, parsers, limits and mounts in every complete candidate.
@@ -136,7 +137,14 @@ def approved_gpt_declarations():
     cached_moe['runtime']['env']['XDG_CACHE_HOME'] = '/srv/spark/hf-home/gptoss-runtime-cache'
     cached_scaled_moe = copy.deepcopy(scaled_moe)
     cached_scaled_moe['runtime']['env']['XDG_CACHE_HOME'] = '/srv/spark/hf-home/gptoss-runtime-cache'
-    return original, moe, scaled_original, scaled_moe, cached_moe, cached_scaled_moe
+    # Preserve the six original declarations byte-for-byte. The seventh pins
+    # only the exact streaming header-transition fix; no numerical/kernel delta.
+    cached_moe_streamfix = copy.deepcopy(cached_moe)
+    cached_moe_streamfix['runtime']['mounts'].append({
+        'source': '/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py',
+        'target': '/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/serving_chat_stream_harmony.py',
+        'readonly': True})
+    return original, moe, scaled_original, scaled_moe, cached_moe, cached_scaled_moe, cached_moe_streamfix
 
 def validate_row(row):
     expected = next(x for x in definitions() if x['id']==row['id'])
@@ -575,7 +583,7 @@ def observe(adapter,row,run):
                     # proc_birth intentionally hides zombies; only a fresh raw Z
                     # with the same captured tick may wait for the normal full
                     # release proof. Never call this process released/READY.
-                    stopping_zombie=(row['id']==QWEN and run.get('model_id')==QWEN
+                    stopping_zombie=(row['id'] in IDS and run.get('model_id')==row['id']
                         and run.get('state')=='STOPPING' and run.get('cancelled') is True
                         and not birth and type(epid) is int and epid>0
                         and epid==run.get('engine_pid')
@@ -596,14 +604,14 @@ def observe(adapter,row,run):
                         # Still refuse this running snapshot. Only a positively gone
                         # exact PID in an already cancelled Qwen stop may request a
                         # separate full release proof; PID reuse never gets this tag.
-                        if (row['id']==QWEN and run.get('model_id')==QWEN
+                        if (row['id'] in IDS and run.get('model_id')==row['id']
                                 and run.get('state')=='STOPPING' and run.get('cancelled') is True
                                 and not birth and type(epid) is int and epid>0
                                 and epid==run.get('engine_pid')
                                 and isinstance(run.get('engine_birth'),str)
                                 and re.fullmatch('[0-9]+',run['engine_birth'])
                                 and adapter.process_released(epid,run['engine_birth']) is True):
-                            error.qwen_stopping_run=copy.deepcopy(run)
+                            setattr(error,'qwen_stopping_run' if row['id']==QWEN else 'gpt_stopping_run',copy.deepcopy(run))
                         raise error
     return {'active':active or engine,'engine_active':engine,'supervisor_active':active,'engine_pid':epid}
 

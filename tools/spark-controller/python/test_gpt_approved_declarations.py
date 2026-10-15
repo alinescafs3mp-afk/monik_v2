@@ -23,8 +23,8 @@ class ApprovedGptDeclarations(unittest.TestCase):
         self.rows = legacy.approved_gpt_declarations()
 
     def test_six_distinct_complete_rows_reach_existing_manifest_validation(self):
-        self.assertEqual(6, len(self.rows))
-        self.assertEqual(6, len({legacy.digest(row) for row in self.rows}))
+        self.assertEqual(7, len(self.rows))
+        self.assertEqual(7, len({legacy.digest(row) for row in self.rows}))
         self.assertEqual(legacy.definitions()[1], self.rows[0])
         for row in self.rows:
             with self.subTest(variant=legacy.digest(row)):
@@ -169,8 +169,8 @@ class ApprovedGptDeclarations(unittest.TestCase):
                 revisions.append(ctl.profile_revision(legacy.GPT))
                 with self.assertRaisesRegex(core.Refusal, 'bundle_not_prepared'):
                     ctl._sealed_bundle(row)
-            self.assertEqual(6, len(set(revisions)))
-            for old_index, new_index in itertools.permutations(range(6), 2):
+            self.assertEqual(7, len(set(revisions)))
+            for old_index, new_index in itertools.permutations(range(7), 2):
                 data = store.read()
                 data['bundle_seals'] = {legacy.GPT: {'profile_revision': revisions[old_index],
                                                     'witnesses': [['/compiled/artifact', [1]]]}}

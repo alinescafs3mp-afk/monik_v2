@@ -76,7 +76,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/legacy_runtime.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/legacy_runtime.py",
-      "sha256": "31c9a1e58d18f3286a2773e1a8863491cc330b6d8f7f68af6c61f0e3975d099c",
+      "sha256": "d5b33e215349d22aa936cb52a0187bd272f0ab74c04fb07c2e9707554baed8dd",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -84,7 +84,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/modelctl.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/modelctl.py",
-      "sha256": "61fcd6cda7ad7acf0e4bb39cc3f2d3f2b3285777414d95d1490158a8b3e236e7",
+      "sha256": "af3722fbe40de2e3afe1c75c33ad007de47009fe112fe21b78d62ae0e089dcbb",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -92,7 +92,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/monik_bridge.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/monik_bridge.py",
-      "sha256": "bf8a049802db32d6a4746414e2fb531b67e31209db58e4b9eea0d25f6f1f20a2",
+      "sha256": "c1a681d3c6de8bd242cf2a57cdda9bb2398879fd62d9ba41639c5916a9e071a9",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -100,7 +100,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/supervisor.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/supervisor.py",
-      "sha256": "0a82bbf51941003453ccde89d040f82db3cfe8872dfd11452a1b2b8ea3b7cd65",
+      "sha256": "16517b8e16ca95ef305d097110b11dc5961836f5ba4a45fcb18833dfd536676d",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -152,6 +152,14 @@
       "uid": 0,
       "gid": 0,
       "mode": "0750"
+    },
+    {
+      "path": "/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
+      "source": "deployment/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
+      "sha256": "443bcfc4b8f98d03072b01d6edd72cfec50ec81fd1973c9d2cab9272d5815616",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
     }
   ],
   "directories": [

@@ -76,7 +76,7 @@ class MistralCompilerCache(unittest.TestCase):
                 self.assertFalse(any(',exec,' in mount for mount in option_values(argv, '--tmpfs')))
 
     def test_legacy_profiles_still_delegate_exact_row_and_run(self):
-        for mid in base.modelctl.IDS[5:]:
+        for mid in base.modelctl.LEGACY_IDS:
             row = {'id': mid}  # No generic runtime may be read on this path.
             expected = ['unchanged-legacy-command']
             def dispatch(actual_row, actual_run):

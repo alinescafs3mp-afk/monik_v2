@@ -1,6 +1,6 @@
 # Exact GPT precision and cache controls
 
-`legacy_runtime.approved_gpt_declarations()` returns six complete local rows for
+`legacy_runtime.approved_gpt_declarations()` returns seven complete local rows for
 `gpt-oss-120b-existing-configured`. `definitions()` stays the historical reference.
 These are accepted declarations for controlled qualification, not evidence of
 runtime correctness, speed, cache reuse or model acceptance.
@@ -13,6 +13,7 @@ runtime correctness, speed, cache reuse or model acceptance.
 | 3 | `moe` | `--calculate-kv-scales` | Existing default |
 | 4 | `moe` | Existing default | Exact XDG path below |
 | 5 | `moe` | `--calculate-kv-scales` | Exact XDG path below |
+| 6 | `moe` | Existing default | Exact XDG path below, plus fixed Harmony stream helper |
 
 Rows 4 and 5 add only
 `XDG_CACHE_HOME=/srv/spark/hf-home/gptoss-runtime-cache`. The HF_HOME bind mount is
@@ -22,6 +23,16 @@ The pinned vLLM source resolves its default `VLLM_CACHE_ROOT` to
 FlashInfer cache path; their environment controls are not added. CUDA graphs
 still require capture in the new process. Compare row 1 with 4 or row 3 with 5
 to isolate the cache declaration from precision changes.
+
+Row 6 preserves row 4 and adds one fixed read-only source mount at
+`/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py`, whose SHA-256 is
+`443bcfc4b8f98d03072b01d6edd72cfec50ec81fd1973c9d2cab9272d5815616`.
+When a streaming parser step discovers a new tool recipient and already contains
+argument text, the original helper discarded that text. The replacement keeps
+`delta_text` in the initial tool delta. It changes no model weights, sampler or
+token budget. This source correction does not establish that all malformed
+Harmony headers, repeated final text or task failures are resolved. Fresh native
+qualification is required. See [the correction notes](NATIVE-CORRECTIONS-2026-10-16.md).
 
 The exact pinned image recognizes `--mxfp4-layers moe`: only checkpoint experts
 retain MXFP4, while dense attention projections and the head remain BF16.

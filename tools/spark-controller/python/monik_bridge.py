@@ -22,6 +22,9 @@ IDS = ('qwen3-coder-next-80b-huihui', 'ling-3-flash-124b-heretic-text',
        'mistral-small-4-119b-heretic', 'nemotron-3-super-120b-heretic-v2',
        'minimax-m27-229b-heretic', 'qwen-existing-observation',
        'gpt-oss-120b-existing-configured')
+MIDRANGE_IDS = ('glm45-air-106b-derestricted', 'gemma4-31b-deckard-heretic',
+                'nemotron-super-49b-v15-abliterated')
+IDS = (*IDS, *MIDRANGE_IDS)
 
 
 def strict_object(pairs):
@@ -45,7 +48,7 @@ def decode_envelope(raw):
         if set(body) != {'schema_version', 'method', 'profile_ids'}:
             raise ValueError('Unknown observation selectors')
         profiles = body['profile_ids']
-        if not isinstance(profiles, list) or not 1 <= len(profiles) <= 7 or any(not isinstance(p, str) or p not in IDS for p in profiles) or len(set(profiles)) != len(profiles):
+        if not isinstance(profiles, list) or not 1 <= len(profiles) <= len(IDS) or any(not isinstance(p, str) or p not in IDS for p in profiles) or len(set(profiles)) != len(profiles):
             raise ValueError('Only distinct fixed profile IDs permitted')
     elif method == 'bind_current_agent':
         if set(body) != {'schema_version', 'method', 'binding'} or not isinstance(body['binding'], dict):

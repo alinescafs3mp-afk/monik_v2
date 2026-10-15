@@ -16,13 +16,13 @@ import sys
 import time
 
 sys.path.insert(0, '/opt/spark/model-collection-v4/bin')
-from modelctl import (BASE_ENV, IDS, LOG_ROOT, Command, Controller, ObservationError,
+from modelctl import (BASE_ENV, IDS, LEGACY_IDS, LOG_ROOT, Command, Controller, ObservationError,
                       Refusal, RotatingSink, StateStore, SystemAdapter,
                       load_production_manifest, proc_birth, protect, unit_name, legacy_support)
 
 
 def container_argv(row, run):
-    if row['id'] in IDS[5:]:
+    if row['id'] in LEGACY_IDS:
         return legacy_support().container_argv(row, run)
     runtime = row['runtime']
     args = ['/usr/bin/docker', 'create', '--name', 'spark-v4-' + run['run_id'],
@@ -121,7 +121,7 @@ class Supervisor:
             # not take this lock; a CID-only intermediate snapshot is ambiguous.
             run['container_created'] = created
             self.ctl.store.write(data)
-            if row['id'] in IDS[5:]:
+            if row['id'] in LEGACY_IDS:
                 legacy = legacy_support()
                 run['legacy_declaration_sha256'] = legacy.check_declaration(row, observed, legacy.read_secret(), self.ctl.adapter)
             self.ctl.store.write(data)
@@ -151,7 +151,7 @@ class Supervisor:
         # Never call systemctl stop on own service from its own shutdown handler.
         observed = self.ctl.adapter.observe(self.ctl.row(self.mid), run)
         if observed['engine_active']:
-            self.command(['/usr/bin/docker', 'stop', '--time', '90' if self.mid in IDS[5:] else '20', run['container_id']], 95 if self.mid in IDS[5:] else 25)
+            self.command(['/usr/bin/docker', 'stop', '--time', '90' if self.mid in LEGACY_IDS else '20', run['container_id']], 95 if self.mid in LEGACY_IDS else 25)
         return run
 
     def follow(self, run):

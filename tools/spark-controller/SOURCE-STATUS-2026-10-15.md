@@ -9,7 +9,7 @@ excluded.
 | --- | --- | --- |
 | Nemo metadata and Unicode | [Pinned repair, complete patch and ARM64 build recipe](nemotron-tokenizer-fix/README.md). The installed correction preserved the tensor payload. Historical vocabulary-only qualification covered 145,820 rows with zero candidate failures; both old-core and old-metadata negative controls are retained. | The private full corpus is not redistributed. Rebuilding with another toolchain needs new native qualification; a vocabulary pass does not establish inference quality. |
 | LAN model contract | [Final Go source and controls](lan-api/README.md). Ling and Nemo chat routes require exactly one correctly typed, exact model name. Complete invalid Nemo model bodies receive a fixed JSON error; incomplete uploads retain the generic error. Accepted bodies and SSE remain unchanged. Native Nemo identity, authentication and wrong-model JSON controls were observed; duplicate/type/escape and forwarding controls are offline tests. | Model validation is limited to the documented routes. It does not establish cancellation, model capacity or product acceptance. |
-| GPT fixed declarations | [Six exact precision/FP8-scale/cache rows](GPT-APPROVED-DECLARATIONS.md) and their real manifest/container/seal tests. Source approval accepts only complete fixed rows. | Each selected row needs its own ordinary policy approval, integrity preparation and actual runtime/quality qualification. A declared cache directory is not measured cache reuse. |
+| GPT fixed declarations | [Seven exact precision/FP8-scale/cache/stream-helper rows](GPT-APPROVED-DECLARATIONS.md) and their real manifest/container/seal tests. Source approval accepts only complete fixed rows. | Each selected row needs its own ordinary policy approval, integrity preparation and actual runtime/quality qualification. A declared cache directory is not measured cache reuse. |
 | Mistral compiler cache | [Fixed private executable tmpfs and four explicit cache variables](MISTRAL-COMPILER-CACHE.md). Historical CPU-only checks in the pinned image reproduced the old mapping failure and loaded a generated shared object from the proposed mount. | This is an ephemeral 2 GiB cache. Source/CPU mapping checks do not prove a healthy native model start, speed or quality; complete deployment approval and native qualification remain separate. |
 
 The [Nemo launch example](NEMOTRON-PROVISIONAL-EXAMPLE.json) records the tested
@@ -35,3 +35,8 @@ Reproduce the source checks with the focused commands in the linked documents.
 Python controller tests inject host observations; Go tests use local test
 transports; metadata guards use tiny synthetic GGUF files. A source-only test
 pass must stay distinct from installation, native execution and acceptance.
+
+The subsequent [16 October native correction checkpoint](NATIVE-CORRECTIONS-2026-10-16.md)
+adds the exact Harmony stream-prefix correction, GPT stop-release observation
+handling, fixed midrange catalog recognition, and a blocked Mistral correctness
+example. Read its explicit installation/runtime distinction before using it.
