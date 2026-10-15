@@ -1,0 +1,69 @@
+{
+  "status": "DEPLOYED_VERIFIED",
+  "date": "2026-10-15",
+  "change": "Background Spark model observation every 30 seconds instead of 5; existing 5-second agent report/contact loop remains unchanged.",
+  "timing": {
+    "idle_minimum_seconds": 30,
+    "possible_tick_quantization_seconds": 35,
+    "snapshot_observation_freshness_seconds": 45,
+    "agent_report_contact_freshness_seconds": 15,
+    "restart_stage_proof_freshness_seconds": 15,
+    "exact_native_action_observation_freshness_seconds": 5,
+    "dispatch_lease_seconds": 30
+  },
+  "behavior": [
+    "First broker observation is immediate; record attempt before launching to throttle failures and prevent overlap.",
+    "Refresh at the existing 5-second cadence during active jobs and model startup/shutdown. Reading logs keeps the background model interval.",
+    "Retain actual snapshot timestamps; separate cached observation age from agent connectivity.",
+    "Keep fresh exact native checks before effects; cached background samples are never effect authority."
+  ],
+  "preserved": {
+    "qwen_running_instance": true,
+    "model_scripts_parameters_and_python_backend": true,
+    "policy_and_profile_integrity_approvals": true,
+    "agent_ids_credentials_trust_and_state": true,
+    "server_tls_and_persisted_sessions": true,
+    "no_model_restart": true
+  },
+  "validation": {
+    "go_packages": [
+      "internal/spark",
+      "internal/storage",
+      "internal/server",
+      "internal/protocol"
+    ],
+    "go_all_pass": true,
+    "focused_worker_race_pass": true,
+    "web_tests": 216,
+    "web_all_pass": true,
+    "independent_review": "PASS",
+    "controller_https_health": 200,
+    "native_inventory_profiles": 7,
+    "native_qwen_readiness": "ready",
+    "agent_report_age_seconds": 4.772039,
+    "model_observation_age_seconds": 18.39859,
+    "actual_initial_background_intervals_seconds": [
+      29.95,
+      29.927,
+      35.111,
+      29.967
+    ],
+    "actual_final_background_intervals_seconds": [
+      29.985
+    ],
+    "log_view_interval_regression_pass": true,
+    "final_worker_package_pass": true
+  },
+  "artifacts": {
+    "spark_agent_source_build": "source-sha256-0f6c064d91331a24c8ab9c22fb198ab73ad4ec0826d8633410652d574a842117",
+    "spark_agent_sha256": "38daf9f4ed16737a801493c6267435929783a050209aef69b1ec69a7c6842e71",
+    "controller_source_build": "source-sha256-78f5f4c985323ae9398f2e4dc795d84a25d733c2d4d66c1e87b6bbf757583966",
+    "controller_sha256": "54e7fe02d3de1912e2b544aa233a8c9d95fc9757b2fc86de0334d299312644fc"
+  },
+  "rollout": "Consistent private controller database backup; controller/UI first, then both Spark monitor binaries with exact mode/owner-preserving atomic replacement and private state/spool/policy backups. No model service restart.",
+  "limits": [
+    "Idle cadence can be 30-35 seconds because scheduling uses the existing 5-second loop. Only active operations and model transitions use faster observations; log viewing does not.",
+    "Private credentials, database backups, deployment state and raw logs are excluded from publication."
+  ],
+  "verified_at_msk": "2026-10-15T05:25:15.673213+03:00"
+}

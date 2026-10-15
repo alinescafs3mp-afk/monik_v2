@@ -67,7 +67,7 @@ func (a *App) logRequestValid(id string, p protocol.SparkLogRequest) error {
 	}
 	fresh := func(at time.Time) bool {
 		age := a.Clock.Now().Sub(at)
-		return age >= -5*time.Second && age <= protocol.SparkControlFreshness
+		return age >= -5*time.Second && age <= protocol.SparkObservationFreshness
 	}
 	c := v.Spark.ControlState
 	if c == nil || c.Epoch == nil || *c.Epoch != p.ControlEpoch || !c.Enabled || !fresh(c.ObservedAt) {

@@ -41,6 +41,7 @@ export const errorLabel:Readonly<Record<string,string>>={
 };
 export function explainCode(code:string){return errorLabel[code]||code||'Причина не сообщена';}
 export function freshAt(value:string|undefined,now=Date.now(),seconds=30){const at=Date.parse(value||'');return Number.isFinite(at)&&at<=now+5000&&now-at<=seconds*1000;}
+const sparkObservationFreshnessSeconds=45;
 export function metricLabel(id:string){
  const known:Record<string,string>={'cpu.usage_percent':'CPU','cpu.load1':'Средняя нагрузка за минуту','memory.total_bytes':'Общая физическая память','memory.available_bytes':'Доступно памяти (MemAvailable)',
  'memory.pressure_used_bytes':'Занято (MemTotal − MemAvailable)','memory.swap_total_bytes':'Всего swap','memory.swap_free_bytes':'Свободно swap',
@@ -65,13 +66,13 @@ export function modelLabel(s:Pick<ModelState,'supervisor_state'|'readiness'|'qua
  if(s.reason==='configured_catalog_runtime_unobserved')return 'Профиль настроен · состояние запуска не наблюдается'+(!online?' · машина не на связи':'');
  const labels:Record<string,string>={stopped:'Остановлена',starting:'Запускается',stopping:'Останавливается',failed:'Ошибка процесса',unknown:'Состояние процесса неизвестно'};
  const text=s.supervisor_state==='stopped'&&s.reason==='start_preflight_pending'?'Остановлена · проверка перед запуском':s.supervisor_state==='running'?(s.readiness==='ready'?'Готова к запросам':s.readiness==='unready'?'Работает, к запросам не готова':'Работает, готовность не подтверждена'):(labels[s.supervisor_state]||'Состояние неизвестно');
- return text+(!online||s.quality!=='ok'||!freshAt(s.observed_at,now)?' · последнее наблюдение':'');
+ return text+(!online||s.quality!=='ok'||!freshAt(s.observed_at,now,sparkObservationFreshnessSeconds)?' · последнее наблюдение':'');
 }
 export function actionReason(d:SparkDetail|null,p:Profile,s:ModelState|undefined,action:ModelAction,owner:boolean,now=Date.now(),pending=false){
  if(!owner)return 'Управление доступно владельцу';
  if(!d?.online)return 'Машина не на связи. Команда не будет поставлена в очередь';
  if(p.control_reason==='configured_catalog_runtime_unobserved')return explainCode(p.control_reason);
- if(!freshAt(d.received_at,now)||!freshAt(d.spark.control_state?.observed_at,now)||!freshAt(s?.observed_at,now)||s?.quality!=='ok')return explainCode('state_stale');
+ if(!freshAt(d.received_at,now)||!freshAt(d.spark.control_state?.observed_at,now,sparkObservationFreshnessSeconds)||!freshAt(s?.observed_at,now,sparkObservationFreshnessSeconds)||s?.quality!=='ok')return explainCode('state_stale');
  if(!p.control_allowed||!d.spark.control_state?.enabled)return explainCode(p.control_reason||d.spark.control_state?.reason||'control_disabled');
  if(!p.allowed_actions.includes(action))return 'Это действие не разрешено локальным профилем';
  if(!d.agent_session||!d.spark.control_state.epoch||!/^sha256:[0-9a-f]{64}$/.test(p.profile_revision)||!Number.isSafeInteger(s?.generation)||s!.generation<0)return 'Нет подтверждённой привязки к профилю и экземпляру';

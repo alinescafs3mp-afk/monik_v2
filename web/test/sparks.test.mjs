@@ -26,6 +26,26 @@ test('model PID/running is never ready without observed readiness; stale ready i
  state.readiness='ready';assert.equal(spark.modelLabel(state,true,at),'Готова к запросам');
  assert.match(spark.modelLabel(state,false,at),/последнее наблюдение/);
 });
+test('cached model and control observations cover idle polling while contact and metrics keep their own freshness',()=>{
+ const {detail,profile,state}=fixture();state.supervisor_state='running';state.readiness='ready';
+ for(const seconds of [20,31,45]){
+  const now=at+seconds*1000;detail.received_at=new Date(now-5000).toISOString();
+  assert.equal(spark.modelLabel(state,true,now),'Готова к запросам');
+  assert.equal(spark.actionReason(detail,profile,state,'stop',true,now),'');
+ }
+ const now=at+46000;detail.received_at=new Date(now-5000).toISOString();
+ assert.match(spark.modelLabel(state,true,now),/последнее наблюдение/);
+ assert.equal(spark.actionReason(detail,profile,state,'stop',true,now),spark.explainCode('state_stale'));
+ state.observed_at=new Date(now-5000).toISOString();
+ assert.equal(spark.actionReason(detail,profile,state,'stop',true,now),spark.explainCode('state_stale'));
+ detail.spark.control_state.observed_at=state.observed_at;state.observed_at=stamp;
+ assert.equal(spark.actionReason(detail,profile,state,'stop',true,now),spark.explainCode('state_stale'));
+ state.observed_at=detail.spark.control_state.observed_at;detail.received_at=stamp;
+ assert.equal(spark.actionReason(detail,profile,state,'stop',true,now),spark.explainCode('state_stale'));
+ assert.equal(spark.freshAt(stamp,at+31000),false);
+ assert.match(spark.formatObservation({value:0,unit:'percent',source:'fixture',observed_at:stamp,quality:'ok'},at+31000),/устарело/);
+ assert.equal(state.observed_at,new Date(now-5000).toISOString());
+});
 test('action matrix keeps stop during startup and rejects old sessions, offline, unknown and viewer effects',()=>{
  const {detail,profile,state}=fixture();
  assert.equal(spark.actionReason(detail,profile,state,'start',true,at),'');

@@ -14,6 +14,10 @@ import (
 const SparkDispatchLease = 30 * time.Second
 const SparkControlFreshness = 15 * time.Second
 
+// Cached broker observations cover the 30s idle poll, 5s report cadence and
+// bounded 8s probe, with a small margin. Contact and effect proofs stay stricter.
+const SparkObservationFreshness = 45 * time.Second
+
 var SparkFeatures = map[string]int{"spark_telemetry_v1": 1, "spark_inventory_v1": 1, "spark_control_v1": 1, "spark_logs_v1": 1}
 
 // SparkExtensionV1 is optional in the unchanged schema-3 envelope. These are

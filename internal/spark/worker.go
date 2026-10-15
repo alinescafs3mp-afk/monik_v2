@@ -86,6 +86,8 @@ type Worker struct {
 	lastContact    time.Time
 	collection     collectedSnapshot
 	collectRunning bool
+
+	lastBrokerAttempt time.Time
 }
 
 func OpenWorker(configPath, brokerSocket string) (*Worker, error) {
@@ -264,7 +266,7 @@ func (w *Worker) tick() {
 	snapshot := w.brokerSnapshot
 	lastBroker := w.lastBroker
 	w.mu.Unlock()
-	fresh := !lastBroker.IsZero() && now.Sub(lastBroker) <= 15*time.Second
+	fresh := !lastBroker.IsZero() && now.Sub(lastBroker) <= protocol.SparkObservationFreshness
 	controlCap := protocol.Capability{Status: protocol.CapUnsupported, Reason: "local_broker_not_configured"}
 	logsCap := protocol.Capability{Status: protocol.CapUnsupported, Reason: "local_logs_not_approved"}
 	if fresh {
@@ -402,11 +404,15 @@ func (w *Worker) refreshBroker() {
 		return
 	}
 	w.mu.Lock()
-	if w.brokerRunning {
+	now := time.Now()
+	if !w.brokerRefreshDueLocked(now) {
 		w.mu.Unlock()
 		return
 	}
 	w.brokerRunning = true
+	// Failed probes consume the same background interval as successful ones.
+	// Record the attempt before launching, while the no-overlap guard is held.
+	w.lastBrokerAttempt = now
 	w.mu.Unlock()
 	w.wg.Add(1)
 	go func() {
@@ -426,6 +432,30 @@ func (w *Worker) refreshBroker() {
 		w.lastBroker = time.Now()
 		w.mu.Unlock()
 	}()
+}
+
+// The report/contact loop stays at five seconds. Only idle model observation is
+// slower; actions and transitions retain its normal cadence. Reading logs does not
+// increase model health polling.
+// The caller holds w.mu. Cached observations keep their original timestamps.
+func (w *Worker) brokerRefreshDueLocked(now time.Time) bool {
+	if w.brokerRunning {
+		return false
+	}
+	if w.lastBrokerAttempt.IsZero() || now.Sub(w.lastBrokerAttempt) >= 30*time.Second {
+		return true
+	}
+	for _, job := range w.jobs {
+		if !job.Acked || job.running || job.stageRenewing || member(string(job.Receipt.Status), string(protocol.TargetAccepted), string(protocol.TargetRunning), string(protocol.TargetUnknownResult), string(protocol.TargetAwaitingConfirmation)) {
+			return true
+		}
+	}
+	for _, state := range w.brokerSnapshot.States {
+		if member(state.SupervisorState, "starting", "stopping") {
+			return true
+		}
+	}
+	return false
 }
 func (w *Worker) authenticatedRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var data []byte

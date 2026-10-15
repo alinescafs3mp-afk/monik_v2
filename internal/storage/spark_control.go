@@ -15,11 +15,11 @@ func (s *Store) ValidateSparkControl(agentID string, p protocol.ModelActionParam
 	if err != nil {
 		return nil, nil, err
 	}
-	fresh := func(at time.Time) bool {
+	fresh := func(at time.Time, limit time.Duration) bool {
 		age := s.now().Sub(at)
-		return age >= -5*time.Second && age <= protocol.SparkControlFreshness
+		return age >= -5*time.Second && age <= limit
 	}
-	if ag.Revoked || ag.Archived || ag.Conflict || ag.LastLiveAt == nil || !fresh(*ag.LastLiveAt) || ag.SessionID != p.ExpectedAgentSession {
+	if ag.Revoked || ag.Archived || ag.Conflict || ag.LastLiveAt == nil || !fresh(*ag.LastLiveAt, protocol.SparkControlFreshness) || ag.SessionID != p.ExpectedAgentSession {
 		return nil, nil, fmt.Errorf("agent_offline_or_session_changed")
 	}
 	var caps map[string]protocol.Capability
@@ -34,7 +34,7 @@ func (s *Store) ValidateSparkControl(agentID string, p protocol.ModelActionParam
 		return nil, nil, err
 	}
 	c := v.Spark.ControlState
-	if v.AgentSession != ag.SessionID || !fresh(v.ObservedAt) || c == nil || !c.Enabled || c.Epoch == nil || *c.Epoch != p.ControlEpoch || !fresh(c.ObservedAt) {
+	if v.AgentSession != ag.SessionID || !fresh(v.ObservedAt, protocol.SparkControlFreshness) || c == nil || !c.Enabled || c.Epoch == nil || *c.Epoch != p.ControlEpoch || !fresh(c.ObservedAt, protocol.SparkObservationFreshness) {
 		return nil, nil, fmt.Errorf("stale_or_disabled_control")
 	}
 	if v.Spark.Inventory == nil {
@@ -67,7 +67,7 @@ func (s *Store) ValidateSparkControl(agentID string, p protocol.ModelActionParam
 			break
 		}
 	}
-	if state == nil || state.Generation != p.ExpectedGeneration || state.Quality != "ok" || !fresh(state.ObservedAt) {
+	if state == nil || state.Generation != p.ExpectedGeneration || state.Quality != "ok" || !fresh(state.ObservedAt, protocol.SparkObservationFreshness) {
 		return nil, nil, fmt.Errorf("stale_generation_or_state")
 	}
 	if action == "model.restart" {
@@ -305,8 +305,18 @@ func (s *Store) AuthorizeSparkStartStage(agentID, opID, jobID string) (*protocol
 			}
 		}
 		p := protocol.ModelActionParams{ProfileID: profile, ProfileRevision: revision, ExpectedGeneration: generation, ControlEpoch: epoch, ExpectedAgentSession: session, ConfirmDisruption: true}
-		if _, _, e = ts.ValidateSparkControl(agentID, p, "model.start"); e != nil {
+		current, state, e := ts.ValidateSparkControl(agentID, p, "model.start")
+		if e != nil {
 			return e
+		}
+		// Cached observations may propose a new operation, but minting this
+		// restart's next effect lease still requires fresh stop/control proof.
+		stageNow := s.now()
+		if age := stageNow.Sub(current.Spark.ControlState.ObservedAt); age < -5*time.Second || age > protocol.SparkControlFreshness {
+			return fmt.Errorf("stale_or_disabled_control")
+		}
+		if age := stageNow.Sub(state.ObservedAt); age < -5*time.Second || age > protocol.SparkControlFreshness {
+			return fmt.Errorf("restart_stop_unverified")
 		}
 		if rec.Evidence["profile_id"] != profile || rec.Evidence["profile_revision"] != revision || rec.Evidence["control_epoch"] != epoch || rec.Evidence["agent_session"] != session || fmt.Sprint(rec.Evidence["generation"]) != fmt.Sprint(generation) {
 			return fmt.Errorf("restart_stop_unverified")
