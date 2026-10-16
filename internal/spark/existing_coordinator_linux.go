@@ -421,12 +421,79 @@ func (LocalSupervisor) ExistingObserve(ctx context.Context, p Profile) (existing
 }
 
 func (LocalSupervisor) ExistingObserveMany(ctx context.Context, profiles []Profile) ([]existingSnapshot, error) {
-	ids := make([]string, len(profiles))
-	for index, p := range profiles {
-		ids[index] = p.ID
+	return existingObserveMany(ctx, profiles, existingProfilesCall)
+}
+
+// Only the expanded eight-to-ten catalog needs two read-only helpers. The
+// existing one-to-seven observation path and every effect path are unchanged.
+// Both helpers inherit one caller deadline; neither retries or receives a new
+// budget. Their existing command cancellation owns and joins each process group.
+func existingObserveMany(ctx context.Context, profiles []Profile, call func(context.Context, []Profile, existingEnvelope) (existingResponse, error)) ([]existingSnapshot, error) {
+	envelope := func(group []Profile) existingEnvelope {
+		ids := make([]string, len(group))
+		for index, p := range group {
+			ids[index] = p.ID
+		}
+		return existingEnvelope{SchemaVersion: 1, Method: "observe_many", ProfileIDs: ids}
 	}
-	response, err := existingProfilesCall(ctx, profiles, existingEnvelope{SchemaVersion: 1, Method: "observe_many", ProfileIDs: ids})
-	return response.Models, err
+	// Check the complete selector/source approval set before either child can
+	// run: splitting must not hide duplicate IDs or conflicting shared pins.
+	if err := validateExistingProfiles(profiles, envelope(profiles)); err != nil {
+		return nil, err
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if len(profiles) <= 7 {
+		response, err := call(ctx, profiles, envelope(profiles))
+		return response.Models, err
+	}
+	probe, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type result struct {
+		index    int
+		response existingResponse
+		err      error
+	}
+	completed := make(chan result, 2)
+	middle := (len(profiles) + 1) / 2
+	groups := [2][]Profile{profiles[:middle], profiles[middle:]}
+	for index, group := range groups {
+		go func(index int, group []Profile) {
+			response, err := call(probe, group, envelope(group))
+			completed <- result{index, response, err}
+		}(index, group)
+	}
+	var results [2]existingResponse
+	var failed bool
+	for range groups {
+		r := <-completed
+		if r.err != nil {
+			failed = true
+			cancel()
+		}
+		results[r.index] = r.response
+	}
+	// Always join both calls before returning, including error/cancellation.
+	if failed || ctx.Err() != nil {
+		return nil, fmt.Errorf("bounded existing observation pair unavailable")
+	}
+	models := make([]existingSnapshot, 0, len(profiles))
+	for index, group := range groups {
+		if len(results[index].Models) != len(group) {
+			return nil, fmt.Errorf("incomplete existing observation pair")
+		}
+		models = append(models, results[index].Models...)
+	}
+	// Child decoders already enforce every raw field. Recheck every joined
+	// member at the common completion point, preserving canonical order,
+	// exact revision and the original five-second native timestamp limit.
+	for index, p := range profiles {
+		if validateExistingSnapshot(models[index], p) != nil || models[index].ProfileRevision != p.Target.Existing.BackendRevision {
+			return nil, fmt.Errorf("invalid existing observation pair member")
+		}
+	}
+	return models, nil
 }
 func (LocalSupervisor) ExistingBind(ctx context.Context, p Profile, b existingBinding) error {
 	_, e := existingCall(ctx, p, existingEnvelope{SchemaVersion: 1, Method: "bind_current_agent", Binding: &b})
