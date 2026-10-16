@@ -1,0 +1,13 @@
+# Exact three new fixed-model actions only; existing rules unchanged.
+Dest ALL=(root) NOPASSWD: /usr/local/sbin/spark-modelctl-v4 start glm45-air-106b-derestricted, \
+    /usr/local/sbin/spark-modelctl-v4 stop glm45-air-106b-derestricted, \
+    /usr/local/sbin/spark-modelctl-v4 status glm45-air-106b-derestricted, \
+    /usr/local/sbin/spark-modelctl-v4 status glm45-air-106b-derestricted --json, \
+    /usr/local/sbin/spark-modelctl-v4 start gemma4-31b-deckard-heretic, \
+    /usr/local/sbin/spark-modelctl-v4 stop gemma4-31b-deckard-heretic, \
+    /usr/local/sbin/spark-modelctl-v4 status gemma4-31b-deckard-heretic, \
+    /usr/local/sbin/spark-modelctl-v4 status gemma4-31b-deckard-heretic --json, \
+    /usr/local/sbin/spark-modelctl-v4 start nemotron-super-49b-v15-abliterated, \
+    /usr/local/sbin/spark-modelctl-v4 stop nemotron-super-49b-v15-abliterated, \
+    /usr/local/sbin/spark-modelctl-v4 status nemotron-super-49b-v15-abliterated, \
+    /usr/local/sbin/spark-modelctl-v4 status nemotron-super-49b-v15-abliterated --json

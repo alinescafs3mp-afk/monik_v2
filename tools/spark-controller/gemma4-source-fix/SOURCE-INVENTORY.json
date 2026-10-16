@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "scope": "Public immutable image source hashes, not a host receipt or runtime approval",
+  "image": {
+    "image_id": "sha256:6986488e0bb80d1a879fc6d40a66c048efd5c77c9ed897a68fe6a98dd88118f5",
+    "repository_digest": "ghcr.io/aeon-7/gemma-4-31b-uncensored-nvfp4-dflash@sha256:6986488e0bb80d1a879fc6d40a66c048efd5c77c9ed897a68fe6a98dd88118f5",
+    "raw_OCI_config_descriptor": "sha256:78479909123b685a34443f51efd4b62414eacdcc9029e6890bc2b68b40966c53",
+    "public_config_canonical_sha256": "0a76674cae0a7f0ac321e06fa82d42133264ee130e0c8048935280b42639436b",
+    "platform": "linux/arm64"
+  },
+  "source_files": {
+    "entrypoint.sh": {
+      "container_path": "/opt/gemma31-dflash/entrypoint.sh",
+      "sha256": "c817f613e118c1f42f5002f33f45bcb79b493fbb474fa62cb02e0d2fd998f3b0",
+      "bytes": 4611
+    },
+    "vllm/config/attention.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/config/attention.py",
+      "sha256": "046443b05da8811d409c1249dbb1e1e4a165560c721d88b9b95058d2a02974ee",
+      "bytes": 3193
+    },
+    "vllm/config/speculative.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/config/speculative.py",
+      "sha256": "3ebc65fec8e8893b21dcc5acaa881e3c52ce46f35c5a3fa9906a712a65444773",
+      "bytes": 44311
+    },
+    "vllm/entrypoints/openai/chat_completion/serving.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/entrypoints/openai/chat_completion/serving.py",
+      "sha256": "8c41af967ef813bf6fd2e2f16b8eedbbf6098d78c971639a58b6297d1c217c02",
+      "bytes": 81494
+    },
+    "vllm/model_executor/layers/quantization/modelopt.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/modelopt.py",
+      "sha256": "af2e8c0d20803a16d6ba1d4d2d231356d94dc86b9609b2c45797fcf8f2cb9957",
+      "bytes": 83323
+    },
+    "vllm/model_executor/models/gemma4.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/models/gemma4.py",
+      "sha256": "320e23d985c68e208530c6a2553946f863d505fb6eb5032b2a4987bf6c1879cd",
+      "bytes": 67968
+    },
+    "vllm/model_executor/models/qwen3_dflash.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/models/qwen3_dflash.py",
+      "sha256": "688829793cb8b666deff648cd779d74892f5e6fbfa02fbe2079faf9f87ce7196",
+      "bytes": 27858
+    },
+    "vllm/reasoning/gemma4_reasoning_parser.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/reasoning/gemma4_reasoning_parser.py",
+      "sha256": "64a1d3f05e22cee893ebc1f2507a150eaadf4d06e3efac5035c6ab94480a739e",
+      "bytes": 9297
+    },
+    "vllm/tool_parsers/gemma4_tool_parser.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/tool_parsers/gemma4_tool_parser.py",
+      "sha256": "47e51ed34c1ca618707e6d266b72f6f95de7c9e0c234f4baba137e210a994e26",
+      "bytes": 27983
+    },
+    "vllm/transformers_utils/configs/speculators/algos.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/transformers_utils/configs/speculators/algos.py",
+      "sha256": "549b9252c4e2d0382998ca17383b171a912267939002b510119855cc0950dff7",
+      "bytes": 3494
+    },
+    "vllm/v1/attention/backends/triton_attn.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/attention/backends/triton_attn.py",
+      "sha256": "0e7f0f6cddc84a80d005f9db8b404b46957d0bbe5bb7cc0a3180904394ca54ec",
+      "bytes": 29244
+    },
+    "vllm/v1/attention/selector.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/attention/selector.py",
+      "sha256": "e31b95dcb5af18b69708c377a689312f8a237aa9a69239213cbcbf199f50f00a",
+      "bytes": 5496
+    },
+    "vllm/v1/core/kv_cache_utils.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/core/kv_cache_utils.py",
+      "sha256": "ac486e5d6a72071beadf76a58dc9947115ae1f360842b512a58f7b2f26298a28",
+      "bytes": 87780
+    },
+    "vllm/v1/core/sched/scheduler.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/core/sched/scheduler.py",
+      "sha256": "19213098b22e8e23e7d2cd5b6aa37218c24f1e9d664141f3e7085699180d4204",
+      "bytes": 106039
+    },
+    "vllm/v1/metrics/loggers.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/metrics/loggers.py",
+      "sha256": "d1998a556e7decf9d11869f4b62a0a34977be9b147b3db1352d4baae10f5551b",
+      "bytes": 51893
+    },
+    "vllm/v1/spec_decode/dflash.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/spec_decode/dflash.py",
+      "sha256": "cdcfcbe32a88df812aed82724f5f05e1b62a21d77167a1bdf311e8c0885d9308",
+      "bytes": 13685
+    },
+    "vllm/v1/spec_decode/utils.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/spec_decode/utils.py",
+      "sha256": "cab3e90c6faf2081b272f8b98695da9bd34d0f3cdca3c55cf91da0a2092f7b49",
+      "bytes": 25166
+    },
+    "vllm/v1/worker/gpu_model_runner.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/v1/worker/gpu_model_runner.py",
+      "sha256": "54c5e2c09994b78eb74ba663182c5ca2c2792ac4ee50f7d3cf411f598d9a1bd2",
+      "bytes": 310967
+    },
+    "vllm/version.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/version.py",
+      "sha256": "bd7a42776b630b611e2f5fa4698bc97e1f4f2583c35ccb246ec2e7bd43c83313",
+      "bytes": 1339
+    },
+    "vllm/model_executor/layers/linear.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/linear.py",
+      "sha256": "4bc3c8cc2696c05ca6e3ac01be72c77a78c493281af616de21a97d51b015e6ed",
+      "bytes": 63239
+    },
+    "vllm/model_executor/layers/quantization/__init__.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/layers/quantization/__init__.py",
+      "sha256": "51efb85234674eb28ec4d478eb23f75cc623ae4ff8f4c396622eb253b81e5332",
+      "bytes": 6643
+    },
+    "vllm/model_executor/model_loader/base_loader.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/model_loader/base_loader.py",
+      "sha256": "8da0723b6af4e9f5ef6ce667ca6ae6e7187aa3c7ad6eb06f5cf7cb5a0b46c474",
+      "bytes": 3645
+    },
+    "vllm/model_executor/model_loader/utils.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/model_loader/utils.py",
+      "sha256": "9236b82a7476a242ab708731af071f322fd91072f10a5246cc3a5614ab527ad0",
+      "bytes": 11075
+    },
+    "vllm/model_executor/parameter.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/parameter.py",
+      "sha256": "2748f088e5173d5009c7e8884a71c07bc35809c1a9aa7575c251e2ffee9e452c",
+      "bytes": 21973
+    },
+    "vllm/model_executor/models/gemma4_mm.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/models/gemma4_mm.py",
+      "sha256": "98b57994a9cec47c0d5d5590f41a707acab3753f5f0f2e6f620b486b0dd7a5c4",
+      "bytes": 57691
+    },
+    "vllm/model_executor/models/registry.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/models/registry.py",
+      "sha256": "e753cf1c6fa11cf609d3459fd50c41316acd479b35445954d5166c99834099ea",
+      "bytes": 55111
+    },
+    "vllm/config/model.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/config/model.py",
+      "sha256": "bae5239e76832af767eac3d250fcf8da7986fef0605a4eebaee7bc6a125a3cc6",
+      "bytes": 88725
+    },
+    "vllm/config/vllm.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/config/vllm.py",
+      "sha256": "462260430b2635d0c53e3bbc0c5f7ec3b2c429cd4c34de42b891d4cd0430065c",
+      "bytes": 88681
+    },
+    "vllm/model_executor/model_loader/__init__.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/model_loader/__init__.py",
+      "sha256": "a8b9804eba44d4f20901db9528825aa69095fb159766f76079cf2db82095b3e4",
+      "bytes": 5081
+    },
+    "vllm/model_executor/model_loader/default_loader.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/model_loader/default_loader.py",
+      "sha256": "0557f6a5d37bd5f3bd109380853f8247f1d6828b9e3a28f9b70316fc69776793",
+      "bytes": 15325
+    },
+    "vllm/model_executor/models/utils.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/models/utils.py",
+      "sha256": "b8c73a2014f76476a316dc31337d8cf74c47052fbae03ec602c18c5779df6f04",
+      "bytes": 29642
+    },
+    "vllm/model_executor/model_loader/weight_utils.py": {
+      "container_path": "/usr/local/lib/python3.12/site-packages/vllm/model_executor/model_loader/weight_utils.py",
+      "sha256": "eac985cbab1b3ddfcfa170c236b82ee0a78e3d70291e633c243a848f93a5d6e1",
+      "bytes": 61382
+    }
+  }
+}

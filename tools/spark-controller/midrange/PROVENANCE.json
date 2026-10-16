@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "SOURCE_ONLY_ALL_THREE_DISABLED",
+  "models": {
+    "glm45-air-106b-derestricted": {
+      "repository": "noctrex/GLM-4.5-Air-Derestricted-MXFP4_MOE-GGUF",
+      "revision": "d4577271c93af67f9f5ae3dbe6f4dd6f76bf2a93",
+      "quant": "MXFP4_MOE"
+    },
+    "gemma4-31b-deckard-heretic": {
+      "repository": "AEON-7/Gemma-4-31B-it-DECKARD-HERETIC-Uncensored-NVFP4",
+      "revision": "c9f11f3cbeb8efc93d5afcb5dc1b33abee1f09ba",
+      "draft_repository": "z-lab/gemma-4-31B-it-DFlash",
+      "draft_revision": "eabd648301ce28583cc14757912e5e0f84e152e1",
+      "quant": "NVFP4_AWQ"
+    },
+    "nemotron-super-49b-v15-abliterated": {
+      "repository": "timteh673/Nemotron-Super-49B-v1.5-Uncensored-GGUF",
+      "quant": "Q5_K_M",
+      "revision": "778ccafd8bfde4f13752c7a47a484967638d8d66"
+    }
+  },
+  "artifact_hashes": "See disabled rows/*.json; hashes are expected inputs, not integrity/preparation receipts."
+}

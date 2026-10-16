@@ -1,6 +1,14 @@
 {
-  "status": "PROPOSAL_NOT_APPLIED",
+  "status": "PUBLIC_SOURCE_PROPOSAL_NOT_APPLIED",
   "files": [
+    {
+      "path": "/etc/sudoers.d/spark-v4-midrange-20261015",
+      "source": "deployment/etc/sudoers.d/spark-v4-midrange-20261015",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0440",
+      "sha256": "b786af9fca61a9d5d539c8b367f985d9ea55eb156c6bf2c3359b0cb339c9377e"
+    },
     {
       "path": "/etc/systemd/system/spark-sglang.service.d/99-monik-shared-controller.conf",
       "source": "deployment/etc/systemd/system/spark-sglang.service.d/99-monik-shared-controller.conf",
@@ -8,6 +16,22 @@
       "uid": 0,
       "gid": 0,
       "mode": "0644"
+    },
+    {
+      "path": "/etc/systemd/system/spark-v4-gemma4-31b-deckard-heretic@.service",
+      "source": "deployment/etc/systemd/system/spark-v4-gemma4-31b-deckard-heretic@.service",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "0b3d0dd8877ad65347d8053d25d48acbffa718f529810db06d53b64d023f8113"
+    },
+    {
+      "path": "/etc/systemd/system/spark-v4-glm45-air-106b-derestricted@.service",
+      "source": "deployment/etc/systemd/system/spark-v4-glm45-air-106b-derestricted@.service",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "1ae3d87801cd6962f484fa346f3077a200945bdfd853635f838c34a15d44fe21"
     },
     {
       "path": "/etc/systemd/system/spark-v4-gpt-oss-120b-existing-configured@.service",
@@ -18,12 +42,44 @@
       "mode": "0644"
     },
     {
+      "path": "/etc/systemd/system/spark-v4-nemotron-super-49b-v15-abliterated@.service",
+      "source": "deployment/etc/systemd/system/spark-v4-nemotron-super-49b-v15-abliterated@.service",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "c708c270f21fb2765af5fac73add0f06da30b3f36caab3a7c39ec82e91dc8f6d"
+    },
+    {
+      "path": "/home/Dest/start_gemma4_31b_deckard_heretic_v4.sh",
+      "source": "deployment/home/Dest/start_gemma4_31b_deckard_heretic_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "b7b41b59cce49dd5b1bf2f09eee2369190e6c72002ab0d9010593a1f6863d510"
+    },
+    {
+      "path": "/home/Dest/start_glm45_air_106b_derestricted_v4.sh",
+      "source": "deployment/home/Dest/start_glm45_air_106b_derestricted_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "6dfe947ad1c29ab5c357a7d0c52421d3112fa54c1b8323c381dfe6fae8629031"
+    },
+    {
       "path": "/home/Dest/start_gpt_oss_120b_existing_shared.sh",
       "source": "deployment/home/Dest/start_gpt_oss_120b_existing_shared.sh",
       "sha256": "6c19eed9ba588fff17330ac2bf1774702747bd5dd5737ce01c53964bf262e1a8",
       "uid": 1000,
       "gid": 1000,
       "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/start_nemotron_super_49b_v15_abliterated_v4.sh",
+      "source": "deployment/home/Dest/start_nemotron_super_49b_v15_abliterated_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "fb853a5b0f479870b016ff16a80c3b7a4c83c909cad5bb759fef0e1f18c4391f"
     },
     {
       "path": "/home/Dest/start_qwen_existing_shared.sh",
@@ -34,12 +90,36 @@
       "mode": "0755"
     },
     {
+      "path": "/home/Dest/status_gemma4_31b_deckard_heretic_v4.sh",
+      "source": "deployment/home/Dest/status_gemma4_31b_deckard_heretic_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "ae1de14994b39974c3c7e3fdc95650dc6bbbec1d65eb2c3915adcbb556827a80"
+    },
+    {
+      "path": "/home/Dest/status_glm45_air_106b_derestricted_v4.sh",
+      "source": "deployment/home/Dest/status_glm45_air_106b_derestricted_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "fbf790072904556211675ee935d184e834db67854bb873d46701fbaf240514bc"
+    },
+    {
       "path": "/home/Dest/status_gpt_oss_120b_existing_shared.sh",
       "source": "deployment/home/Dest/status_gpt_oss_120b_existing_shared.sh",
       "sha256": "c8da9d1287dc2d4478e553ee838ba305b1a07fd478ba6ba2d6075eb69a3a8356",
       "uid": 1000,
       "gid": 1000,
       "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/status_nemotron_super_49b_v15_abliterated_v4.sh",
+      "source": "deployment/home/Dest/status_nemotron_super_49b_v15_abliterated_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "681afa519a1dde6b49aca87adafc79627e56e6c8ee6605a7bef3e97f4e0d6630"
     },
     {
       "path": "/home/Dest/status_qwen_existing_shared.sh",
@@ -50,12 +130,36 @@
       "mode": "0755"
     },
     {
+      "path": "/home/Dest/stop_gemma4_31b_deckard_heretic_v4.sh",
+      "source": "deployment/home/Dest/stop_gemma4_31b_deckard_heretic_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "fdbed4965c325bd19cf26d683e92f060eae9eef439e854e06d02b0b37cf5c477"
+    },
+    {
+      "path": "/home/Dest/stop_glm45_air_106b_derestricted_v4.sh",
+      "source": "deployment/home/Dest/stop_glm45_air_106b_derestricted_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "bb936dcfcad9f4d44b17b151b88712a8dbdd4f716d8badd0002b90c4772c593c"
+    },
+    {
       "path": "/home/Dest/stop_gpt_oss_120b_existing_shared.sh",
       "source": "deployment/home/Dest/stop_gpt_oss_120b_existing_shared.sh",
       "sha256": "389b039b299bfcfead33852673671050b3b247ca22346885e533e352fdbf9e81",
       "uid": 1000,
       "gid": 1000,
       "mode": "0755"
+    },
+    {
+      "path": "/home/Dest/stop_nemotron_super_49b_v15_abliterated_v4.sh",
+      "source": "deployment/home/Dest/stop_nemotron_super_49b_v15_abliterated_v4.sh",
+      "uid": 1000,
+      "gid": 1000,
+      "mode": "0750",
+      "sha256": "ff8ca0d856dc9ec15c3aa100acb5254974b5148f50b655787a44fbdd9abed6d0"
     },
     {
       "path": "/home/Dest/stop_qwen_existing_shared.sh",
@@ -84,7 +188,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/modelctl.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/modelctl.py",
-      "sha256": "af3722fbe40de2e3afe1c75c33ad007de47009fe112fe21b78d62ae0e089dcbb",
+      "sha256": "248a5f01ae316a71e4bb3caa0ce50302bbe0e8c437c2ea4f4620258d904cfcac",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -100,7 +204,7 @@
     {
       "path": "/opt/spark/model-collection-v4/bin/supervisor.py",
       "source": "deployment/opt/spark/model-collection-v4/bin/supervisor.py",
-      "sha256": "16517b8e16ca95ef305d097110b11dc5961836f5ba4a45fcb18833dfd536676d",
+      "sha256": "51a119fcdb3894d681afefc6baaf8936836495f054f4c847f71c6e21fe86a76e",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -108,7 +212,47 @@
     {
       "path": "/opt/spark/model-collection-v4/config/controller-manifest.json",
       "source": "deployment/opt/spark/model-collection-v4/config/controller-manifest.json",
-      "sha256": "828838713ce04b14ffab7f3b3b155ea57be03f0db0f722650bf380c1cc89f886",
+      "sha256": "dd3e2807b03a84603d544c68699ac73cc98de79f02ebc8258706c193bfaeb011",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/config/launcher-installation.json",
+      "source": "deployment/opt/spark/model-collection-v4/config/launcher-installation.json",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "3d9008071a6f3dd070b5bf926dbdcc9f0b5534b5f25ab650f60c8b3e603d6011"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/config/tui-models.json",
+      "source": "deployment/opt/spark/model-collection-v4/config/tui-models.json",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "de4b9324bd61fa6c335163e1129685e15c22d5300646165e073da086be573a74"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py",
+      "source": "deployment/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "1b05153c3675ae24a94d6776650d8e6907f7c1760797a84fe6f0f985b5cb9c91"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py",
+      "source": "deployment/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py",
+      "uid": 0,
+      "gid": 0,
+      "mode": "0644",
+      "sha256": "e3000ae6fba848a6547ad895b566efa01489bf97061be443a55f671634da5e4d"
+    },
+    {
+      "path": "/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
+      "source": "deployment/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
+      "sha256": "443bcfc4b8f98d03072b01d6edd72cfec50ec81fd1973c9d2cab9272d5815616",
       "uid": 0,
       "gid": 0,
       "mode": "0644"
@@ -138,14 +282,6 @@
       "mode": "0750"
     },
     {
-      "path": "/usr/local/sbin/spark-stop-qwen",
-      "source": "deployment/usr/local/sbin/spark-stop-qwen",
-      "sha256": "f1569dad352a2c0125fb2071741fc54f6871a6cd9d7f22765ade5b938be2423c",
-      "uid": 0,
-      "gid": 0,
-      "mode": "0750"
-    },
-    {
       "path": "/usr/local/sbin/spark-stop-gpt",
       "source": "deployment/usr/local/sbin/spark-stop-gpt",
       "sha256": "3fcfaf6c17259dd537944d978bf787e83abb386e0fcad56a61e1aecea8a544af",
@@ -154,12 +290,12 @@
       "mode": "0750"
     },
     {
-      "path": "/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
-      "source": "deployment/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
-      "sha256": "443bcfc4b8f98d03072b01d6edd72cfec50ec81fd1973c9d2cab9272d5815616",
+      "path": "/usr/local/sbin/spark-stop-qwen",
+      "source": "deployment/usr/local/sbin/spark-stop-qwen",
+      "sha256": "f1569dad352a2c0125fb2071741fc54f6871a6cd9d7f22765ade5b938be2423c",
       "uid": 0,
       "gid": 0,
-      "mode": "0644"
+      "mode": "0750"
     }
   ],
   "directories": [
@@ -197,6 +333,7 @@
   "compare_before_merge": {
     "controller-manifest_base_sha256": "57b5dccf340b7b6be4a52ea33432fc50f08aaa99ebb4636a91bf024596bd4f7d",
     "tui_config_base_sha256": "b51da481a46ca53a6d2553a6feff1b2553af516f454b147f20acf5aef50e62bd",
-    "on_drift": "Stop installation and merge current safe state; never overwrite concurrent/current source or state"
+    "on_drift": "Stop installation and merge current safe state; never overwrite concurrent/current source or state",
+    "scope": "Historical first-integration CAS witnesses below, not a current-host admission. Fresh full source/config/policy/alias/lock/service CAS is mandatory; see MIDRANGE-SOURCE-2026-10-16.md."
   }
 }

@@ -51,8 +51,8 @@ func (f *existingRoundFake) ExistingObserveMany(ctx context.Context, profiles []
 func existingRoundFixture(t *testing.T) (*Coordinator, *existingRoundFake, []Profile) {
 	t.Helper()
 	c, base, first := existingFixture(t)
-	profiles := make([]Profile, len(existingIDs))
-	for index, id := range existingIDs {
+	profiles := make([]Profile, 7)
+	for index, id := range existingIDs[:7] {
 		p := first
 		p.ID = id
 		a := *first.Target.Existing

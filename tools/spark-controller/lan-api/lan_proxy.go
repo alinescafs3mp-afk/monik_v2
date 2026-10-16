@@ -1,4 +1,4 @@
-// Fixed authenticated LAN ingress for the five prepared V4 APIs.
+// Fixed authenticated LAN ingress for the eight fixed V4 API ports.
 // It never launches an engine or changes a model request.
 package main
 
@@ -39,7 +39,7 @@ const (
 	nemoModel       = "nemotron-3-super-120b-heretic-v2"
 )
 
-var fixedPorts = [...]int{31001, 31002, 31003, 31004, 31005}
+var fixedPorts = [...]int{31001, 31002, 31003, 31004, 31005, 31006, 31007, 31008}
 
 type gateway struct {
 	key       []byte
@@ -138,11 +138,21 @@ func (g *gateway) handler(port int) (http.Handler, error) {
 		requiredModel = lingModel
 	case 31004:
 		requiredModel = nemoModel
+	case 31006:
+		requiredModel = "glm45-air-106b-derestricted"
+	case 31007:
+		requiredModel = "gemma4-31b-deckard-heretic"
+	case 31008:
+		requiredModel = "nemotron-super-49b-v15-abliterated"
 	}
 	target := "127.0.0.1:" + strconv.Itoa(port)
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
-			// Keep path/query/body/model settings; never derive a target from a request.
+			// Fixed Gemma count alias only; keep query/body/model settings.
+			if port == 31007 && pr.In.Method == http.MethodPost && pr.In.URL.Path == "/v1/tokenize" {
+				pr.Out.URL.Path = "/tokenize"
+				pr.Out.URL.RawPath = ""
+			}
 			pr.Out.URL.Scheme = "http"
 			pr.Out.URL.Host = target
 			pr.Out.Host = target
@@ -172,6 +182,15 @@ func (g *gateway) handler(port int) (http.Handler, error) {
 		}
 		if !allowedPath(r.URL) {
 			fail(w, http.StatusNotFound)
+			return
+		}
+		gemmaCount := port == 31007 && r.URL.Path == "/v1/tokenize"
+		if gemmaCount && r.URL.EscapedPath() != "/v1/tokenize" {
+			fail(w, http.StatusNotFound)
+			return
+		}
+		if gemmaCount && r.Method != http.MethodPost {
+			fail(w, http.StatusMethodNotAllowed)
 			return
 		}
 		if (r.Method != http.MethodGet && r.Method != http.MethodPost) || (r.URL.Path == "/health" && r.Method != http.MethodGet) {
@@ -210,7 +229,7 @@ func (g *gateway) handler(port int) (http.Handler, error) {
 			body.remaining.Store(r.ContentLength)
 			r.Body = body
 		}
-		if requiredModel != "" && r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions" {
+		if requiredModel != "" && r.Method == http.MethodPost && (r.URL.Path == "/v1/chat/completions" || gemmaCount) {
 			if !g.reserveLingBody(r.ContentLength) {
 				fail(w, http.StatusServiceUnavailable)
 				return
@@ -226,7 +245,7 @@ func (g *gateway) handler(port int) (http.Handler, error) {
 				return
 			}
 			if !exactModel(body, requiredModel) {
-				if port == 31004 {
+				if port != 31002 {
 					failNemoModel(w)
 				} else {
 					fail(w, http.StatusBadRequest)

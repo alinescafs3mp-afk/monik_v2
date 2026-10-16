@@ -37,7 +37,7 @@ def container_argv(row, run):
             '--tmpfs', '/tmp:rw,nosuid,nodev,size=' + str(runtime.get('tmpfs_bytes', 2 * 1024**3)),
             '--log-driver', 'local', '--log-opt', 'max-size=10m',
             '--log-opt', 'max-file=3']
-    if row['id'] == IDS[2]:
+    if row['id'] in (IDS[2], 'gemma4-31b-deckard-heretic'):
         # Mistral's native compiler loads shared objects from this private,
         # bounded cache. The generic /tmp mount retains Docker's noexec default.
         args += ['--tmpfs', '/tmp/spark-compiled-cache:rw,exec,nosuid,nodev,size=2147483648,uid=1000,gid=1000']

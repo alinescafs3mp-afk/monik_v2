@@ -1,0 +1,26 @@
+[Unit]
+Description=Spark V4 glm45-air-106b-derestricted exact-run supervisor
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/opt/spark/model-collection-v4/config/controller-manifest.json
+[Service]
+Type=exec
+User=root
+Group=root
+UMask=0027
+ExecStart=/usr/bin/python3 -I /opt/spark/model-collection-v4/bin/supervisor.py glm45-air-106b-derestricted %i
+Restart=no
+KillMode=mixed
+TimeoutStartSec=15s
+TimeoutStopSec=45s
+SendSIGKILL=yes
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/spark-model-collection-v4 /var/log/spark-model-collection-v4
+RestrictSUIDSGID=yes
+RestrictRealtime=yes

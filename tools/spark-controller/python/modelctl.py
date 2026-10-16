@@ -53,6 +53,14 @@ ENV_KEYS = {'VLLM_NVFP4_GEMM_BACKEND', 'VLLM_ATTENTION_BACKEND', 'VLLM_USE_FLASH
             'FLASHINFER_WORKSPACE_BASE', 'VLLM_NO_USAGE_STATS',
             'VLLM_ENABLE_CUDA_COMPATIBILITY', 'VLLM_USE_V2_MODEL_RUNNER',
             'GGML_CUDA_ENABLE_UNIFIED_MEMORY', 'GGML_CUDA_NO_PINNED'}
+GEMMA_FIXED_ENV = {'TORCH_CUDA_ARCH_LIST': '12.1a', 'TORCH_MATMUL_PRECISION': 'high', 'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True', 'NVIDIA_FORWARD_COMPAT': '1', 'NVIDIA_DISABLE_REQUIRE': '1'}
+GEMMA_FIXED_FILES = {'/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py': {'target': '/usr/local/lib/python3.12/site-packages/vllm/tool_parsers/gemma4_tool_parser.py', 'size': 29664, 'sha256': '1b05153c3675ae24a94d6776650d8e6907f7c1760797a84fe6f0f985b5cb9c91'}, '/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py': {'target': '/usr/local/lib/python3.12/site-packages/vllm/entrypoints/openai/chat_completion/serving.py', 'size': 81393, 'sha256': 'e3000ae6fba848a6547ad895b566efa01489bf97061be443a55f671634da5e4d'}}
+def gemma_file_mount(row, mount):
+    item = GEMMA_FIXED_FILES.get(mount.get('source'))
+    return (row['id'] == 'gemma4-31b-deckard-heretic' and item is not None
+            and mount.get('target') == item['target'] and mount.get('readonly') is True)
+
+
 BASE_ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8',
             'LC_ALL': 'C.UTF-8', 'HOME': '/root'}
 BRIDGE_JOURNAL_CAP = 256
@@ -204,7 +212,10 @@ def validate_manifest(data):
         if argument_value(args, alias_flag) != mid or argument_value(args, '--port') != match[1] or argument_value(args, '--host') != '127.0.0.1':
             raise Refusal(mid + ': argv API model alias/loopback endpoint differs from manifest')
         env = runtime.get('env', {})
-        if not isinstance(env, dict) or not set(env).issubset(ENV_KEYS) or any(not isinstance(v, str) or '\x00' in v or '\n' in v for v in env.values()):
+        allowed_env = ENV_KEYS | (set(GEMMA_FIXED_ENV) if mid == 'gemma4-31b-deckard-heretic' else set())
+        if mid == 'gemma4-31b-deckard-heretic' and (not isinstance(env, dict) or any(env.get(k) != v for k, v in GEMMA_FIXED_ENV.items())):
+            raise Refusal(mid + ': exact audited Gemma compatibility environment required')
+        if not isinstance(env, dict) or not set(env).issubset(allowed_env) or any(not isinstance(v, str) or '\x00' in v or '\n' in v for v in env.values()):
             raise Refusal(mid + ': unsupported environment key/value')
         for key, default in [('shm_bytes', 2 * 1024**3), ('tmpfs_bytes', 2 * 1024**3)]:
             value = runtime.get(key, default)
@@ -220,6 +231,12 @@ def validate_manifest(data):
                 raise Refusal(mid + ': invalid readonly mount')
             if str(source) in {'/', '/proc', '/sys', '/dev', '/run', '/var/run', '/etc', '/root', '/home/Dest'} or 'docker.sock' in str(source) or ',' in str(source) or ',' in str(target):
                 raise Refusal(mid + ': unsafe mount')
+        if mid == 'gemma4-31b-deckard-heretic':
+            for source, fixed in GEMMA_FIXED_FILES.items():
+                if sum(gemma_file_mount(row, m) and m['source'] == source for m in mounts) != 1:
+                    raise Refusal(mid + ': two exact readonly Gemma source overrides required')
+                if sum(a.get('path') == source and a.get('size') == fixed['size'] and a.get('sha256') == fixed['sha256'] for a in artifacts) != 1:
+                    raise Refusal(mid + ': Gemma override artifact hash/size binding differs')
         for art in artifacts:
             if not any(Path(art['path']).is_relative_to(Path(m['source'])) for m in mounts):
                 raise Refusal(mid + ': artifact is not in a readonly mount')
@@ -1192,7 +1209,7 @@ class Controller:
             for artifact in row['artifacts']:
                 protect(Path(artifact['path']))
             for mount in row['runtime']['mounts']:
-                protect(Path(mount['source']), directory=True)
+                protect(Path(mount['source']), directory=not gemma_file_mount(row, mount))
         witnesses = self.adapter.verify_bundle(row)
         with self.store.lock():
             data = self.store.read()
@@ -1216,7 +1233,7 @@ class Controller:
                 protect(path)
             for mount in row['runtime']['mounts']:
                 path = Path(mount['source'])
-                protect(path, directory=path.is_dir() if row['id'] in LEGACY_IDS else True)
+                protect(path, directory=path.is_dir() if row['id'] in LEGACY_IDS else not gemma_file_mount(row, mount))
             # Original image identity check is preserved without weight rehashing.
             image = json.loads(self.adapter.command(['/usr/bin/docker', 'image', 'inspect', row['runtime']['image']], 2.0))
             if len(image) != 1 or image[0].get('Id') != row['runtime']['image_id'] or image[0].get('Architecture') != 'arm64' or image[0].get('Os') != 'linux':

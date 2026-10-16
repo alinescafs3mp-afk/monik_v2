@@ -1,0 +1,163 @@
+{
+  "id": "glm45-air-106b-derestricted",
+  "name": "GLM4.5 Air106B ArliAI Derestricted MXFP4_MOE",
+  "engine": "llama.cpp CUDA",
+  "quant": "MXFP4_MOE",
+  "context": 131072,
+  "endpoint": "http://127.0.0.1:31006/v1",
+  "prepared": false,
+  "required_memory_bytes": 107360816128,
+  "memory_budget": {
+    "resident_weights_bytes": 63337401344,
+    "cache_state_bytes": 24696061952,
+    "runtime_workspace_bytes": 8589934592,
+    "additional_loading_peak_bytes": 2147483648,
+    "safety_headroom_bytes": 8589934592
+  },
+  "runtime": {
+    "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+    "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+    "argv": [
+      "/opt/llama/bin/llama-server",
+      "--model",
+      "/models/GLM-4.5-Air-Derestricted-MXFP4_MOE-00001-of-00004.gguf",
+      "--alias",
+      "glm45-air-106b-derestricted",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "31006",
+      "--ctx-size",
+      "131072",
+      "--parallel",
+      "1",
+      "--gpu-layers",
+      "all",
+      "--split-mode",
+      "none",
+      "--flash-attn",
+      "on",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--batch-size",
+      "2048",
+      "--ubatch-size",
+      "512",
+      "--load-mode",
+      "dio",
+      "--lazy-mode",
+      "off",
+      "--fit",
+      "off",
+      "--cache-ram",
+      "0",
+      "--no-context-shift",
+      "--jinja",
+      "--reasoning",
+      "on",
+      "--spec-type",
+      "none",
+      "--temp",
+      "0.6",
+      "--top-p",
+      "1.0",
+      "--top-k",
+      "0",
+      "--min-p",
+      "0",
+      "--repeat-penalty",
+      "1.0"
+    ],
+    "env": {
+      "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+      "GGML_CUDA_NO_PINNED": "0"
+    },
+    "mounts": [
+      {
+        "source": "/opt/spark/model-collection-v4/models/glm45-air",
+        "target": "/models",
+        "readonly": true
+      },
+      {
+        "source": "/opt/spark/model-collection-v4/runtime/llama",
+        "target": "/opt/llama",
+        "readonly": true
+      }
+    ],
+    "tmpfs_bytes": 536870912,
+    "shm_bytes": 1073741824
+  },
+  "artifacts": [
+    {
+      "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00001-of-00004.gguf",
+      "size": 16944265056,
+      "sha256": "0a2d3b33c1c7e1ee1c3fb22398eb0b45cac79b35c649759df6b354ba0a3052af"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00002-of-00004.gguf",
+      "size": 16667848576,
+      "sha256": "ccbf99fbfa7cab0797115f0f9a1cfd54d19dcb2446968fdee45a47b8e0a2c729"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00003-of-00004.gguf",
+      "size": 16669945792,
+      "sha256": "6a3674540f2c85e9405fd58f0a7c2d7d980dceb044d3f6c21524eec03a8bc562"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00004-of-00004.gguf",
+      "size": 13055341920,
+      "sha256": "ad8b8ddfc5950b128be15465469f6deb076992a9bf7a668fe6a3ddbeb1334264"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+      "size": 876488,
+      "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+      "size": 1001960,
+      "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+      "size": 44376056,
+      "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+      "size": 78104,
+      "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+      "size": 5553784,
+      "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+      "size": 3526392,
+      "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+      "size": 4765544,
+      "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+      "size": 1834984,
+      "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+      "size": 72456,
+      "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+    }
+  ],
+  "evidence_level": "PUBLIC_SOURCE_TEMPLATE_NOT_DEPLOYED_OR_RUNTIME_ACCEPTED",
+  "startup_timeout_seconds": 1800,
+  "stop_timeout_seconds": 90,
+  "block_reason": "Disabled source template. Requires independent artifact integrity/protection, ordinary local policy approval and native preparation, then actual capacity, correctness, context and cleanup qualification."
+}

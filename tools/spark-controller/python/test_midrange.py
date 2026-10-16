@@ -23,6 +23,14 @@ def fixture_rows(manifest, prepared=False):
         flag = '--served-model-name' if index == 1 else '--alias'
         args[args.index(flag) + 1] = mid
         args[args.index('--port') + 1] = str(31006 + index)
+        if index == 1:
+            # Synthetic host effects retain the exact production Gemma authority.
+            row['runtime']['env'].update(core.GEMMA_FIXED_ENV)
+            for source, item in core.GEMMA_FIXED_FILES.items():
+                row['runtime']['mounts'].append(dict(source=source,
+                    target=item['target'], readonly=True))
+                row['artifacts'].append(dict(path=source, size=item['size'],
+                    sha256=item['sha256']))
         rows.append(row)
     return rows
 

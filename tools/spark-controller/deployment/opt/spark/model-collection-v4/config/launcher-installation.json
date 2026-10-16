@@ -1,0 +1,47 @@
+{
+  "home": "/home/Dest",
+  "wrappers": {
+    "qwen3-coder-next-80b-huihui": {
+      "start": "/home/Dest/start_qwen3_coder_next_80b_abliterated_v4.sh",
+      "stop": "/home/Dest/stop_qwen3_coder_next_80b_abliterated_v4.sh",
+      "status": "/home/Dest/status_qwen3_coder_next_80b_abliterated_v4.sh"
+    },
+    "ling-3-flash-124b-heretic-text": {
+      "start": "/home/Dest/start_ling3_flash_124b_heretic_text_v4.sh",
+      "stop": "/home/Dest/stop_ling3_flash_124b_heretic_text_v4.sh",
+      "status": "/home/Dest/status_ling3_flash_124b_heretic_text_v4.sh"
+    },
+    "mistral-small-4-119b-heretic": {
+      "start": "/home/Dest/start_mistral_small4_119b_heretic_v4.sh",
+      "stop": "/home/Dest/stop_mistral_small4_119b_heretic_v4.sh",
+      "status": "/home/Dest/status_mistral_small4_119b_heretic_v4.sh"
+    },
+    "nemotron-3-super-120b-heretic-v2": {
+      "start": "/home/Dest/start_nemotron3_super_120b_heretic_v4.sh",
+      "stop": "/home/Dest/stop_nemotron3_super_120b_heretic_v4.sh",
+      "status": "/home/Dest/status_nemotron3_super_120b_heretic_v4.sh"
+    },
+    "minimax-m27-229b-heretic": {
+      "start": "/home/Dest/start_minimax_m27_229b_heretic_v4.sh",
+      "stop": "/home/Dest/stop_minimax_m27_229b_heretic_v4.sh",
+      "status": "/home/Dest/status_minimax_m27_229b_heretic_v4.sh"
+    },
+    "glm45-air-106b-derestricted": {
+      "start": "/home/Dest/start_glm45_air_106b_derestricted_v4.sh",
+      "stop": "/home/Dest/stop_glm45_air_106b_derestricted_v4.sh",
+      "status": "/home/Dest/status_glm45_air_106b_derestricted_v4.sh"
+    },
+    "gemma4-31b-deckard-heretic": {
+      "start": "/home/Dest/start_gemma4_31b_deckard_heretic_v4.sh",
+      "stop": "/home/Dest/stop_gemma4_31b_deckard_heretic_v4.sh",
+      "status": "/home/Dest/status_gemma4_31b_deckard_heretic_v4.sh"
+    },
+    "nemotron-super-49b-v15-abliterated": {
+      "start": "/home/Dest/start_nemotron_super_49b_v15_abliterated_v4.sh",
+      "stop": "/home/Dest/stop_nemotron_super_49b_v15_abliterated_v4.sh",
+      "status": "/home/Dest/status_nemotron_super_49b_v15_abliterated_v4.sh"
+    }
+  },
+  "tui_entrypoint": "/home/Dest/spark-models-v4.sh",
+  "status": "SOURCE_TEMPLATE_NOT_AN_INSTALLATION_RECEIPT"
+}

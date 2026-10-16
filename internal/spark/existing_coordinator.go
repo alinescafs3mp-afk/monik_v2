@@ -14,7 +14,7 @@ import (
 const existingCoordinatorKind = "existing-coordinator"
 const existingProject = "/opt/spark/model-collection-v4"
 
-var existingIDs = []string{"qwen3-coder-next-80b-huihui", "ling-3-flash-124b-heretic-text", "mistral-small-4-119b-heretic", "nemotron-3-super-120b-heretic-v2", "minimax-m27-229b-heretic", "qwen-existing-observation", "gpt-oss-120b-existing-configured"}
+var existingIDs = []string{"qwen3-coder-next-80b-huihui", "ling-3-flash-124b-heretic-text", "mistral-small-4-119b-heretic", "nemotron-3-super-120b-heretic-v2", "minimax-m27-229b-heretic", "qwen-existing-observation", "gpt-oss-120b-existing-configured", "glm45-air-106b-derestricted", "gemma4-31b-deckard-heretic", "nemotron-super-49b-v15-abliterated"}
 
 // Approval is fixed LOCAL policy, never a remote selector or telemetry-derived
 // approval. BackendRevision has a separate domain from the Go profile revision.

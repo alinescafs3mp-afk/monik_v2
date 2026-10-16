@@ -1,0 +1,155 @@
+{
+  "id": "nemotron-super-49b-v15-abliterated",
+  "name": "Nemotron Super49B v1.5 Abliterated Q5_K_M",
+  "engine": "llama.cpp CUDA",
+  "quant": "Q5_K_M",
+  "context": 131072,
+  "endpoint": "http://127.0.0.1:31008/v1",
+  "prepared": false,
+  "required_memory_bytes": 89615573824,
+  "memory_budget": {
+    "resident_weights_bytes": 35391611712,
+    "cache_state_bytes": 26306674688,
+    "runtime_workspace_bytes": 17179869184,
+    "additional_loading_peak_bytes": 2147483648,
+    "safety_headroom_bytes": 8589934592
+  },
+  "runtime": {
+    "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+    "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+    "argv": [
+      "/opt/llama/bin/llama-server",
+      "--model",
+      "/models/Nemotron-Super-49B-Uncensored-Q5_K_M.gguf",
+      "--alias",
+      "nemotron-super-49b-v15-abliterated",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "31008",
+      "--ctx-size",
+      "131072",
+      "--parallel",
+      "1",
+      "--gpu-layers",
+      "all",
+      "--split-mode",
+      "none",
+      "--flash-attn",
+      "on",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--batch-size",
+      "2048",
+      "--ubatch-size",
+      "512",
+      "--load-mode",
+      "dio",
+      "--lazy-mode",
+      "off",
+      "--fit",
+      "off",
+      "--cache-ram",
+      "0",
+      "--no-context-shift",
+      "--jinja",
+      "--chat-template-file",
+      "/models/chat-template.jinja",
+      "--reasoning",
+      "on",
+      "--spec-type",
+      "none",
+      "--temp",
+      "0.6",
+      "--top-p",
+      "0.95",
+      "--top-k",
+      "0",
+      "--min-p",
+      "0",
+      "--repeat-penalty",
+      "1.0"
+    ],
+    "env": {
+      "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+      "GGML_CUDA_NO_PINNED": "0"
+    },
+    "mounts": [
+      {
+        "source": "/opt/spark/model-collection-v4/models/nemotron49",
+        "target": "/models",
+        "readonly": true
+      },
+      {
+        "source": "/opt/spark/model-collection-v4/runtime/llama",
+        "target": "/opt/llama",
+        "readonly": true
+      }
+    ],
+    "tmpfs_bytes": 536870912,
+    "shm_bytes": 1073741824
+  },
+  "artifacts": [
+    {
+      "path": "/opt/spark/model-collection-v4/models/nemotron49/Nemotron-Super-49B-Uncensored-Q5_K_M.gguf",
+      "size": 35391611712,
+      "sha256": "6a17b134c0cd30b3a64746b356a7289982471c0fbcfe3d69a729072c7daaa581"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/nemotron49/chat-template.jinja",
+      "size": 3246,
+      "sha256": "1b13a386b158bb4033ad9960032530554c47a92d1735c7dfce715efcabf30e5c"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+      "size": 876488,
+      "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+      "size": 1001960,
+      "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+      "size": 44376056,
+      "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+      "size": 78104,
+      "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+      "size": 5553784,
+      "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+      "size": 3526392,
+      "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+      "size": 4765544,
+      "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+      "size": 1834984,
+      "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+      "size": 72456,
+      "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+    }
+  ],
+  "evidence_level": "PUBLIC_SOURCE_TEMPLATE_NOT_DEPLOYED_OR_RUNTIME_ACCEPTED",
+  "startup_timeout_seconds": 1800,
+  "stop_timeout_seconds": 90,
+  "block_reason": "Disabled source template. Requires independent artifact integrity/protection, ordinary local policy approval and native preparation, then actual capacity, correctness, context and cleanup qualification."
+}

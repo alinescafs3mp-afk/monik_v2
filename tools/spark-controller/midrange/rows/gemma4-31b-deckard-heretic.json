@@ -1,0 +1,226 @@
+{
+  "id": "gemma4-31b-deckard-heretic",
+  "name": "Gemma4 31B DECKARD HERETIC NVFP4 +DFlash",
+  "engine": "vLLM",
+  "quant": "NVFP4_AWQ",
+  "context": 131072,
+  "endpoint": "http://127.0.0.1:31007/v1",
+  "prepared": false,
+  "block_reason": "Disabled source template. Requires independent artifact integrity/protection, ordinary local policy approval and native preparation, then actual capacity, correctness, context and cleanup qualification.",
+  "required_memory_bytes": 96536948928,
+  "memory_budget": {
+    "resident_weights_bytes": 23522504896,
+    "cache_state_bytes": 42949672960,
+    "runtime_workspace_bytes": 12884901888,
+    "additional_loading_peak_bytes": 8589934592,
+    "safety_headroom_bytes": 8589934592
+  },
+  "memory_policy": "Provisional reservation, not measured allocation or exact KV geometry. Includes private4GiBtmpfs+2GiBexec cache within12GiBworkspace;8GiB safety. GPUutil0.65 and configured131072 remain explicit; actual KV allocation/loading peak/source compatibility must be reviewed before prepared=true; no automatic fit/offload/context reduction. Conservative10pool KV bound42213048320B at131072 inclprefill/padding fits reserved40GiB; startupgeneric5pool admission is not exactphysicalcapacity proof.",
+  "startup_timeout_seconds": 1800,
+  "stop_timeout_seconds": 90,
+  "runtime": {
+    "image": "ghcr.io/aeon-7/gemma-4-31b-uncensored-nvfp4-dflash@sha256:6986488e0bb80d1a879fc6d40a66c048efd5c77c9ed897a68fe6a98dd88118f5",
+    "image_id": "sha256:6986488e0bb80d1a879fc6d40a66c048efd5c77c9ed897a68fe6a98dd88118f5",
+    "argv": [
+      "/usr/local/bin/vllm",
+      "serve",
+      "/models/deckard",
+      "--served-model-name",
+      "gemma4-31b-deckard-heretic",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "31007",
+      "--tensor-parallel-size",
+      "1",
+      "--dtype",
+      "auto",
+      "--quantization",
+      "modelopt",
+      "--kv-cache-dtype",
+      "auto",
+      "--max-model-len",
+      "131072",
+      "--max-num-seqs",
+      "1",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.65",
+      "--enable-chunked-prefill",
+      "--enable-prefix-caching",
+      "--load-format",
+      "safetensors",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "gemma4",
+      "--reasoning-parser",
+      "gemma4",
+      "--attention-backend",
+      "triton_attn",
+      "--generation-config",
+      "vllm",
+      "--compilation-config",
+      "{\"cudagraph_capture_sizes\":[1,2,4,8,12,16,20,24,28,32,40,48,56,64]}",
+      "--limit-mm-per-prompt",
+      "{\"image\":4,\"video\":2}",
+      "--mm-encoder-tp-mode",
+      "data",
+      "--mm-processor-cache-type",
+      "shm",
+      "--mm-shm-cache-max-object-size-mb",
+      "256",
+      "--speculative-config",
+      "{\"method\":\"dflash\",\"model\":\"/models/gemma-dflash\",\"num_speculative_tokens\":15,\"attention_backend\":\"flash_attn\"}",
+      "--block-size",
+      "16"
+    ],
+    "env": {
+      "TORCH_CUDA_ARCH_LIST": "12.1a",
+      "TORCH_MATMUL_PRECISION": "high",
+      "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+      "NVIDIA_FORWARD_COMPAT": "1",
+      "NVIDIA_DISABLE_REQUIRE": "1",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1",
+      "HF_HOME": "/tmp/spark-compiled-cache/hf",
+      "XDG_CACHE_HOME": "/tmp/spark-compiled-cache/xdg",
+      "CUDA_CACHE_PATH": "/tmp/spark-compiled-cache/cuda",
+      "TORCHINDUCTOR_CACHE_DIR": "/tmp/spark-compiled-cache/torchinductor",
+      "TRITON_CACHE_DIR": "/tmp/spark-compiled-cache/triton",
+      "FLASHINFER_WORKSPACE_BASE": "/tmp/spark-compiled-cache/flashinfer",
+      "VLLM_NO_USAGE_STATS": "1"
+    },
+    "mounts": [
+      {
+        "source": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4",
+        "target": "/models/deckard",
+        "readonly": true
+      },
+      {
+        "source": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash",
+        "target": "/models/gemma-dflash",
+        "readonly": true
+      },
+      {
+        "source": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py",
+        "target": "/usr/local/lib/python3.12/site-packages/vllm/tool_parsers/gemma4_tool_parser.py",
+        "readonly": true
+      },
+      {
+        "source": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py",
+        "target": "/usr/local/lib/python3.12/site-packages/vllm/entrypoints/openai/chat_completion/serving.py",
+        "readonly": true
+      }
+    ],
+    "tmpfs_bytes": 4294967296,
+    "shm_bytes": 2147483648
+  },
+  "artifacts": [
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/README.md",
+      "size": 15513,
+      "sha256": "7fc98e92957ce9974b47bf0031dde3ba15d1e0f63830c8af83198ce30d432b57",
+      "expected_git_blob_sha1": "a40b24c0a14f54806b04ece7c8b6fe9d5fa0919f"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/chat_template-instruct.jinja",
+      "size": 12045,
+      "expected_git_blob_sha1": "33c51c2dbf7e7494b2c055cae7b52f523d3df564",
+      "sha256": "2dfbfc7d538912f4ea11d29d85b4e25d7bc26386e53f57529f1d707c28b5828c"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/chat_template.jinja",
+      "size": 12080,
+      "sha256": "a88ca871315ccd37e1232ae05fb19d0078007bb90d18de8416818825c3b52346",
+      "expected_git_blob_sha1": "0cb12cdecf0c51b073b858c73c25bfe586bd7dc5"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/config.json",
+      "size": 5790,
+      "sha256": "f4cf6df224883b55932c921091b032cdd10af944b111417fcd50f3cee77b1ce6",
+      "expected_git_blob_sha1": "14a3deb8dbe08931d041dbb371e8da59c95ee5d4"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/generation_config.json",
+      "size": 171,
+      "sha256": "58bbe258a499fc164fe5adbc7d975ebe393ba89d1faec0a1c2b70004b014ac47",
+      "expected_git_blob_sha1": "a7cbeb955592c09b5932a3b75e7c4fb9e2ce5e44"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/hf_quant_config.json",
+      "size": 407,
+      "sha256": "ff1caf9529bd3efe50c6fa562b00e94f6346a278e2ea98afe8d5d31b604012b8",
+      "expected_git_blob_sha1": "667136d2dd39caf1e28da2e9917d8625b55d47a2"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/model.safetensors",
+      "size": 20450563656,
+      "sha256": "f8f9ccecc635da40a9d8c3787ca6a524cd1c26950dd8f1687c61fbda7a72c07f",
+      "expected_git_blob_sha1": null
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/processor_config.json",
+      "size": 1689,
+      "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+      "expected_git_blob_sha1": "5465974d23e1eca2c46c2809b26c997946ce0d90"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/tokenizer.json",
+      "size": 32169626,
+      "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+      "expected_git_blob_sha1": null
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/tokenizer_config.json",
+      "size": 2068,
+      "sha256": "97af7f9a43d9c26b4ae9558b39c2d6ffed60b9869f2cf2b9a5282b05c6dac67c",
+      "expected_git_blob_sha1": "e54180678550bb9eb3ed2e4a64c540dcdf80a2ee"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash/README.md",
+      "size": 4417,
+      "sha256": "cb3d8c064bfe9e18dcf6ae65c4010e1c1f1d0d5e21ba5082e9ab9602061ddf71",
+      "expected_git_blob_sha1": "2b172fd8cbf002a06ae5021d65571b719e70648e"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash/config.json",
+      "size": 1096,
+      "sha256": "325f2a18894994b19f916e551b6f13a6904e961ae59a818d2b1dec18458e97f8",
+      "expected_git_blob_sha1": "893a78fafa5fe3e5cd63dabc616a69704739d368"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash/model.safetensors",
+      "size": 3071941240,
+      "sha256": "b3f28580103d6e8a0a1d9389646957b9309df5982558afd754b9810357f425b7",
+      "expected_git_blob_sha1": null
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py",
+      "size": 29664,
+      "sha256": "1b05153c3675ae24a94d6776650d8e6907f7c1760797a84fe6f0f985b5cb9c91"
+    },
+    {
+      "path": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py",
+      "size": 81393,
+      "sha256": "e3000ae6fba848a6547ad895b566efa01489bf97061be443a55f671634da5e4d"
+    }
+  ],
+  "evidence_level": "PUBLIC_SOURCE_TEMPLATE_NOT_DEPLOYED_OR_RUNTIME_ACCEPTED",
+  "advertised_context": 262144,
+  "qualified_context_actual": null,
+  "main_output_budget": 8192,
+  "history_aux_reserve": 2048,
+  "native_thinking_policy": "Template hardcodesON; system roles unchanged; no generic reasoning_effort; title/AUX native retained2048 with actualhelper capability NOT_RUN",
+  "capacity_source_math": "Ten-pool source estimate 42213048320 cache bytes; actual CUDA/vLLM-visible total >=120954546314 bytes and measured available >=96536948928 bytes are future necessary gates, not a source-only fit claim. See MIDRANGE-SOURCE-2026-10-16.md.",
+  "sampler_candidate": {
+    "source": "midrange/gemma4.params.json",
+    "sha256": "3661ae0734cef374180365c122f1899e130604ec06a69b55c7422c49c6b2239f",
+    "parameters": {
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 64
+    },
+    "actual_quality": "NOT_RUN"
+  }
+}

@@ -422,7 +422,13 @@
           "--top-p",
           "0.95",
           "--top-k",
-          "20"
+          "20",
+          "--repeat-penalty",
+          "1.0",
+          "--repeat-last-n",
+          "512",
+          "--min-p",
+          "0"
         ],
         "env": {
           "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
@@ -522,10 +528,10 @@
       "context": 256000,
       "endpoint": "http://127.0.0.1:31003/v1",
       "prepared": true,
-      "required_memory_bytes": 101940472672,
+      "required_memory_bytes": 106235439968,
       "memory_budget": {
         "resident_weights_bytes": 70801959776,
-        "cache_state_bytes": 4294967296,
+        "cache_state_bytes": 8589934592,
         "runtime_workspace_bytes": 12884901888,
         "additional_loading_peak_bytes": 5368709120,
         "safety_headroom_bytes": 8589934592
@@ -566,10 +572,9 @@
           "--attention-backend",
           "TRITON_MLA",
           "--kv-cache-dtype",
-          "fp8",
+          "float16",
           "--kv-cache-memory-bytes",
-          "4294967296",
-          "--calculate-kv-scales",
+          "8589934592",
           "--max-model-len",
           "256000",
           "--tool-call-parser",
@@ -596,16 +601,18 @@
           "--compilation-config",
           "{\"cudagraph_capture_sizes\":[1]}",
           "--default-chat-template-kwargs",
-          "{\"reasoning_effort\":\"high\"}"
+          "{\"reasoning_effort\":\"high\"}",
+          "--moe-backend",
+          "flashinfer_cutlass"
         ],
         "env": {
           "HF_HUB_OFFLINE": "1",
           "TRANSFORMERS_OFFLINE": "1",
           "HF_HOME": "/tmp/hf",
-          "XDG_CACHE_HOME": "/tmp/cache",
-          "TORCHINDUCTOR_CACHE_DIR": "/tmp/torchinductor",
-          "TRITON_CACHE_DIR": "/tmp/triton",
-          "FLASHINFER_WORKSPACE_BASE": "/tmp/flashinfer",
+          "XDG_CACHE_HOME": "/tmp/spark-compiled-cache/cache",
+          "TORCHINDUCTOR_CACHE_DIR": "/tmp/spark-compiled-cache/torchinductor",
+          "TRITON_CACHE_DIR": "/tmp/spark-compiled-cache/triton",
+          "FLASHINFER_WORKSPACE_BASE": "/tmp/spark-compiled-cache/flashinfer",
           "VLLM_NO_USAGE_STATS": "1",
           "VLLM_ENABLE_CUDA_COMPATIBILITY": "0"
         },
@@ -616,8 +623,8 @@
             "readonly": true
           }
         ],
-        "kernel_policy": "Fixed TRITON_MLA path with head_size320, FP8 KV/BF16 queries; metadata-driven NVFP4 MoE kernel selection. No VLLM_MLA_DISABLE and no old FLASH_ATTN workaround.",
-        "kv_scale_policy": "Explicit runtime-supported calculate_kv_scales during a separately authorized future model start; source MLA calc_kv_scales covers compressed KV. No calibration/forward executed during PREPARE_ONLY.",
+        "kernel_policy": "Correctness diagnostic E: native flashinfer_cutlass NVFP4 W4A4 MoE; default native NVFP4 Linear selection with no Marlin override. Same TRITON_MLA compressed320/BF16 compute, FP16 KV8GiB, weights/model/template. Numerical/runtime behavior and peak memory remain unqualified.",
+        "kv_scale_policy": "FP16 KV8GiB, no FP8 quantization or calculate-kv-scales. Same theoretical compressed token capacity as FP8KV4GiB; actual native token capacity and numerical correctness must be measured on fresh runtime.",
         "multimodal_policy": "Original pinned BF16 native vision/adapter restored per publisher route; one image per prompt, published1540-pixel cap. Reasoning and tool parsers preserve native Mistral capability.",
         "manifest_config_digest_provenance": "sha256:1d4a6ca97805bde1f93fa80428be23e0ddf9500a9698ee10c7a60d804fe3fb61"
       },
@@ -690,11 +697,11 @@
       "context": 262144,
       "endpoint": "http://127.0.0.1:31004/v1",
       "prepared": true,
-      "required_memory_bytes": 84857132608,
+      "required_memory_bytes": 113042868384,
       "memory_budget": {
-        "resident_weights_bytes": 68578317888,
+        "resident_weights_bytes": 68578330784,
         "cache_state_bytes": 2320171008,
-        "runtime_workspace_bytes": 4294967296,
+        "runtime_workspace_bytes": 32480690176,
         "additional_loading_peak_bytes": 1073741824,
         "safety_headroom_bytes": 8589934592
       },
@@ -704,7 +711,7 @@
         "argv": [
           "/opt/llama/bin/llama-server",
           "--model",
-          "/models/Nemotron-3-Super-120B-A12B-MXFP4_MOE-heretic-v2.gguf",
+          "/models/Nemotron-3-Super-120B-A12B-MXFP4_MOE-heretic-v2-metadata-fixed-v1.gguf",
           "--alias",
           "nemotron-3-super-120b-heretic-v2",
           "--host",
@@ -728,7 +735,7 @@
           "--batch-size",
           "2048",
           "--ubatch-size",
-          "512",
+          "1024",
           "--load-mode",
           "dio",
           "--lazy-mode",
@@ -736,7 +743,7 @@
           "--fit",
           "off",
           "--cache-ram",
-          "0",
+          "16384",
           "--no-context-shift",
           "--jinja",
           "--reasoning",
@@ -759,7 +766,7 @@
             "readonly": true
           },
           {
-            "source": "/opt/spark/model-collection-v4/runtime/llama",
+            "source": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1",
             "target": "/opt/llama",
             "readonly": true
           }
@@ -774,52 +781,57 @@
           "sha256": "870e367f1ae025cba5ad3709d9bbb05444d9b4a51e89ca162021736cefcdd0cf"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+          "path": "/opt/spark/model-collection-v4/models/nemotron/Nemotron-3-Super-120B-A12B-MXFP4_MOE-heretic-v2-metadata-fixed-v1.gguf",
+          "size": 68578330784,
+          "sha256": "601aa97e15921593ece860c8d962cbba3c4499b0845211977eb9a4cbdb2f746f"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libggml-base.so.0.26.0",
           "size": 876488,
           "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libggml-cpu.so.0.26.0",
           "size": 1001960,
           "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libggml-cuda.so.0.26.0",
           "size": 44376056,
           "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libggml.so.0.26.0",
           "size": 78104,
           "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libllama-common.so.0.6.0",
           "size": 5553784,
           "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libllama-server-impl.so",
           "size": 3526392,
           "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
-          "size": 4765544,
-          "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libllama.so.0.6.0",
+          "size": 4831368,
+          "sha256": "f973c8e13bf9bea0ef1e012c60283f7296229ad8b9598c882d6e19abc387d146"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/libmtmd.so.0.6.0",
           "size": 1834984,
           "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
         },
         {
-          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+          "path": "/opt/spark/model-collection-v4/runtime/llama-nemotron-unicode-20261015-v1/bin/llama-server",
           "size": 72456,
           "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
         }
       ],
-      "evidence_level": "PREPARED_NOT_RUNTIME_VALIDATED",
+      "evidence_level": "OFFLINE_CACHE_CANDIDATE_NOT_RUNTIME_VALIDATED",
       "startup_timeout_seconds": 1800,
       "stop_timeout_seconds": 90
     },
@@ -1044,7 +1056,7 @@
           "--tool-call-parser",
           "qwen3_coder",
           "--default-chat-template-kwargs",
-          "{\"enable_thinking\": true, \"reasoning_effort\": \"xhigh\"}",
+          "{\"enable_thinking\": true}",
           "--enable-cache-report"
         ],
         "env": {
@@ -1144,7 +1156,7 @@
           "--mxfp4-backend",
           "CUTLASS",
           "--mxfp4-layers",
-          "moe,qkv,o,lm_head",
+          "moe",
           "--attention-backend",
           "FLASHINFER",
           "--kv-cache-dtype",
@@ -1157,7 +1169,8 @@
           "TRANSFORMERS_OFFLINE": "1",
           "HF_HOME": "/srv/spark/hf-home",
           "HF_HUB_DISABLE_TELEMETRY": "1",
-          "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8": "1"
+          "VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8": "1",
+          "XDG_CACHE_HOME": "/srv/spark/hf-home/gptoss-runtime-cache"
         },
         "mounts": [
           {
@@ -1173,6 +1186,11 @@
           {
             "source": "/usr/local/lib/spark-gptoss/openai_harmony_init.py",
             "target": "/usr/local/lib/python3.12/dist-packages/openai_harmony/__init__.py",
+            "readonly": true
+          },
+          {
+            "source": "/usr/local/lib/spark-gptoss/serving_chat_stream_harmony.py",
+            "target": "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/serving_chat_stream_harmony.py",
             "readonly": true
           }
         ],
@@ -1190,6 +1208,550 @@
       },
       "artifacts": [],
       "evidence_level": "ROOT_METADATA_PINNED_NOT_RUNTIME_VALIDATED"
+    },
+    {
+      "id": "glm45-air-106b-derestricted",
+      "name": "GLM4.5 Air106B ArliAI Derestricted MXFP4_MOE",
+      "engine": "llama.cpp CUDA",
+      "quant": "MXFP4_MOE",
+      "context": 131072,
+      "endpoint": "http://127.0.0.1:31006/v1",
+      "prepared": false,
+      "required_memory_bytes": 107360816128,
+      "memory_budget": {
+        "resident_weights_bytes": 63337401344,
+        "cache_state_bytes": 24696061952,
+        "runtime_workspace_bytes": 8589934592,
+        "additional_loading_peak_bytes": 2147483648,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "argv": [
+          "/opt/llama/bin/llama-server",
+          "--model",
+          "/models/GLM-4.5-Air-Derestricted-MXFP4_MOE-00001-of-00004.gguf",
+          "--alias",
+          "glm45-air-106b-derestricted",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31006",
+          "--ctx-size",
+          "131072",
+          "--parallel",
+          "1",
+          "--gpu-layers",
+          "all",
+          "--split-mode",
+          "none",
+          "--flash-attn",
+          "on",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--batch-size",
+          "2048",
+          "--ubatch-size",
+          "512",
+          "--load-mode",
+          "dio",
+          "--lazy-mode",
+          "off",
+          "--fit",
+          "off",
+          "--cache-ram",
+          "0",
+          "--no-context-shift",
+          "--jinja",
+          "--reasoning",
+          "on",
+          "--spec-type",
+          "none",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "1.0",
+          "--top-k",
+          "0",
+          "--min-p",
+          "0",
+          "--repeat-penalty",
+          "1.0"
+        ],
+        "env": {
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+          "GGML_CUDA_NO_PINNED": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/glm45-air",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/llama",
+            "target": "/opt/llama",
+            "readonly": true
+          }
+        ],
+        "tmpfs_bytes": 536870912,
+        "shm_bytes": 1073741824
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00001-of-00004.gguf",
+          "size": 16944265056,
+          "sha256": "0a2d3b33c1c7e1ee1c3fb22398eb0b45cac79b35c649759df6b354ba0a3052af"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00002-of-00004.gguf",
+          "size": 16667848576,
+          "sha256": "ccbf99fbfa7cab0797115f0f9a1cfd54d19dcb2446968fdee45a47b8e0a2c729"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00003-of-00004.gguf",
+          "size": 16669945792,
+          "sha256": "6a3674540f2c85e9405fd58f0a7c2d7d980dceb044d3f6c21524eec03a8bc562"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/glm45-air/GLM-4.5-Air-Derestricted-MXFP4_MOE-00004-of-00004.gguf",
+          "size": 13055341920,
+          "sha256": "ad8b8ddfc5950b128be15465469f6deb076992a9bf7a668fe6a3ddbeb1334264"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+          "size": 876488,
+          "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+          "size": 1001960,
+          "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+          "size": 44376056,
+          "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+          "size": 78104,
+          "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+          "size": 5553784,
+          "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+          "size": 3526392,
+          "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+          "size": 4765544,
+          "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+          "size": 1834984,
+          "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+          "size": 72456,
+          "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+        }
+      ],
+      "evidence_level": "PUBLIC_SOURCE_TEMPLATE_NOT_DEPLOYED_OR_RUNTIME_ACCEPTED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90,
+      "block_reason": "Disabled source template. Requires independent artifact integrity/protection, ordinary local policy approval and native preparation, then actual capacity, correctness, context and cleanup qualification."
+    },
+    {
+      "id": "gemma4-31b-deckard-heretic",
+      "name": "Gemma4 31B DECKARD HERETIC NVFP4 +DFlash",
+      "engine": "vLLM",
+      "quant": "NVFP4_AWQ",
+      "context": 131072,
+      "endpoint": "http://127.0.0.1:31007/v1",
+      "prepared": false,
+      "block_reason": "Disabled source template. Requires independent artifact integrity/protection, ordinary local policy approval and native preparation, then actual capacity, correctness, context and cleanup qualification.",
+      "required_memory_bytes": 96536948928,
+      "memory_budget": {
+        "resident_weights_bytes": 23522504896,
+        "cache_state_bytes": 42949672960,
+        "runtime_workspace_bytes": 12884901888,
+        "additional_loading_peak_bytes": 8589934592,
+        "safety_headroom_bytes": 8589934592
+      },
+      "memory_policy": "Provisional reservation, not measured allocation or exact KV geometry. Includes private4GiBtmpfs+2GiBexec cache within12GiBworkspace;8GiB safety. GPUutil0.65 and configured131072 remain explicit; actual KV allocation/loading peak/source compatibility must be reviewed before prepared=true; no automatic fit/offload/context reduction. Conservative10pool KV bound42213048320B at131072 inclprefill/padding fits reserved40GiB; startupgeneric5pool admission is not exactphysicalcapacity proof.",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90,
+      "runtime": {
+        "image": "ghcr.io/aeon-7/gemma-4-31b-uncensored-nvfp4-dflash@sha256:6986488e0bb80d1a879fc6d40a66c048efd5c77c9ed897a68fe6a98dd88118f5",
+        "image_id": "sha256:6986488e0bb80d1a879fc6d40a66c048efd5c77c9ed897a68fe6a98dd88118f5",
+        "argv": [
+          "/usr/local/bin/vllm",
+          "serve",
+          "/models/deckard",
+          "--served-model-name",
+          "gemma4-31b-deckard-heretic",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31007",
+          "--tensor-parallel-size",
+          "1",
+          "--dtype",
+          "auto",
+          "--quantization",
+          "modelopt",
+          "--kv-cache-dtype",
+          "auto",
+          "--max-model-len",
+          "131072",
+          "--max-num-seqs",
+          "1",
+          "--max-num-batched-tokens",
+          "8192",
+          "--gpu-memory-utilization",
+          "0.65",
+          "--enable-chunked-prefill",
+          "--enable-prefix-caching",
+          "--load-format",
+          "safetensors",
+          "--enable-auto-tool-choice",
+          "--tool-call-parser",
+          "gemma4",
+          "--reasoning-parser",
+          "gemma4",
+          "--attention-backend",
+          "triton_attn",
+          "--generation-config",
+          "vllm",
+          "--compilation-config",
+          "{\"cudagraph_capture_sizes\":[1,2,4,8,12,16,20,24,28,32,40,48,56,64]}",
+          "--limit-mm-per-prompt",
+          "{\"image\":4,\"video\":2}",
+          "--mm-encoder-tp-mode",
+          "data",
+          "--mm-processor-cache-type",
+          "shm",
+          "--mm-shm-cache-max-object-size-mb",
+          "256",
+          "--speculative-config",
+          "{\"method\":\"dflash\",\"model\":\"/models/gemma-dflash\",\"num_speculative_tokens\":15,\"attention_backend\":\"flash_attn\"}",
+          "--block-size",
+          "16"
+        ],
+        "env": {
+          "TORCH_CUDA_ARCH_LIST": "12.1a",
+          "TORCH_MATMUL_PRECISION": "high",
+          "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+          "NVIDIA_FORWARD_COMPAT": "1",
+          "NVIDIA_DISABLE_REQUIRE": "1",
+          "HF_HUB_OFFLINE": "1",
+          "TRANSFORMERS_OFFLINE": "1",
+          "HF_HOME": "/tmp/spark-compiled-cache/hf",
+          "XDG_CACHE_HOME": "/tmp/spark-compiled-cache/xdg",
+          "CUDA_CACHE_PATH": "/tmp/spark-compiled-cache/cuda",
+          "TORCHINDUCTOR_CACHE_DIR": "/tmp/spark-compiled-cache/torchinductor",
+          "TRITON_CACHE_DIR": "/tmp/spark-compiled-cache/triton",
+          "FLASHINFER_WORKSPACE_BASE": "/tmp/spark-compiled-cache/flashinfer",
+          "VLLM_NO_USAGE_STATS": "1"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4",
+            "target": "/models/deckard",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash",
+            "target": "/models/gemma-dflash",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py",
+            "target": "/usr/local/lib/python3.12/site-packages/vllm/tool_parsers/gemma4_tool_parser.py",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py",
+            "target": "/usr/local/lib/python3.12/site-packages/vllm/entrypoints/openai/chat_completion/serving.py",
+            "readonly": true
+          }
+        ],
+        "tmpfs_bytes": 4294967296,
+        "shm_bytes": 2147483648
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/README.md",
+          "size": 15513,
+          "sha256": "7fc98e92957ce9974b47bf0031dde3ba15d1e0f63830c8af83198ce30d432b57",
+          "expected_git_blob_sha1": "a40b24c0a14f54806b04ece7c8b6fe9d5fa0919f"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/chat_template-instruct.jinja",
+          "size": 12045,
+          "expected_git_blob_sha1": "33c51c2dbf7e7494b2c055cae7b52f523d3df564",
+          "sha256": "2dfbfc7d538912f4ea11d29d85b4e25d7bc26386e53f57529f1d707c28b5828c"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/chat_template.jinja",
+          "size": 12080,
+          "sha256": "a88ca871315ccd37e1232ae05fb19d0078007bb90d18de8416818825c3b52346",
+          "expected_git_blob_sha1": "0cb12cdecf0c51b073b858c73c25bfe586bd7dc5"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/config.json",
+          "size": 5790,
+          "sha256": "f4cf6df224883b55932c921091b032cdd10af944b111417fcd50f3cee77b1ce6",
+          "expected_git_blob_sha1": "14a3deb8dbe08931d041dbb371e8da59c95ee5d4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/generation_config.json",
+          "size": 171,
+          "sha256": "58bbe258a499fc164fe5adbc7d975ebe393ba89d1faec0a1c2b70004b014ac47",
+          "expected_git_blob_sha1": "a7cbeb955592c09b5932a3b75e7c4fb9e2ce5e44"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/hf_quant_config.json",
+          "size": 407,
+          "sha256": "ff1caf9529bd3efe50c6fa562b00e94f6346a278e2ea98afe8d5d31b604012b8",
+          "expected_git_blob_sha1": "667136d2dd39caf1e28da2e9917d8625b55d47a2"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/model.safetensors",
+          "size": 20450563656,
+          "sha256": "f8f9ccecc635da40a9d8c3787ca6a524cd1c26950dd8f1687c61fbda7a72c07f",
+          "expected_git_blob_sha1": null
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/processor_config.json",
+          "size": 1689,
+          "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+          "expected_git_blob_sha1": "5465974d23e1eca2c46c2809b26c997946ce0d90"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/tokenizer.json",
+          "size": 32169626,
+          "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+          "expected_git_blob_sha1": null
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-deckard-heretic-nvfp4/tokenizer_config.json",
+          "size": 2068,
+          "sha256": "97af7f9a43d9c26b4ae9558b39c2d6ffed60b9869f2cf2b9a5282b05c6dac67c",
+          "expected_git_blob_sha1": "e54180678550bb9eb3ed2e4a64c540dcdf80a2ee"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash/README.md",
+          "size": 4417,
+          "sha256": "cb3d8c064bfe9e18dcf6ae65c4010e1c1f1d0d5e21ba5082e9ab9602061ddf71",
+          "expected_git_blob_sha1": "2b172fd8cbf002a06ae5021d65571b719e70648e"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash/config.json",
+          "size": 1096,
+          "sha256": "325f2a18894994b19f916e551b6f13a6904e961ae59a818d2b1dec18458e97f8",
+          "expected_git_blob_sha1": "893a78fafa5fe3e5cd63dabc616a69704739d368"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/gemma4-31b-dflash/model.safetensors",
+          "size": 3071941240,
+          "sha256": "b3f28580103d6e8a0a1d9389646957b9309df5982558afd754b9810357f425b7",
+          "expected_git_blob_sha1": null
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/gemma4_tool_parser.py",
+          "size": 29664,
+          "sha256": "1b05153c3675ae24a94d6776650d8e6907f7c1760797a84fe6f0f985b5cb9c91"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/gemma4-source-overrides/serving.py",
+          "size": 81393,
+          "sha256": "e3000ae6fba848a6547ad895b566efa01489bf97061be443a55f671634da5e4d"
+        }
+      ],
+      "evidence_level": "PUBLIC_SOURCE_TEMPLATE_NOT_DEPLOYED_OR_RUNTIME_ACCEPTED",
+      "advertised_context": 262144,
+      "qualified_context_actual": null,
+      "main_output_budget": 8192,
+      "history_aux_reserve": 2048,
+      "native_thinking_policy": "Template hardcodesON; system roles unchanged; no generic reasoning_effort; title/AUX native retained2048 with actualhelper capability NOT_RUN",
+      "capacity_source_math": "Ten-pool source estimate 42213048320 cache bytes; actual CUDA/vLLM-visible total >=120954546314 bytes and measured available >=96536948928 bytes are future necessary gates, not a source-only fit claim. See MIDRANGE-SOURCE-2026-10-16.md.",
+      "sampler_candidate": {
+        "source": "midrange/gemma4.params.json",
+        "sha256": "3661ae0734cef374180365c122f1899e130604ec06a69b55c7422c49c6b2239f",
+        "parameters": {
+          "temperature": 1.0,
+          "top_p": 0.95,
+          "top_k": 64
+        },
+        "actual_quality": "NOT_RUN"
+      }
+    },
+    {
+      "id": "nemotron-super-49b-v15-abliterated",
+      "name": "Nemotron Super49B v1.5 Abliterated Q5_K_M",
+      "engine": "llama.cpp CUDA",
+      "quant": "Q5_K_M",
+      "context": 131072,
+      "endpoint": "http://127.0.0.1:31008/v1",
+      "prepared": false,
+      "required_memory_bytes": 89615573824,
+      "memory_budget": {
+        "resident_weights_bytes": 35391611712,
+        "cache_state_bytes": 26306674688,
+        "runtime_workspace_bytes": 17179869184,
+        "additional_loading_peak_bytes": 2147483648,
+        "safety_headroom_bytes": 8589934592
+      },
+      "runtime": {
+        "image": "lmsysorg/sglang@sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "image_id": "sha256:9d2a843c706c74bc259c0d9abf360551eb2734e1e7d255ab012a6965f10480b6",
+        "argv": [
+          "/opt/llama/bin/llama-server",
+          "--model",
+          "/models/Nemotron-Super-49B-Uncensored-Q5_K_M.gguf",
+          "--alias",
+          "nemotron-super-49b-v15-abliterated",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "31008",
+          "--ctx-size",
+          "131072",
+          "--parallel",
+          "1",
+          "--gpu-layers",
+          "all",
+          "--split-mode",
+          "none",
+          "--flash-attn",
+          "on",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--batch-size",
+          "2048",
+          "--ubatch-size",
+          "512",
+          "--load-mode",
+          "dio",
+          "--lazy-mode",
+          "off",
+          "--fit",
+          "off",
+          "--cache-ram",
+          "0",
+          "--no-context-shift",
+          "--jinja",
+          "--chat-template-file",
+          "/models/chat-template.jinja",
+          "--reasoning",
+          "on",
+          "--spec-type",
+          "none",
+          "--temp",
+          "0.6",
+          "--top-p",
+          "0.95",
+          "--top-k",
+          "0",
+          "--min-p",
+          "0",
+          "--repeat-penalty",
+          "1.0"
+        ],
+        "env": {
+          "GGML_CUDA_ENABLE_UNIFIED_MEMORY": "0",
+          "GGML_CUDA_NO_PINNED": "0"
+        },
+        "mounts": [
+          {
+            "source": "/opt/spark/model-collection-v4/models/nemotron49",
+            "target": "/models",
+            "readonly": true
+          },
+          {
+            "source": "/opt/spark/model-collection-v4/runtime/llama",
+            "target": "/opt/llama",
+            "readonly": true
+          }
+        ],
+        "tmpfs_bytes": 536870912,
+        "shm_bytes": 1073741824
+      },
+      "artifacts": [
+        {
+          "path": "/opt/spark/model-collection-v4/models/nemotron49/Nemotron-Super-49B-Uncensored-Q5_K_M.gguf",
+          "size": 35391611712,
+          "sha256": "6a17b134c0cd30b3a64746b356a7289982471c0fbcfe3d69a729072c7daaa581"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/models/nemotron49/chat-template.jinja",
+          "size": 3246,
+          "sha256": "1b13a386b158bb4033ad9960032530554c47a92d1735c7dfce715efcabf30e5c"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-base.so.0.26.0",
+          "size": 876488,
+          "sha256": "67b579fdc85c87ecab3adc52e1bdf5548189684e9904a26223d5d2617be0d5e7"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cpu.so.0.26.0",
+          "size": 1001960,
+          "sha256": "b98b98a45d476a04fbea9b04020e00372fbb1b47abecaed9045211cf1f0dfbf2"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml-cuda.so.0.26.0",
+          "size": 44376056,
+          "sha256": "1ef39091979e4093b1089535ca1db34a066bf2789a6ebac54892d8a95ad8aef4"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libggml.so.0.26.0",
+          "size": 78104,
+          "sha256": "24b18e5727b4338e62815210df0d970f4b28eb27949bad8b2bf325410e8fcc03"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-common.so.0.6.0",
+          "size": 5553784,
+          "sha256": "68fb39a7b6d6f916ff507d8a557c6ed507de7869c77415d68f97931581482d36"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama-server-impl.so",
+          "size": 3526392,
+          "sha256": "758f63ddceccff5e07c6f63aaf95adb46f813ebd04efd8f912646ba1d3bb9ffb"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libllama.so.0.6.0",
+          "size": 4765544,
+          "sha256": "1579c0aa3d2ae23972f47958a9c3734b867e7d4604f89946b17b088fc6affc79"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/libmtmd.so.0.6.0",
+          "size": 1834984,
+          "sha256": "a33053d97063842663a1ea37af606a7b1f762a005041f95f66092239eea2b2aa"
+        },
+        {
+          "path": "/opt/spark/model-collection-v4/runtime/llama/bin/llama-server",
+          "size": 72456,
+          "sha256": "045f7d2a82e32cb0e0f5eb936607190de560fe2d1365acbb18002e7539cd1392"
+        }
+      ],
+      "evidence_level": "PUBLIC_SOURCE_TEMPLATE_NOT_DEPLOYED_OR_RUNTIME_ACCEPTED",
+      "startup_timeout_seconds": 1800,
+      "stop_timeout_seconds": 90,
+      "block_reason": "Disabled source template. Requires independent artifact integrity/protection, ordinary local policy approval and native preparation, then actual capacity, correctness, context and cleanup qualification."
     }
   ],
   "prepare_only": true,
